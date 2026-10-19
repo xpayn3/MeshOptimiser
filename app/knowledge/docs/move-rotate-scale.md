@@ -32,7 +32,7 @@ Hold the Move, Rotate or Scale button on the tool strip, or right-click it, for 
 
 ## Type exact values
 
-1. Click the transform panel button on the viewport’s tool strip, the fifth button from the top. The **Transform** card rises into place at the foot of the left sidebar, under the parts tree.
+1. Click **Transform** in the toolbar above the parts tree, in the left sidebar. The **Transform** card rises into place at the foot of the left sidebar, under the parts tree.
 2. It has three columns, **Position**, **Rotation** and **Size**, with a row for X, Y and Z.
 3. Click a number and type a value, or drag it sideways.
 4. Press **Reset** to put position, rotation and size back.
@@ -51,7 +51,7 @@ A number you type goes to each part on its own, about its own origin. Every part
 
 The gizmo helps too. When the selected parts are all turned the same way, the gizmo keeps that turn instead of snapping to the scene’s axes as soon as a second part is picked. To line parts up on an axis or space them evenly, see [Align parts](meshoptimiser://docs/align-parts).
 
-Right-click a column heading to copy all three values or paste them onto another part. The units follow **Display units** under **Settings**, **Scene**.
+Right-click a column heading to copy all three values or paste them onto another part. The units follow **Display units** in the **Scene** card of the right sidebar.
 
 ## Dynamic place
 
@@ -68,6 +68,7 @@ A press that is not on the selected part selects as usual, and a press with `Shi
 ## What the options mean
 
 - **Align to surface**: On to begin with. The part turns so that its top points away from the surface it rests on. Off: the part keeps the way it faces and only slides.
+- **Seat bolts by the head**: Off to begin with. A bolt goes in by its shank, so only its head is left standing on the surface, as if it were screwed in. Other parts rest as usual. It needs **Align to surface**.
 - **Land on the grid**: On to begin with. Where nothing is under the pointer, the part lands on the grid. Off: it stays where it last rested.
 - **Top axis**: Which of the part’s own axes, X, Y or Z, counts as its top. It is the part’s axes as it stands when you first pick it up. Z is the default when Z is up.
 - **Direction**: **+** or **−**: whether the top axis points away from the surface or into it. Choose **−** to put a part on upside down.
@@ -93,7 +94,7 @@ Right-click a group and choose **Lock everything inside**, or press **Lock** in 
 
 ## Measure
 
-1. Press `M`, or click the ruler on the bottom toolbar.
+1. Press `M`, or click the ruler on the tool strip at the left edge of the view.
 2. Click a point on the model. A dot follows the pointer to show where you will pick.
 3. Click a second point. The distance appears between them.
 4. Measure again, or press `M` or `Esc` to leave measure mode.

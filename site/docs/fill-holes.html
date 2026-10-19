@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -171,8 +172,8 @@
           <ul class="kb-points">
             <li>Closed: holes that go right through, holes with a floor, counterbores, slots, pockets and engraved lettering in flat faces.</li>
             <li>Countersinks and flared holes: the hole counts by its bore. The wide opening of a countersink may be up to five times the limit and is closed with the hole.</li>
-            <li>An opening that leads into a hollow space: with <span class="ui">Close openings into hollow spaces</span> on, as it is to begin with, it is closed flush with the face from outside. What lies behind it stays as it was, out of sight. With the switch off, it is left alone.</li>
-            <li>Loose walls: a broken file can leave a cut-loose tube or cup floating where a hole was. With <span class="ui">Remove vertices left over</span> on, it is taken out and the opening it sat in is closed. Only a piece that is small next to its part goes, never more than a third of the part.</li>
+            <li>An opening that leads into a hollow space: with <span class="ui">Seal hollows</span> on, as it is to begin with, it is closed flush with the face from outside. What lies behind it stays as it was, out of sight. With the switch off, it is left alone.</li>
+            <li>Loose walls: a broken file can leave a cut-loose tube or cup floating where a hole was. With <span class="ui">Leftover vertices</span> on, it is taken out and the opening it sat in is closed. Only a piece that is small next to its part goes, never more than a third of the part.</li>
             <li>Left alone: a boss or a pin that stands up from a face.</li>
             <li>Left alone: an opening that is what the part is, such as the bore of a washer, a nut or a bushing.</li>
             <li>Left alone: an opening that leads out through a curved surface.</li>
@@ -191,14 +192,15 @@
           <p>Open <span class="ui">Advanced</span> in the panel.</p>
           <dl class="table">
             <div><dt>Through holes</dt><dd>Holes that go right through: an opening on both sides.</dd></div>
-            <div><dt>Blind holes and pockets</dt><dd>Holes and pockets with a floor: an opening on one side only.</dd></div>
+            <div><dt>Blind holes</dt><dd>Holes and pockets with a floor: an opening on one side only.</dd></div>
             <div><dt>Open holes</dt><dd>Openings with nothing behind them: a missing patch in a flat face.</dd></div>
-            <div><dt>Close openings into hollow spaces</dt><dd>An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight. Off: such an opening is left alone. It is on to begin with.</dd></div>
-            <div><dt>Raised details (lettering, bosses)</dt><dd>Anything that stands proud of a flat face and is no higher than the limit is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. What stands higher stays.</dd></div>
-            <div><dt>Raised, up to</dt><dd>A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too.</dd></div>
+            <div><dt>Seal hollows</dt><dd>An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight. Off: such an opening is left alone. It is on to begin with.</dd></div>
+            <div><dt>Inner pieces</dt><dd>A mesh can hold separate closed pieces inside its body, such as the balls of a valve or a pin in a bore. Once the holes are closed they are sealed in and never seen again, though still drawn. On: every piece that lies entirely inside the closed part is removed. It is on to begin with.</dd></div>
+            <div><dt>Raised details</dt><dd>Anything that stands proud of a flat face and is no higher than the limit is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. What stands higher stays.</dd></div>
+            <div><dt>Up to</dt><dd>A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too.</dd></div>
             <div><dt>Keep openings that shape the part</dt><dd>On: an opening that takes up much of its face and of the part is kept, such as the bore of a washer or a window in a frame. Off: only the size limit decides.</dd></div>
             <div><dt>Smallest hole</dt><dd>Holes narrower than this are left alone.</dd></div>
-            <div><dt>Remove vertices left over</dt><dd>On: the points that ringed each hole are taken out of the flat face, and the face is triangulated again with the fewest triangles. Press <span class="ui">Remove holes</span> a second time to clean the same way what an earlier run, or an earlier tool, left behind, even when no hole is left to close. It also works on parts that are already in n-gons. Loose walls that a broken file left floating in an opening, a cut-loose tube or cup that belongs to no solid, go with it.</dd></div>
+            <div><dt>Leftover vertices</dt><dd>On: the points that ringed each hole are taken out of the flat face, and the face is triangulated again with the fewest triangles. Press <span class="ui">Remove holes</span> a second time to clean the same way what an earlier run, or an earlier tool, left behind, even when no hole is left to close. It also works on parts that are already in n-gons. Loose walls that a broken file left floating in an opening, a cut-loose tube or cup that belongs to no solid, go with it.</dd></div>
             <div><dt>Depth limit</dt><dd>How far the inside of a hole may reach, as a multiple of the size limit. Lower it to leave deep bores alone.</dd></div>
             <div><dt>Flatness</dt><dd>How far apart the directions of two triangles may be and still count as one flat face. Raise it for meshes whose flat faces are slightly bent.</dd></div>
             <div><dt>Surface may move</dt><dd>After a hole is closed, a vertex of the flat face round it may be a little off the plane of that face, as on a gently curved panel. It may still be removed if the surface moves no more than this, and never more than 1% of the part’s size. It starts at 0.5 mm. With 0, only vertices exactly in the plane go.</dd></div>
@@ -211,7 +213,7 @@
             <li>Start with a small limit, look at the result, and raise it. A limit that is too high closes openings you wanted, such as a cable cut-out.</li>
             <li>The filled result is what gets saved and exported.</li>
             <li>A hole that was formed by pushing through the sheet, with a collar on the other side, is closed, and its collar stays as a small stub.</li>
-            <li>Points of a closed hole still show in the Lines view? Press <span class="ui">Remove holes</span> again: with <span class="ui">Remove vertices left over</span> on, it removes them.</li>
+            <li>Points of a closed hole still show in the Lines view? Press <span class="ui">Remove holes</span> again: with <span class="ui">Leftover vertices</span> on, it removes them.</li>
             <li>A hole whose wall is wound the wrong way round, or whose edge is doubled, is found and closed too, instead of being closed twice.</li>
             <li>Two holes that touch at a corner, or a hole that touches the edge of its face, are closed as well.</li>
             <li>While it runs, Remove holes shows in the Tasks list of the status bar.</li>
@@ -240,12 +242,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

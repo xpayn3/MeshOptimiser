@@ -32,20 +32,20 @@ While the drawing differs from the real model, it says **Preview: not applied ye
 
 ## What the options mean
 
-- **Turn, step**: How far one press turns the model. 90 gives quarter turns. A small number straightens a model that is slightly tilted.
-- **Sits at zero with its: X and Y**: Which side of the model goes to 0 on that axis: **Low**, **Mid** (the middle), **High**, or **Keep** to leave it where it is. The rows are named after the scene’s floor axes: X and Y when Z is up.
-- **Sits at zero with its: Up**: **Floor** stands the model on the grid. **Top** hangs it from the grid. **Mid** centres it. **Keep** leaves its height alone.
+- **Turn the model, each press**: How far one press turns the model. 90 gives quarter turns. A small number straightens a model that is slightly tilted.
+- **Which point of it goes to zero: X and Y**: Which side of the model goes to 0 on that axis: **Low**, **Mid** (the middle), **High**, or **Keep** to leave it where it is. The rows are named after the scene’s floor axes: X and Y when Z is up.
+- **Which point of it goes to zero: Up**: **Floor** stands the model on the grid. **Top** hangs it from the grid. **Mid** centres it. **Keep** leaves its height alone.
 - **Align to floor**: Does it: turns and moves the model as the drawing shows.
 - **Back to how it was loaded**: Puts the model back where and how it was loaded, and puts the card back to its start: no turn waiting, and Mid, Mid and Floor.
 
 Mid, Mid and Floor is the usual choice: it stands the model on the grid, centred over the origin.
 
-To repeat the last choices without opening the card, press `Ctrl + K` and choose **Align model to the floor (with the last choices)**.
+To repeat the last choices without opening the card, press `Ctrl + K` and choose **Align model to the floor, as before**.
 
 ## Undo
 
 Pressing **Align to floor** is one undo step. **Back to how it was loaded** in the card does what its name says.
 
-> Which direction is “up” is a setting of the scene: **Up axis (viewport)** under **Settings**, **Scene**. CAD files normally use Z as up. If the whole scene looks turned by a quarter, check that setting before you turn the model.
+> Which direction is “up” is a setting of the scene: **Up axis** in the **Scene** card of the right sidebar. CAD files normally use Z as up. If the whole scene looks turned by a quarter, check that setting before you turn the model.
 
 Related: [align-parts](meshoptimiser://docs/align-parts), [move-rotate-scale](meshoptimiser://docs/move-rotate-scale), [export](meshoptimiser://docs/export), [workflow](meshoptimiser://docs/workflow)

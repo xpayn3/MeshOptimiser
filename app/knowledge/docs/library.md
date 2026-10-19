@@ -8,7 +8,7 @@ MeshOptimiser can also add parts. The library holds 112 ready-made parts on eigh
 
 Press `Shift + L`, or click the button with the small shapes on the bottom toolbar, just left of the palette button. The library is a drawer: it slides up from the bottom of the viewport and leaves the parts tree where it is. Press `Shift + L` again, or click the cross in its header, to close it.
 
-- Drag the top edge of the drawer to make it taller. Double-click the edge to reset it.
+- Drag the top edge of the drawer to make it taller. Double-click the edge to reset it. The materials dock and Animate keep the same height, unless **Same height for every dock** is switched off under **Settings**, **General**.
 - One drawer is open at a time. The library, the materials dock and the console give way to each other.
 - To keep the library open next to the materials, press **Pop out as a floating window** in its header. The library becomes a window over the view: drag it by its head, and resize it from any edge or corner. The same button, now **Dock to the bottom**, puts it back. Where you left it is remembered in this browser.
 
@@ -80,7 +80,6 @@ The nut is part of the bolt’s own shape. It follows the bolt’s size and leng
 
 - The search: press `Ctrl + K`, type `add flange` and press `Enter`.
 - The add button on the bottom toolbar, next to the search: a click adds the shape you used last, and holding the button down opens a choice of shapes.
-- The start screen: pick Cube, Sphere, Cylinder or Torus to start a new scene with that shape.
 
 ## Undo
 

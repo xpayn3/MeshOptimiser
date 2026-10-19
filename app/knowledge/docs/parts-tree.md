@@ -11,17 +11,19 @@ The parts tree in the left sidebar lists everything in the scene. A part is one 
 - The eye at the right hides or shows the row.
 - Click the small box in front of a group to open or close it.
 
-## The three buttons
+## The buttons above the tree
 
-- **Collapse**: Closes every group. When every group is closed, the button says **Expand** and opens them all. The small arrow beside it, or a right-click on the button, opens a menu with more choices. See below.
-- **Rename**: Renames many parts at once. `F2`.
-- **Flatten**: Removes levels of grouping.
+- **Collapse**: A click, or a right-click, opens a menu to close or open every group, the groups you selected, or the groups from the selected row on. See below.
+- **Rename**: Renames many parts at once. A click, or a right-click, opens a menu: **Batch rename…** first (`F2` opens it too), then your saved rules and the built-in ones. A rule opens the window with its settings filled in.
+- **Flatten**: Removes levels of grouping. A click, or a right-click, opens a menu: **Advanced flatten…** first, then quick choices such as flattening the deepest level.
+- **Transform**: Shows or hides the Transform card at the foot of the sidebar. See [Move, rotate, scale](meshoptimiser://docs/move-rotate-scale).
+- **Recentre, Centre pivot, Bake transforms**: One press each. See [Clean up](meshoptimiser://docs/cleanup) and [The axis of a part](meshoptimiser://docs/axis-center).
 
 ## Collapse and expand part of the tree
 
-A big assembly has many groups. Sometimes you want to close only some of them. Click the arrow beside **Collapse** to choose. Select a part or a group in the tree first, for the choices that need a selection.
+A big assembly has many groups. Sometimes you want to close only some of them. Click **Collapse** to choose. Select a part or a group in the tree first, for the choices that need a selection.
 
-- **Collapse the whole tree**: Closes every group. The same as pressing **Collapse**.
+- **Collapse the whole tree**: Closes every group.
 - **Collapse the selection**: Closes the groups you selected and every group inside them. For a selected part, it closes the group the part is in.
 - **Collapse from here on**: Closes the first selected row and every group after it in the tree. The groups above stay as they are, so the row you are on stays in view.
 - **Expand the whole tree**: Opens every group.
@@ -64,8 +66,8 @@ When nothing at all is found, the search tries again more forgivingly. In a word
 CAD files often come with names like `Part_0031_geom`. Batch rename changes many names in one go.
 
 1. Select the parts to rename.
-2. Press `F2` or the **Rename** button. The **Batch rename** window opens.
-3. Choose a tab. **Find & Replace** swaps one piece of text for another. **Pattern** builds each name from pieces such as `{name}`, `{parent}` and `{counter:003}`. **Presets** has ready-made rules, such as lower-casing every name or removing a number at the end.
+2. Press `F2`, or press the **Rename** button and choose **Batch rename…**. The **Batch rename** window opens.
+3. Choose a tab. **Replace** swaps one piece of text for another. **Quick** adds text before or after the name, changes the letters (UPPER, lower, Title Case, snake_case and more), cleans up and numbers the names. **Pattern** builds each name from pieces such as `{name}`, `{parent}` and `{counter:003}`. **Presets** has ready-made rules, such as lower-casing every name or removing a number at the end.
 4. Look at the **Preview**. It shows every name before and after.
 5. Press **Apply**, or `Ctrl + Enter`.
 
@@ -83,7 +85,7 @@ Drag a row onto a group to move it into that group, or between two rows to chang
 
 ## Flatten
 
-A STEP file can have groups inside groups ten levels deep. Flatten removes levels you do not need. Press **Flatten** to open the **Advanced flatten** window.
+A STEP file can have groups inside groups ten levels deep. Flatten removes levels you do not need. Press **Flatten** and choose **Advanced flatten…** to open the **Advanced flatten** window; the other choices in that menu do the common cases in one step.
 
 - **Scope**: The whole tree, or only the groups you selected.
 - **Total flatten**: Removes every group inside the scope. All parts end up side by side.

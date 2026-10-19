@@ -49,6 +49,6 @@ The **Gap** field sets a fixed gap for the second Spread button, in the scene’
 - If the view is exploded, the parts are put back together first, because the parts at rest are what is lined up.
 - Each press is one undo step, so `Ctrl + Z` takes back one press.
 
-> Which axis is up is a setting of the scene: **Up axis (viewport)** under **Settings**, **Scene**. The pictures on the buttons stand upright for the axis that is up.
+> Which axis is up is a setting of the scene: **Up axis** in the **Scene** card of the right sidebar. The pictures on the buttons stand upright for the axis that is up.
 
 Related: [align-to-floor](meshoptimiser://docs/align-to-floor), [move-rotate-scale](meshoptimiser://docs/move-rotate-scale), [select-parts](meshoptimiser://docs/select-parts), [search-and-commands](meshoptimiser://docs/search-and-commands), [undo-redo](meshoptimiser://docs/undo-redo)

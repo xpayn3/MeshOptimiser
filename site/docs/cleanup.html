@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -166,30 +167,30 @@
         <g class="art-fine"><path d="M158 80 L190 98 L170 112 L150 100 Z" style="fill: var(--card-bg, var(--surface))"/></g>
         <g class="art-edge art-hot"><path d="M158 80 L190 98 L170 112 L150 100 Z"/></g></g></svg></figure>
         <div class="kb-body">
-          <p>Two cards in the right sidebar hold one-click commands: <span class="ui">Quick fixes</span>, under Optimise, and <span class="ui">Edit selection</span>, under Select. Each command is one undo step.</p>
+          <p>The card <span class="ui">Quick fixes</span> in the right sidebar holds one-click commands. In the right-click menu they are called Remove empty parts, Deduplicate geometry, Fix degenerate parts, Delete empty groups and Recompute normals. Each command is one undo step.</p>
           <h2 id="quick-fixes">Quick fixes</h2>
           <dl class="table">
-            <div><dt>Remove empty parts</dt><dd>Deletes parts that contain no triangles. Files often carry a few of these.</dd></div>
-            <div><dt>Deduplicate geometry</dt><dd>Looks for parts whose mesh data is identical to another part’s. See the note below before you use it.</dd></div>
-            <div><dt>Fix degenerate parts</dt><dd>Removes parts whose triangles have no area, which can confuse the programs that draw them.</dd></div>
-            <div><dt>Remove floating pieces…</dt><dd>Opens a panel that deletes the small loose pieces of a part that touch nothing. See <a href="../docs/remove-floating-pieces.html">Remove floating pieces</a>.</dd></div>
-            <div><dt>Delete empty groups</dt><dd>Removes groups that have no parts left in them.</dd></div>
-            <div><dt>Recompute smooth normals</dt><dd>Works out the shading directions of every surface again. Use it when parts look oddly faceted or dark after large changes.</dd></div>
+            <div><dt>Empty parts</dt><dd>Deletes parts that contain no triangles. Files often carry a few of these.</dd></div>
+            <div><dt>Duplicates</dt><dd>Looks for parts whose mesh data is identical to another part’s. See the note below before you use it.</dd></div>
+            <div><dt>Degenerate</dt><dd>Removes parts whose triangles have no area, which can confuse the programs that draw them.</dd></div>
+            <div><dt>Floating…</dt><dd>Opens a panel that deletes the small loose pieces of a part that touch nothing. See <a href="../docs/remove-floating-pieces.html">Remove floating pieces</a>.</dd></div>
+            <div><dt>Empty groups</dt><dd>Removes groups that have no parts left in them.</dd></div>
+            <div><dt>Normals</dt><dd>Works out the shading directions of every surface again. Use it when parts look oddly faceted or dark after large changes.</dd></div>
           </dl>
           <p>Each command reports what it did, or says that it found nothing.</p>
-          <aside class="kb-note"><p>Be careful with <span class="ui">Deduplicate geometry</span> on an assembly. It removes a part only when another part with identical mesh data sits in the same place (two copies stacked on each other), so a set of identical bolts placed in different positions stays. Check the parts count afterwards, and press <kbd>Ctrl</kbd><kbd>Z</kbd> if it took parts you wanted. (Before v0.20.0 it removed every repeat, placed or not; that was a bug.)</p></aside>
-          <p><a href="../docs/smart-optimise.html">Smart optimise</a> starts every run with the first three commands, empty parts, degenerate parts and empty groups, under the name <span class="ui">Empty parts</span>. It does not run <span class="ui">Deduplicate geometry</span> or any of the other commands on this page.</p>
-          <h2 id="edit-selection">Edit selection</h2>
+          <aside class="kb-note"><p>Be careful with <span class="ui">Duplicates</span> on an assembly. It removes a part only when another part with identical mesh data sits in the same place (two copies stacked on each other), so a set of identical bolts placed in different positions stays. Check the parts count afterwards, and press <kbd>Ctrl</kbd><kbd>Z</kbd> if it took parts you wanted. (Before v0.20.0 it removed every repeat, placed or not; that was a bug.)</p></aside>
+          <p><a href="../docs/smart-optimise.html">Smart optimise</a> starts every run with the first three commands, empty parts, degenerate parts and empty groups, under the name <span class="ui">Empty parts</span>. Its next step, <span class="ui">Exact copies</span>, removes what <span class="ui">Duplicates</span> removes. It runs none of the other commands on this page.</p>
+          <h2 id="on-the-toolbar-of-the-parts-tree">On the toolbar of the parts tree</h2>
           <dl class="table">
-            <div><dt>Recentre on origin</dt><dd>Moves the model so the centre of its bounding box sits at 0,0,0.</dd></div>
-            <div><dt>Bake gizmo transforms</dt><dd>Makes the moves, turns and scalings you did with the gizmo permanent in the mesh itself.</dd></div>
+            <div><dt>Recentre</dt><dd>Moves the model so the centre of its bounding box sits at 0,0,0.</dd></div>
+            <div><dt>Bake transforms</dt><dd>Makes the moves, turns and scalings you did with the gizmo permanent in the mesh itself.</dd></div>
             <div><dt>Centre pivot</dt><dd>Moves the pivot of each selected part to the centre of its bounding box. The part does not move on screen.</dd></div>
           </dl>
           <h2 id="flags">Flags</h2>
           <p>The card <span class="ui">Filters &amp; flags</span>, under Find, marks suspicious parts without changing them:</p>
           <dl class="table">
-            <div><dt>Flag low-triangle parts</dt><dd>Marks parts with fewer triangles than the slider says.</dd></div>
-            <div><dt>Flag thin slivers</dt><dd>Marks parts that are extremely long for their width, such as gaskets, wires and decals.</dd></div>
+            <div><dt>Flag low-poly</dt><dd>Marks parts with fewer triangles than the slider says.</dd></div>
+            <div><dt>Flag slivers</dt><dd>Marks parts that are extremely long for their width, such as gaskets, wires and decals.</dd></div>
           </dl>
           <p>The status bar shows how many parts are flagged. Click that number to isolate them, look at them, and decide what to do.</p>
           <div class="kb-see"><h2>Related</h2><ul>
@@ -214,12 +215,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

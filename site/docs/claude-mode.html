@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html" aria-current="page">Claude mode (alpha)</a>
@@ -165,7 +166,7 @@
           <aside class="kb-note"><p>Claude mode is an alpha. It works, but it is new, so expect rough edges and changes from one version to the next. Tell me what you find.</p></aside>
           <h2 id="open-it">Open it</h2>
           <ul class="kb-points">
-            <li>On the start screen, choose <span class="ui">Claude mode</span> at the top, next to Help and Keyboard shortcuts.</li>
+            <li>On the start screen, choose <span class="ui">Claude mode</span> at the top right, beside the close button.</li>
             <li>From the <span class="ui">Claude connected</span> badge in the top bar: its dropdown has a <span class="ui">Claude mode</span> button.</li>
             <li>In the command search (<kbd>Shift</kbd><kbd>C</kbd> or <kbd>Ctrl</kbd><kbd>K</kbd>), type <span class="ui">Claude mode</span>.</li>
             <li>Add <span class="ui">?claude</span> to the end of the address of the app. The app then opens straight into Claude mode, with no flash of the normal app.</li>
@@ -179,11 +180,11 @@
             <div><dt>Pictures</dt><dd>Screenshots and renders Claude takes, right under the call. Click one to see it large.</dd></div>
           </dl>
           <p>The model stands on its own in the card: there is no floor grid while Claude mode is on, and it comes back as the <span class="ui">Grid</span> switch had it when you leave. Undo and redo put no pill at the top, and neither do the tools that only look, select or move the view; a longer message waits twice as long and glides slowly, so it can be read.</p>
-          <p>The feed shows what Claude does, not what you type to it: you still talk to Claude in its own window, and the app only sees the requests that reach it. The feed keeps the last 200 entries and the pictures of the last 40, and is emptied when you reload the page.</p>
+          <p>The feed shows what Claude does, not what you type to it: you still talk to Claude in its own window, and the app only sees the requests that reach it. The feed keeps the last 200 entries and the pictures of the last 12 calls (an older picture is dropped to save memory), and is emptied when you reload the page.</p>
           <h2 id="open-a-model">Open a model</h2>
           <p>The folder button at the top opens a small panel with <span class="ui">Open file…</span> and your recent files, with a picture, type, size and age for each, the latest one marked <span class="ui">Continue</span>. The empty feed shows the same list. You can also drop a file on the feed.</p>
           <p>A model opens in the same view: if one is open, the new one replaces it, and no scene tab is opened over it. A STEP, OBJ or other file that needs choices shows the import window first, as usual. A card above the controls shows how it goes: what the app is doing, the step, the percent and the time, with a <span class="ui">Cancel</span> button. When it is done, the <span class="ui">Model opened</span> card lands in the feed and the model fades in.</p>
-          <aside class="kb-note"><p>Opening a file replaces the scene that is open. If you have changes you want to keep, save the scene first.</p></aside>
+          <aside class="kb-note"><p>Opening a file replaces the scene that is open. If that scene has changes that are not saved, the app asks first; to keep them, say no and save the scene.</p></aside>
           <h2 id="the-viewport">The viewport</h2>
           <p>The viewport button at the top shows the model beside the feed, as a rounded card with nothing on it but a few numbers in the corner: the file, parts, triangles and vertices. Click it again to hide the model and give the feed the whole window. Either way Claude’s screenshots work.</p>
           <h2 id="the-controls">The controls</h2>
@@ -193,7 +194,7 @@
             <div><dt>Settings</dt><dd>Open the <span class="ui">Claude</span> section of Settings: what Claude may do.</dd></div>
             <div><dt>Clear</dt><dd>Empty the feed.</dd></div>
             <div><dt>Exit</dt><dd>Leave Claude mode. It asks first; the connection and the open model stay.</dd></div>
-            <div><dt>Start a job</dt><dd>Three buttons (<span class="ui">Optimise for web</span>, <span class="ui">Remove fasteners</span>, <span class="ui">Review scene</span>) copy the command of a ready-made job. Paste it into Claude to start it.</dd></div>
+            <div><dt>Start a job</dt><dd>Three buttons (<span class="ui">Optimise for web</span>, <span class="ui">Remove fasteners</span>, <span class="ui">Review scene</span>) copy the request for a ready-made job. Paste it into Claude to start it; Shift-click copies the slash command instead.</dd></div>
             <div><dt>Connected</dt><dd>The same switch as <span class="ui">Let Claude connect</span>.</dd></div>
             <div><dt>Ask before edits</dt><dd>The same switch as in the badge’s dropdown: the <span class="ui">Allow</span> or <span class="ui">Don’t allow</span> prompt before Claude changes the model. The prompt still appears over the feed.</dd></div>
             <div><dt>Undo and redo</dt><dd>Step back or forward in the model’s history, without leaving the feed.</dd></div>
@@ -225,12 +226,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

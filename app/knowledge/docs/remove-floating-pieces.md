@@ -11,7 +11,7 @@ After you open a CAD file, or after [Remove holes](meshoptimiser://docs/fill-hol
 ## Steps
 
 1. Select the parts to work on. With nothing selected, it works on every visible part.
-2. Open the card **Quick fixes** in the right sidebar and press **Remove floating pieces…**. Or press `Ctrl + K` and type `floating`. The panel opens at the bottom left of the viewport.
+2. Open the card **Quick fixes** in the right sidebar and press **Floating…**. Or press `Ctrl + K` and type `floating`. The panel opens at the bottom left of the viewport.
 3. Set **Piece size up to** to the longest loose piece you want removed, in millimetres. It starts at 5.
 4. Press **Remove**, or `Enter`.
 5. A message says how many floating pieces were removed, from how many parts, and how many triangles that took away.

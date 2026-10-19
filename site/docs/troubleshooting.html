@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -203,13 +204,13 @@
           </ul>
           <p><span class="ui">Cancel</span> on the progress card stops a conversion that is running.</p>
           <h2 id="conversion-failed">“Conversion failed”</h2>
-          <p>A STEP file with nothing solid in it gets a plain message that says so. For any other failure, press <span class="ui">Copy log</span> on the progress card and read the last lines. To see everything the converter prints, drag the STEP file onto <code>test-converter.bat</code> or <code>test-converter.command</code>. Include the log when you report the problem.</p>
+          <p>A STEP file with nothing solid in it gets a plain message that says so. For any other failure, press <span class="ui">Copy log</span> on the progress card and read the last lines. To see everything the converter prints, drag the STEP file onto <code>step2glb.bat</code> or <code>step2glb.command</code>; the window stays open and shows everything the converter prints. Include the log when you report the problem.</p>
           <p>When the conversion fails because a Python package is not installed, the log and the notice name the package and the command that installs it: <code>python -m pip install -r requirements.txt</code>.</p>
           <h2 id="the-model-has-no-colours-or-no-parts-tree">The model has no colours or no parts tree</h2>
           <p>A STEP file may have been converted with geometry only. Open it again and choose <span class="ui">Colours &amp; hierarchy</span> under <span class="ui">Colours and structure</span>. A GLB, FBX, OBJ or STL file can only show what the file itself contains.</p>
           <h2 id="the-view-stutters-on-a-heavy-model">The view stutters on a heavy model</h2>
           <ul class="kb-points">
-            <li>Open <span class="ui">Settings</span>, <span class="ui">Performance</span>. Keep <span class="ui">Skip tiny parts</span> and <span class="ui">Lower the resolution if it stutters</span> on, and try <span class="ui">Quality</span> on Low.</li>
+            <li>Open <span class="ui">Settings</span>, <span class="ui">Performance</span>. Keep <span class="ui">Skip tiny parts</span> on, switch <span class="ui">Lower the resolution if it stutters</span> on, and try <span class="ui">Quality</span> on Low.</li>
             <li>Make the model lighter. See <a href="../docs/workflow.html">A sensible order to work in</a>.</li>
           </ul>
           <h2 id="small-parts-disappear-while-i-turn-the-view">Small parts disappear while I turn the view</h2>
@@ -217,13 +218,13 @@
           <h2 id="a-recent-file-asks-me-to-pick-it-again">A recent file asks me to pick it again</h2>
           <p>The browser needs a fresh permission before the app may read that file. Open it once more with <span class="ui">Open file…</span>, or drop it on the window.</p>
           <h2 id="the-exported-model-is-the-wrong-size-or-lies-on-its-side">The exported model is the wrong size or lies on its side</h2>
-          <p>Export again with a different <span class="ui">Unit scale</span> or the other <span class="ui">Up axis</span>. A model that came from a glTF already stands Y up, so choose <span class="ui">Keep as in the scene</span> for it. See <a href="../docs/export.html">Export</a>.</p>
+          <p>Export again with a different <span class="ui">Unit scale</span> or the other <span class="ui">Up axis</span>. Both start at <span class="ui">The format's own</span>, which writes glTF, GLB and USDZ Y up in metres, OBJ Y up in millimetres, and FBX, STL and PLY Z up in millimetres. <span class="ui">Keep as in the scene</span> keeps the scene’s Z up, which a glTF reader shows lying on its side. See <a href="../docs/export.html">Export</a>.</p>
           <h2 id="another-program-cannot-open-an-fbx-i-exported-long-ago">Another program cannot open an FBX I exported long ago</h2>
           <p>FBX files written by versions before 0.14.0 are refused by the FBX software in other programs. Export the file again with this version, or open it in Blender and save it again.</p>
           <h2 id="an-export-fails-on-a-very-large-model">An export fails on a very large model</h2>
           <p>Text formats such as OBJ can run out of memory. Use GLB or STL, which are binary.</p>
           <h2 id="i-closed-the-window-and-the-app-is-still-running">I closed the window and the app is still running</h2>
-          <p>Closing the window does not stop the server. Close the launcher window too, or next time use <span class="ui">Menu</span>, then <span class="ui">Quit app</span>.</p>
+          <p>The server stops by itself about ten seconds after the last window closes, and the launcher window closes with it. If it is still running, it was started with <code>--no-browser</code> or <code>--keep-running</code>. Close the launcher window, or use <span class="ui">Menu</span>, then <span class="ui">Quit app</span>.</p>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/requirements.html">What you need</a></li>
             <li><a href="../docs/first-start.html">Start it the first time</a></li>
@@ -245,12 +246,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

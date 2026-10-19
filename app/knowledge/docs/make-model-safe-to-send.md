@@ -28,14 +28,14 @@ Part names travel into the GLB. Names like `Gearbox_internal_v7_ACME` say more t
 
 Material names travel too. Look at them in the materials dock (`Shift + M`), and see [Colours and materials](meshoptimiser://docs/colours-materials).
 
-Leave the extra information off when you convert a STEP file. In the import settings, keep **Layer attributes** and **Validation properties (mass, area)** switched off, so layers and per-part volume and area are not read in the first place.
+Leave the extra information off when you convert a STEP file. In the import settings, keep **Keep layers** and **Validation properties** switched off (both start off; they are under **What to read**), so layers and per-part mass and area are not read in the first place.
 
 ## Export settings
 
 - Format: GLB.
 - Keep **Visible parts only** on, which is the default.
 - Better still, delete what you do not want to share instead of only hiding it. A deleted part is gone from the file for certain.
-- Choose **Unit scale** and **Up axis** for the viewer your customer will use. See [How to convert a STEP file to GLB](meshoptimiser://docs/convert-step-to-glb).
+- The defaults, **The format’s own**, suit a glTF viewer. Change **Unit scale** and **Up axis** only if the viewer your customer will use needs it. See [How to convert a STEP file to GLB](meshoptimiser://docs/convert-step-to-glb).
 
 ## Check the file before you send it
 
@@ -49,7 +49,7 @@ Leave the extra information off when you convert a STEP file. In the import sett
 - Send the file you exported, and only that.
 - Do not send the STEP file. It has the exact surfaces.
 - Do not send a saved scene. It keeps your view, your selection and your recolouring, and it is meant for you.
-- Do not send files from the `inbox` folder. Next to each converted GLB the app keeps a small `.params.json` record that includes the path of the original file on your disk.
+- Do not send files from the `inbox` folder. Next to each converted GLB the app keeps a small `.params.json` record that includes the path of the original file on your disk, and `.brep.json` and `.brep.bin` files with the CAD faces and edges.
 
 ## What this does not do
 

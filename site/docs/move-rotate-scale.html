@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -185,7 +186,7 @@
           <p>Hold the Move, Rotate or Scale button on the tool strip, or right-click it, for a short list. <span class="ui">World</span> lines the gizmo up with the scene’s X, Y and Z. <span class="ui">Local</span> lines it up with the part’s own axes, as the part is turned. In <a href="../docs/edit-mesh.html">Edit mesh</a> the list also has <span class="ui">Normal</span>, where the gizmo’s Z points along the average normal of the picked pieces, so a face can be pulled straight out of itself.</p>
           <h2 id="type-exact-values">Type exact values</h2>
           <ol class="kb-steps">
-            <li>Click the transform panel button on the viewport’s tool strip, the fifth button from the top. The <span class="ui">Transform</span> card rises into place at the foot of the left sidebar, under the parts tree.</li>
+            <li>Click <span class="ui">Transform</span> in the toolbar above the parts tree, in the left sidebar. The <span class="ui">Transform</span> card rises into place at the foot of the left sidebar, under the parts tree.</li>
             <li>It has three columns, <span class="ui">Position</span>, <span class="ui">Rotation</span> and <span class="ui">Size</span>, with a row for X, Y and Z.</li>
             <li>Click a number and type a value, or drag it sideways.</li>
             <li>Press <span class="ui">Reset</span> to put position, rotation and size back.</li>
@@ -200,7 +201,7 @@
             <li>The <span class="ui">Scale</span> switch is respected: with it on, the third column is a scale factor for every part.</li>
           </ul>
           <p>The gizmo helps too. When the selected parts are all turned the same way, the gizmo keeps that turn instead of snapping to the scene’s axes as soon as a second part is picked. To line parts up on an axis or space them evenly, see <a href="../docs/align-parts.html">Align parts</a>.</p>
-          <p>Right-click a column heading to copy all three values or paste them onto another part. The units follow <span class="ui">Display units</span> under <span class="ui">Settings</span>, <span class="ui">Scene</span>.</p>
+          <p>Right-click a column heading to copy all three values or paste them onto another part. The units follow <span class="ui">Display units</span> in the <span class="ui">Scene</span> card of the right sidebar.</p>
           <h2 id="dynamic-place">Dynamic place</h2>
           <p>Dynamic place moves a part by dragging it over the model, instead of by its handles. The part rests on whatever surface is under the pointer and turns to face it, as when you drag a part out of the <a href="../docs/library.html">library</a> onto a model. It is handy for putting a bolt on a plate or a bracket on a wall.</p>
           <ol class="kb-steps">
@@ -214,6 +215,7 @@
           <h2 id="what-the-options-mean">What the options mean</h2>
           <dl class="table">
             <div><dt>Align to surface</dt><dd>On to begin with. The part turns so that its top points away from the surface it rests on. Off: the part keeps the way it faces and only slides.</dd></div>
+            <div><dt>Seat bolts by the head</dt><dd>Off to begin with. A bolt goes in by its shank, so only its head is left standing on the surface, as if it were screwed in. Other parts rest as usual. It needs <span class="ui">Align to surface</span>.</dd></div>
             <div><dt>Land on the grid</dt><dd>On to begin with. Where nothing is under the pointer, the part lands on the grid. Off: it stays where it last rested.</dd></div>
             <div><dt>Top axis</dt><dd>Which of the part’s own axes, X, Y or Z, counts as its top. It is the part’s axes as it stands when you first pick it up. Z is the default when Z is up.</dd></div>
             <div><dt>Direction</dt><dd><span class="ui">+</span> or <span class="ui">−</span>: whether the top axis points away from the surface or into it. Choose <span class="ui">−</span> to put a part on upside down.</dd></div>
@@ -234,7 +236,7 @@
           <p>Right-click a group and choose <span class="ui">Lock everything inside</span>, or press <span class="ui">Lock</span> in the group’s Properties, to lock every part in it. The group shows the red lock while all of its parts are locked; if only some are, it stays a folder and reads <span class="ui">Lock</span>.</p>
           <h2 id="measure">Measure</h2>
           <ol class="kb-steps">
-            <li>Press <kbd>M</kbd>, or click the ruler on the bottom toolbar.</li>
+            <li>Press <kbd>M</kbd>, or click the ruler on the tool strip at the left edge of the view.</li>
             <li>Click a point on the model. A dot follows the pointer to show where you will pick.</li>
             <li>Click a second point. The distance appears between them.</li>
             <li>Measure again, or press <kbd>M</kbd> or <kbd>Esc</kbd> to leave measure mode.</li>
@@ -269,12 +271,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

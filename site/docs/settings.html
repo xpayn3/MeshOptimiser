@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -162,7 +163,7 @@
         <p class="lead">One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.</p>
         <div class="kb-body">
           <p>Open it with <kbd>Ctrl</kbd><kbd>,</kbd> or <span class="ui">Menu</span>, then <span class="ui">Settings…</span>. Changes apply as you make them. A click anywhere on a row with a switch turns the switch. There is nothing to confirm: press <span class="ui">Done</span> or <kbd>Esc</kbd> to close the window.</p>
-          <p>The list at the left has the sections. The field at the top searches every section at once. Press <kbd>Ctrl</kbd><kbd>F</kbd> to jump to it. While a search is typed, <kbd>Esc</kbd> clears it first. At the bottom of the list are links to <span class="ui">Help &amp; docs</span> and <span class="ui">Keyboard shortcuts</span>, and the version number.</p>
+          <p>The list at the left has the sections. The field at the top searches every section at once. Press <kbd>Ctrl</kbd><kbd>F</kbd> to jump to it. While a search is typed, <kbd>Esc</kbd> clears it first. At the bottom of the list are links to <span class="ui">Help &amp; docs</span> and <span class="ui">Keyboard shortcuts</span>, and the version number. Inside a section the settings are in cards, one for each group; click the title of a card to fold it (it stays folded next time). A section with three or more cards has chips under its title that jump to them.</p>
           <figure class="kb-figure"><a class="zoom" href="../Images/apps/meshoptimiser-settings-general.webp" data-group="article" data-caption="Settings, General."><img src="../Images/apps/meshoptimiser-settings-general.webp" alt="MeshOptimiser: Settings, General." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>Settings, General.</figcaption></figure>
           <h2 id="general">General</h2>
           <p>How the app starts and behaves.</p>
@@ -173,11 +174,12 @@
             <div><dt>Fit the view after loading</dt><dd>Move the camera so a newly opened model fills the view.</dd></div>
             <div><dt>Same sidebars in every tab</dt><dd>Keep the sidebar widths when you switch tabs.</dd></div>
             <div><dt>Confirm destructive actions</dt><dd>Ask before deletes and other steps that are hard to take back.</dd></div>
-            <div><dt>Warn before leaving with unsaved changes</dt><dd>Closing or reloading the window asks first when a scene has changes that are not saved. On by default.</dd></div>
+            <div><dt>Warn before closing with a model open</dt><dd>Closing the tab (<kbd>Ctrl</kbd><kbd>W</kbd>) or reloading asks first while a model is open or a scene has changes that are not saved. The question is the browser’s own. On by default.</dd></div>
+            <div><dt>Same height for every dock</dt><dd>Materials, Library and Animate keep the height you drag one of them to when you switch between them. Off: each one keeps its own. The Console always keeps its own. On by default.</dd></div>
             <div><dt>Undo history</dt><dd>How many steps <kbd>Ctrl</kbd><kbd>Z</kbd> can go back: <span class="ui">Short</span> (50), <span class="ui">Normal</span> (200) or <span class="ui">Long</span> (500). A longer history uses more memory. See <a href="../docs/undo-redo.html">Undo and redo</a>.</dd></div>
             <div><dt>Delete groups when they become empty</dt><dd>Remove a group automatically when an action empties it. Off by default.</dd></div>
             <div><dt>Keep a recovery copy</dt><dd>While a scene has changes that are not saved, a copy of it is kept inside this browser every minute, every 2 minutes (the default) or every 5 minutes, and only when something changed. If the app crashes, it offers the scene back. <span class="ui">Off</span> stops it. See <a href="../docs/crash-recovery.html">Get your scene back after a crash</a>.</dd></div>
-            <div><dt>New scenes: Unit and Up axis</dt><dd>What a scene you start from now on shows sizes in (mm, cm, m, in, ft, or none), and which way is up (Z-up for CAD, Y-up for glTF and Unity). It applies to every new tab and every reload. The scene you have open keeps its own; change that one under <span class="ui">Scene</span>.</dd></div>
+            <div><dt>New scenes: Unit and Up axis</dt><dd>What a scene you start from now on shows sizes in (mm, cm, m, in, ft, or none), and which way is up (Z-up for CAD, Y-up for glTF and Unity). It applies to every new tab and every reload. The scene you have open keeps its own; change that one in the <span class="ui">Scene</span> card of the right sidebar.</dd></div>
           </dl>
           <h2 id="search">Search</h2>
           <p>What the search (<kbd>Ctrl</kbd><kbd>K</kbd> or <kbd>Shift</kbd><kbd>C</kbd>) looks through, and how closely a name has to fit. The search itself is explained in <a href="../docs/search-and-commands.html">Search and commands</a>.</p>
@@ -202,10 +204,11 @@
           <dl class="table">
             <div><dt>Accent</dt><dd>The colour of buttons, selections and highlights. Choose one of nine colours, or the last swatch to pick any colour. That swatch opens the app’s own colour picker. While you drag in it, the Settings window steps aside so you see the colour on the real interface, and <kbd>Esc</kbd> goes back to the accent you had. The picker can be moved wherever it is opened: drag the strip along its top, or the hint along its bottom.</dd></div>
             <div><dt>Surfaces</dt><dd>The greys the interface is built from: <span class="ui">Graphite</span>, <span class="ui">Midnight</span>, <span class="ui">Warm</span> or <span class="ui">Black</span>.</dd></div>
-            <div><dt>Font</dt><dd>The typeface of the interface: <span class="ui">Inter</span>, <span class="ui">System</span>, <span class="ui">Mono</span> or <span class="ui">Serif</span>.</dd></div>
+            <div><dt>Font</dt><dd>The typeface of the interface: <span class="ui">Default</span> (Inter), <span class="ui">Geist</span>, <span class="ui">Space Grotesk</span>, <span class="ui">System</span>, <span class="ui">Mono</span> or <span class="ui">Serif</span>.</dd></div>
             <div><dt>Text size</dt><dd>Everything written in the interface, from <span class="ui">Small</span> to <span class="ui">Larger</span>. Buttons and fields grow with it.</dd></div>
-            <div><dt>Corners</dt><dd>How round the corners of buttons and cards are: <span class="ui">Sharp</span>, <span class="ui">Default</span> or <span class="ui">Round</span>.</dd></div>
+            <div><dt>Corners</dt><dd>How round the corners of buttons and cards are: <span class="ui">Sharp</span> or <span class="ui">Default</span>.</dd></div>
             <div><dt>Density</dt><dd>The height of buttons, fields and dropdowns: <span class="ui">Compact</span>, <span class="ui">Default</span> or <span class="ui">Roomy</span>.</dd></div>
+            <div><dt>Colour the hierarchy icons</dt><dd>Groups amber, parts green, copies that share geometry purple and cloners blue in the parts tree. Off: all grey, and only the selection is coloured. On by default.</dd></div>
             <div><dt>Interface animations</dt><dd>Fades, slides and the movement of the splash screen. Off: everything just appears.</dd></div>
           </dl>
           <h2 id="viewport">Viewport</h2>
@@ -219,7 +222,10 @@
             <div><dt>FPS counter and Renderer stats</dt><dd>Small read-outs of how fast the view is drawing.</dd></div>
             <div><dt>Show origin points</dt><dd>Shows a dot at the origin of each group in the viewport. Off by default.</dd></div>
             <div><dt>Fog</dt><dd>Fades the grid and distant parts into the background, with start, end and intensity.</dd></div>
-            <div><dt>Background</dt><dd>Dark, Studio gradient, Neutral grey, White, or HDRI environment. An HDRI is a picture of surroundings that lights the model. There are four built-in ones (Studio, Outdoor, Sunset, Overcast), or load your own <code>.hdr</code> or <code>.exr</code> file.</dd></div>
+            <div><dt>Link the list and the view on hover</dt><dd>Point at a part in the tree and it lights up in the view. On by default.</dd></div>
+            <div><dt>Glow on the selection</dt><dd>A soft light on the surface of the selected parts, brightest at their edges, so they stand out in a busy model. Off: the thin outline alone. On by default.</dd></div>
+            <div><dt>Wireframe: Lines</dt><dd><span class="ui">Quads</span> draws the polygons you edit: two flat triangles that make a four-sided cell show as one cell. <span class="ui">Triangles</span> draws every edge of the mesh. It changes what is drawn, not the mesh.</dd></div>
+            <div><dt>Wireframe: Flat within</dt><dd><span class="ui">Strict</span>, <span class="ui">Normal</span> or <span class="ui">Loose</span>: for parts that have polygons of their own, how far neighbouring triangles may turn away from each other and still count as one polygon.</dd></div>
           </dl>
           <h2 id="camera">Camera</h2>
           <p>Projection, field of view, clip planes, and how the view moves.</p>
@@ -243,19 +249,23 @@
             <div><dt>Share materials by colour</dt><dd>Let parts of the same colour share one material. It applies the next time a model is loaded.</dd></div>
             <div><dt>Skip tiny parts</dt><dd>While the view moves, leave out parts that would be only a few pixels across.</dd></div>
             <div><dt>Lower the resolution if it stutters</dt><dd>While a heavy scene moves, draw it a little coarser, and sharp again when it stops.</dd></div>
+            <div><dt>Graphics</dt><dd>Says whether the browser draws with the graphics card or in software, and what to do if it is software.</dd></div>
+            <div><dt>Memory</dt><dd>What the page holds, the geometry of everything open and the undo history, read when the section opens. <span class="ui">Refresh</span> reads them again.</dd></div>
           </dl>
           <h2 id="claude">Claude</h2>
           <p>The connection that lets Claude work with the open scene: the switch, what it may do, whether it asks first, and what it has asked for. It is explained in <a href="../docs/work-with-claude.html">Work with Claude</a>. It is not in the online version.</p>
           <h2 id="updates">Updates</h2>
           <p>Look for a newer version, choose how the app tells you, and go back to the one before. It is explained in <a href="../docs/stop-restart-update.html">Stop, restart and update</a>. It is not in the online version.</p>
           <h2 id="scene">Scene</h2>
-          <p>These belong to the open scene and are saved with it. <kbd>Ctrl</kbd><kbd>;</kbd> opens this section directly, and so does <span class="ui">Scene settings…</span> in the menu.</p>
+          <p>Not a section of this window: these belong to the open scene, are saved with it, and are in the <span class="ui">Scene</span> card at the bottom of the right sidebar. <kbd>Ctrl</kbd><kbd>;</kbd> opens that card, and so does <span class="ui">Scene settings…</span> in the search.</p>
           <dl class="table">
             <div><dt>Display units</dt><dd>The unit used for sizes and distances on screen: millimetres, centimetres, metres, inches, feet, or none.</dd></div>
-            <div><dt>Up axis (viewport)</dt><dd>Which direction is up: Z, as CAD programs have it, or Y, as glTF and some 3D programs have it. It changes how the scene is shown. The exported file follows the choice in the Export window.</dd></div>
+            <div><dt>Up axis</dt><dd>Which direction is up: Z, as CAD programs have it, or Y, as glTF and some 3D programs have it. It changes how the scene is shown. The exported file follows the choice in the Export window.</dd></div>
             <div><dt>Scene scale (×)</dt><dd>A multiplier for the whole scene on screen. 0.001 turns millimetres into metres.</dd></div>
-            <div><dt>Cell size</dt><dd>The size of a grid cell. <span class="ui">Auto</span> fits the model.</dd></div>
+            <div><dt>Grid cell size</dt><dd>The size of a grid cell. <span class="ui">Auto</span> fits the model.</dd></div>
             <div><dt>Snap gizmo to grid</dt><dd>The move tool jumps from one grid cell to the next.</dd></div>
+            <div><dt>Shadows</dt><dd>The sun casts shadows of the parts on each other.</dd></div>
+            <div><dt>Background</dt><dd>Dark, Studio gradient, Neutral grey, White, or HDRI environment. An HDRI is a picture of surroundings that lights the model. Nine come with the app, shown as small pictures (Studio, Soft, Loft, Daylight, Outdoor, Sunset, Venice, Overcast and Grey sky), or load your own <code>.hdr</code> or <code>.exr</code> file with <span class="ui">Load HDRI…</span>. With <span class="ui">Show as background</span> off, the HDRI still lights the model and shows in its reflections, but the background is the plain colour.</dd></div>
           </dl>
           <p>The light has no settings here. The sun is turned with the <span class="ui">Sun direction gizmo</span> in the viewport.</p>
           <h2 id="storage">Storage</h2>
@@ -297,12 +307,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

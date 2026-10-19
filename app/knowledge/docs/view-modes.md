@@ -2,7 +2,7 @@
 
 Six ways to draw the same model: solid, wireframe, X-ray, heatmap, clay and CAD. One key each, plus the Shading card for the clay and CAD looks.
 
-A view mode changes how the model is drawn, not the model itself. Switch with `Alt` and a number for the first four, and with the number alone for Clay and CAD. The first four also have buttons on the tool strip at the left edge of the viewport. Clay and CAD are chosen on the **Shading** card in the right sidebar (see below).
+A view mode changes how the model is drawn, not the model itself. Switch with `Alt` and a number for the first four, and with the number alone for Clay and CAD. The tool strip at the left edge of the viewport has one **View** button for the first four: a click turns the Wireframe on and off, and holding it (or a right-click) lists Solid, Wireframe, X-ray and Heatmap. Clay and CAD are chosen on the **Shading** card in the right sidebar (see below).
 
 > Since v0.24.0 the keys `1` to `4` without `Alt` pick Points, Edges, Polygons and Model in [Edit mesh](meshoptimiser://docs/edit-mesh). They used to switch the view. On a Mac the keys are read by their place on the keyboard, so `Option + 1` to `Option + 4` work although Option + 1 types another character there.
 
@@ -70,7 +70,7 @@ On a very large scene, the smallest parts may be drawn without outlines to keep 
 
 - A view mode never reaches a file. Saving and exporting switch to solid while they run, then switch back.
 - To see inside a model, use X-ray, [Hide, isolate, show all](meshoptimiser://docs/hide-isolate) or [Select hidden parts](meshoptimiser://docs/select-hidden-parts).
-- The background and the lighting are under **Settings**, **Viewport** and **Settings**, **Scene**. CAD does not use the lights at all.
+- The background and the lighting are under **Settings**, **Viewport** and in the **Scene** card of the right sidebar. CAD does not use the lights at all.
 - A [screenshot](meshoptimiser://docs/screenshots) uses the view that is on, unless you choose Solid, Wireframe or X-ray in the screenshot window.
 
 Related: [read-the-numbers](meshoptimiser://docs/read-the-numbers), [hide-isolate](meshoptimiser://docs/hide-isolate), [screenshots](meshoptimiser://docs/screenshots), [edit-mesh](meshoptimiser://docs/edit-mesh)

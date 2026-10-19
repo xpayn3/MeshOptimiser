@@ -9,7 +9,7 @@ Animate makes the parts you choose move: a fan that spins, a lever that swings, 
 ## Open it
 
 - Right-click a part, a group in the tree, or the view with something selected, and choose **Animate…**.
-- Or open the command search and choose **Animate the selection…**.
+- Or open the command search and choose **Animate the selection…**, or press `Shift + A`, or click the clapperboard on the bottom toolbar.
 
 ## Five kinds of motion
 
@@ -31,7 +31,7 @@ While the window is open, a pill in the view says **Animate mode**, **Playing** 
 
 Animate is a drawer along the bottom of the view, set out like a video editor: a ruler, one row for every animated object and a bar for every motion. Drag the ruler or the playhead to scrub. A bar runs from its delay to its repeats: drag its end to change the repeats and the bar itself to change the delay. **Pop out** turns the drawer back into the small window.
 
-While something is animated, the right-hand column has an **Animation** card: play and pause, back to the start and to the end, play backwards, three loop modes, the speed, a scrubber with the time gone and the time left, and a miniature of the timeline. It goes when nothing is animated, and nothing runs while it is paused.
+While something is animated, the right-hand column has an **Animation** card: play and pause, back to the start and to the end, play backwards, a loop button that steps through Loop, Ping-pong and Once, a scrubber with the time gone and the time left, and a miniature of the timeline. It goes when nothing is animated, and nothing runs while it is paused.
 
 ## Take it out
 

@@ -11,7 +11,7 @@ When you drop a STEP file, the page hands it to that local server, which convert
 ## When the internet is used
 
 - **The first start**: The launcher downloads the Python add-ons the converter needs (cadquery-ocp, trimesh, numpy). If Python itself is missing and you agree, it downloads Python too.
-- **Every later start**: Nothing. The libraries the viewer needs are bundled in the `vendor` folder, so the app opens, edits and exports with no connection at all.
+- **Every later start**: The app asks the website, xpayn3.github.io, for the newest version and downloads one small file that lists it. Nothing about you, your computer or your models is sent. You can switch it off under **Settings**, **Updates**. An update itself comes from GitHub, and only when you press **Update now**. Apart from that, nothing: the libraries the viewer needs are bundled in the `vendor` folder, so the app opens, edits and exports with no connection at all.
 - **A few rarely used converters**: Fetched from the internet the first time they are needed: the transcoder for compressed textures, and the converters behind Draco export and some older FBX files.
 
 ## What the browser remembers
@@ -28,7 +28,7 @@ You can clear each of these under **Settings**, **Storage**. Because they live i
 ## What is written to disk
 
 - Converted GLB files, in the `inbox` folder.
-- Scenes you save and files you export, where you choose.
+- Scenes you save and files you export, where you choose. Files that Claude’s tools make go in the `exports` folder.
 - The Python environment, in `.venv`.
 
 Related: [requirements](not in this knowledge base), [files-in-folder](not in this knowledge base), [settings](meshoptimiser://docs/settings)

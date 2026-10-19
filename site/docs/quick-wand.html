@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -171,21 +172,23 @@
           </ol>
           <p>To change your mind, let go with the pointer in the middle of the ring, or press <kbd>Esc</kbd>. Nothing happens.</p>
           <h2 id="with-something-selected">With something selected</h2>
-          <p>The ring works on the selection, and has four slices.</p>
+          <p>The ring works on the selection, and has six slices.</p>
           <dl class="table">
+            <div><dt>Isolate</dt><dd>Shows only the selected parts. While the view is isolated, the slice reads Show all.</dd></div>
             <div><dt>Hide</dt><dd>Hides the selected parts.</dd></div>
-            <div><dt>Reduce</dt><dd>Opens a fan of commands: Decimate −50 %, −25 %, −75 % and −90 % (each shows how many triangles there are before and after), Smart fit, Split and Remove holes.</dd></div>
             <div><dt>Delete</dt><dd>Deletes the selection. It is red, so it is hard to pick by mistake.</dd></div>
-            <div><dt>More</dt><dd>Opens a fan of commands: Isolate, Select similar, Select same colour, Group, Duplicate, Merge, Frame, Hide others and Show all.</dd></div>
+            <div><dt>Reduce</dt><dd>Opens a fan of commands: Decimate −50 %, −25 %, −75 % and −90 % (each shows how many triangles there are before and after), Smart fit, Split and Remove holes.</dd></div>
+            <div><dt>Select</dt><dd>Opens a fan of commands: Select similar, Select same colour, Invert selection and Show in tree.</dd></div>
+            <div><dt>More</dt><dd>Opens a fan of commands: Frame, Duplicate, Group, Merge, Centre pivot, Hide others and Show all (Show all is left out while the view is isolated).</dd></div>
           </dl>
           <h2 id="with-nothing-selected">With nothing selected</h2>
           <p>The ring works on the whole scene, and has six slices.</p>
           <dl class="table">
             <div><dt>Fit view</dt><dd>Zooms to the whole model.</dd></div>
             <div><dt>Select all</dt><dd>Selects every part.</dd></div>
-            <div><dt>View</dt><dd>Opens a fan of commands: Camera, Top, Front and Side views, Solid, Wireframe and X-ray, and the ground grid.</dd></div>
-            <div><dt>Show all</dt><dd>Shows every hidden part.</dd></div>
-            <div><dt>File</dt><dd>Opens a fan of commands: Save screenshot, Save scene and Revert to source file.</dd></div>
+            <div><dt>View</dt><dd>Opens a fan of commands: Camera, Top, Front and Side views, Solid, Wireframe and X-ray, the ground grid and Show all.</dd></div>
+            <div><dt>Save screenshot</dt><dd>Saves a picture of the view.</dd></div>
+            <div><dt>File</dt><dd>Opens a fan of commands: Turntable video, Save scene and Revert to source file.</dd></div>
             <div><dt>Clean</dt><dd>Opens a fan of commands: Recentre on origin, Align to the floor, Align parts, Smart fit all parts, Remove empty parts, Deduplicate geometry and Fix degenerate parts.</dd></div>
           </dl>
           <h2 id="the-fans">The fans</h2>
@@ -221,12 +224,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

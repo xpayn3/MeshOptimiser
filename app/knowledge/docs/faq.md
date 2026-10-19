@@ -20,7 +20,7 @@ No. The viewer and the converter both run on your machine. See [Privacy and offl
 
 ## Do I need an internet connection?
 
-Only for the first start, which downloads the Python add-ons. After that the app runs offline, and so does the help window (`F1`). A few rarely used converters are fetched the first time they are needed.
+Only for the first start, which downloads the Python add-ons. After that the app runs offline, and so does the help window (`F1`). The one thing it does by itself is look for a newer version when it opens; you can switch that off under **Settings**, **Updates**. A few rarely used converters are fetched the first time they are needed.
 
 ## Which browsers work?
 
@@ -56,7 +56,7 @@ No. It reads STEP and writes mesh formats: GLB, glTF, FBX, USDZ, OBJ, STL and PL
 
 ## Where is the converted file?
 
-In the folder `inbox` inside the app folder. To put a file where you want it, save a scene or export.
+In the folder `inbox` inside the app folder, where it stays for about a day. To keep a file where you want it, save a scene or export.
 
 ## Can I undo everything?
 
@@ -68,7 +68,7 @@ Because the converter is a Python program, and a web page cannot start one. The 
 
 ## How do I update?
 
-Download the new zip and unpack it into a new folder. See [Stop, restart and update](not in this knowledge base).
+Open **Settings**, **Updates** and press **Check now**. When a newer version is offered, press **Update now**. A release that changes the launcher files needs the new zip, unpacked into a new folder. See [Stop, restart and update](not in this knowledge base).
 
 ## Where do I find help inside the app?
 

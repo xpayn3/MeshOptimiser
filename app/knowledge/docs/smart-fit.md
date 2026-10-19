@@ -31,10 +31,10 @@ One box says where a part is and nothing about what it is: a bracket becomes a b
 
 - **At most … boxes**: For **A few boxes**: the most boxes a part may become. Simple parts use fewer. It starts at 6.
 - **Blocks detail**: For **Blocks**: how many cells the part’s longest side is cut into. More cells follow the outline more closely and cost more triangles. An opening narrower than a cell closes. It starts at 8.
-- **Roundness for a cylinder**: Under **Advanced**. How round a part must be, looking down its axis, to become a cylinder. 1 is a perfect circle, a hexagon is 0.87, a square 0.71.
-- **Cylinder to box volume**: A cylinder is chosen only if its volume is at most this share of the best box’s volume.
-- **Shortest cylinder, length to width**: How many times longer than it is wide a part must be to become a cylinder. 0 lets flat round parts such as gears and washers be cylinders too.
-- **Find the part's own axes**: Works out which way each part points from its mesh. Off: only the scene’s axes and the axes stored with the part are tried.
+- **Cylinder roundness**: Under **Advanced**. How round a part must be, looking down its axis, to become a cylinder. 1 is a perfect circle, a hexagon is 0.87, a square 0.71.
+- **Cylinder vs box volume**: A cylinder is chosen only if its volume is at most this share of the best box’s volume.
+- **Length to width**: How many times longer than it is wide a part must be to become a cylinder. 0 lets flat round parts such as gears and washers be cylinders too.
+- **Use the part's axes**: Works out which way each part points from its mesh. Off: only the scene’s axes and the axes stored with the part are tried.
 
 ## Every part at once
 
@@ -49,6 +49,6 @@ One run is one undo step: `Ctrl + Z` brings the original meshes back.
 - Only the selected parts change. Another part with the same shape that stands elsewhere is left as it is. Only a copy that lies on the selected part itself, drawn twice in the same place, is fitted along with it.
 - If the view is exploded, Smart fit works on the parts at rest and then puts the explosion back as it was.
 
-> A quick way to simplify all fasteners: press **Select fasteners** in [Fasteners](meshoptimiser://docs/fasteners), then run Smart fit with **Cylinder**. For the copies of one fastener only, select one, press **Select similar** in the card **Selection & actions**, then run Smart fit with **Cylinder**.
+> A quick way to simplify all fasteners: press **Select fasteners** in [Fasteners](meshoptimiser://docs/fasteners), then run Smart fit with **Cylinder**. For the copies of one fastener only, select one, press **Select similar** (the copy icon in the Selection bar of the right sidebar), then run Smart fit with **Cylinder**.
 
 Related: [decimate](meshoptimiser://docs/decimate), [fasteners](meshoptimiser://docs/fasteners), [select-parts](meshoptimiser://docs/select-parts), [smart-optimise](meshoptimiser://docs/smart-optimise), [workflow](meshoptimiser://docs/workflow)

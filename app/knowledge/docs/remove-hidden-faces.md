@@ -26,9 +26,9 @@ Parts are looked at one by one. Everything else in the scene still counts as som
 These are under **Advanced**. The defaults suit most models.
 
 - **Selected parts / Whole scene**: Clean only the parts you selected, or every part in the scene.
-- **Accuracy**: How many directions each part is looked at from: Fast, Normal or Thorough. More directions find faces that show only through a narrow gap, and take longer. Normal is the default.
+- **Fast, Normal, Thorough**: How many directions each part is looked at from. More directions find faces that show only through a narrow gap, and take longer. Normal is the default.
 - **Keep faces next to visible ones**: On by default. A face that touches a visible face stays. This stops holes from opening in the surface, and a face too small to be caught is not lost. Turn it off to remove the most, at the risk of a ragged edge where the inside meets the outside.
-- **See-through parts hide what is behind**: Off by default: a clear part, such as glass, hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part.
+- **Glass blocks the view**: Off by default: a clear part, such as glass, hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part.
 - **Skip parts under**: Parts with fewer triangles than this are left alone. The default is 20.
 - **Reset to defaults**: Puts all of the above back.
 
@@ -44,7 +44,7 @@ The cleaning is one undo step. Press `Ctrl + Z` and the faces are back.
 
 - Show all parts first (`Alt + H`). Parts you hid are not looked at, and they do not count as something in front of the others.
 - Try one heavy part first and look at it from inside. It is the quickest way to learn what the card does on your model.
-- If a face you can see through a small opening was removed, undo and run it again with **Accuracy** on Thorough, and keep **Keep faces next to visible ones** on.
+- If a face you can see through a small opening was removed, undo and run it again with **Thorough** chosen, and keep **Keep faces next to visible ones** on.
 - The card needs WebGL2. If the browser does not have it, the card says so and does nothing.
 
 Related: [select-hidden-parts](meshoptimiser://docs/select-hidden-parts), [delete-small-parts](meshoptimiser://docs/delete-small-parts), [cleanup](meshoptimiser://docs/cleanup), [remove-floating-pieces](meshoptimiser://docs/remove-floating-pieces), [workflow](meshoptimiser://docs/workflow)

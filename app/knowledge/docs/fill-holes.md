@@ -10,8 +10,8 @@ With the limit at 12 mm it closes bolt holes, slots and pockets up to that size,
 
 - Closed: holes that go right through, holes with a floor, counterbores, slots, pockets and engraved lettering in flat faces.
 - Countersinks and flared holes: the hole counts by its bore. The wide opening of a countersink may be up to five times the limit and is closed with the hole.
-- An opening that leads into a hollow space: with **Close openings into hollow spaces** on, as it is to begin with, it is closed flush with the face from outside. What lies behind it stays as it was, out of sight. With the switch off, it is left alone.
-- Loose walls: a broken file can leave a cut-loose tube or cup floating where a hole was. With **Remove vertices left over** on, it is taken out and the opening it sat in is closed. Only a piece that is small next to its part goes, never more than a third of the part.
+- An opening that leads into a hollow space: with **Seal hollows** on, as it is to begin with, it is closed flush with the face from outside. What lies behind it stays as it was, out of sight. With the switch off, it is left alone.
+- Loose walls: a broken file can leave a cut-loose tube or cup floating where a hole was. With **Leftover vertices** on, it is taken out and the opening it sat in is closed. Only a piece that is small next to its part goes, never more than a third of the part.
 - Left alone: a boss or a pin that stands up from a face.
 - Left alone: an opening that is what the part is, such as the bore of a washer, a nut or a bushing.
 - Left alone: an opening that leads out through a curved surface.
@@ -31,14 +31,15 @@ With the limit at 12 mm it closes bolt holes, slots and pockets up to that size,
 Open **Advanced** in the panel.
 
 - **Through holes**: Holes that go right through: an opening on both sides.
-- **Blind holes and pockets**: Holes and pockets with a floor: an opening on one side only.
+- **Blind holes**: Holes and pockets with a floor: an opening on one side only.
 - **Open holes**: Openings with nothing behind them: a missing patch in a flat face.
-- **Close openings into hollow spaces**: An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight. Off: such an opening is left alone. It is on to begin with.
-- **Raised details (lettering, bosses)**: Anything that stands proud of a flat face and is no higher than the limit is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. What stands higher stays.
-- **Raised, up to**: A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too.
+- **Seal hollows**: An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight. Off: such an opening is left alone. It is on to begin with.
+- **Inner pieces**: A mesh can hold separate closed pieces inside its body, such as the balls of a valve or a pin in a bore. Once the holes are closed they are sealed in and never seen again, though still drawn. On: every piece that lies entirely inside the closed part is removed. It is on to begin with.
+- **Raised details**: Anything that stands proud of a flat face and is no higher than the limit is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. What stands higher stays.
+- **Up to**: A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too.
 - **Keep openings that shape the part**: On: an opening that takes up much of its face and of the part is kept, such as the bore of a washer or a window in a frame. Off: only the size limit decides.
 - **Smallest hole**: Holes narrower than this are left alone.
-- **Remove vertices left over**: On: the points that ringed each hole are taken out of the flat face, and the face is triangulated again with the fewest triangles. Press **Remove holes** a second time to clean the same way what an earlier run, or an earlier tool, left behind, even when no hole is left to close. It also works on parts that are already in n-gons. Loose walls that a broken file left floating in an opening, a cut-loose tube or cup that belongs to no solid, go with it.
+- **Leftover vertices**: On: the points that ringed each hole are taken out of the flat face, and the face is triangulated again with the fewest triangles. Press **Remove holes** a second time to clean the same way what an earlier run, or an earlier tool, left behind, even when no hole is left to close. It also works on parts that are already in n-gons. Loose walls that a broken file left floating in an opening, a cut-loose tube or cup that belongs to no solid, go with it.
 - **Depth limit**: How far the inside of a hole may reach, as a multiple of the size limit. Lower it to leave deep bores alone.
 - **Flatness**: How far apart the directions of two triangles may be and still count as one flat face. Raise it for meshes whose flat faces are slightly bent.
 - **Surface may move**: After a hole is closed, a vertex of the flat face round it may be a little off the plane of that face, as on a gently curved panel. It may still be removed if the surface moves no more than this, and never more than 1% of the part’s size. It starts at 0.5 mm. With 0, only vertices exactly in the plane go.
@@ -53,7 +54,7 @@ A whole run is one undo step. Press `Ctrl + Z` and every hole is back.
 - Start with a small limit, look at the result, and raise it. A limit that is too high closes openings you wanted, such as a cable cut-out.
 - The filled result is what gets saved and exported.
 - A hole that was formed by pushing through the sheet, with a collar on the other side, is closed, and its collar stays as a small stub.
-- Points of a closed hole still show in the Lines view? Press **Remove holes** again: with **Remove vertices left over** on, it removes them.
+- Points of a closed hole still show in the Lines view? Press **Remove holes** again: with **Leftover vertices** on, it removes them.
 - A hole whose wall is wound the wrong way round, or whose edge is doubled, is found and closed too, instead of being closed twice.
 - Two holes that touch at a corner, or a hole that touches the edge of its face, are closed as well.
 - While it runs, Remove holes shows in the Tasks list of the status bar.

@@ -6,7 +6,7 @@ Every editing action can be taken back with Ctrl + Z. What counts as one step, a
 - `Ctrl + Y`: Redo: do it again
 - `Ctrl + Shift + Z`: Redo as well
 
-There are no undo buttons on screen. Undo and redo are keyboard only.
+There are no undo buttons on screen. Use the keys, or run **Undo** and **Redo** from the search (`Ctrl + K`).
 
 ## What can be undone
 

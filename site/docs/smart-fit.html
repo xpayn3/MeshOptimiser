@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -193,10 +194,10 @@
           <dl class="table">
             <div><dt>At most … boxes</dt><dd>For <span class="ui">A few boxes</span>: the most boxes a part may become. Simple parts use fewer. It starts at 6.</dd></div>
             <div><dt>Blocks detail</dt><dd>For <span class="ui">Blocks</span>: how many cells the part’s longest side is cut into. More cells follow the outline more closely and cost more triangles. An opening narrower than a cell closes. It starts at 8.</dd></div>
-            <div><dt>Roundness for a cylinder</dt><dd>Under <span class="ui">Advanced</span>. How round a part must be, looking down its axis, to become a cylinder. 1 is a perfect circle, a hexagon is 0.87, a square 0.71.</dd></div>
-            <div><dt>Cylinder to box volume</dt><dd>A cylinder is chosen only if its volume is at most this share of the best box’s volume.</dd></div>
-            <div><dt>Shortest cylinder, length to width</dt><dd>How many times longer than it is wide a part must be to become a cylinder. 0 lets flat round parts such as gears and washers be cylinders too.</dd></div>
-            <div><dt>Find the part's own axes</dt><dd>Works out which way each part points from its mesh. Off: only the scene’s axes and the axes stored with the part are tried.</dd></div>
+            <div><dt>Cylinder roundness</dt><dd>Under <span class="ui">Advanced</span>. How round a part must be, looking down its axis, to become a cylinder. 1 is a perfect circle, a hexagon is 0.87, a square 0.71.</dd></div>
+            <div><dt>Cylinder vs box volume</dt><dd>A cylinder is chosen only if its volume is at most this share of the best box’s volume.</dd></div>
+            <div><dt>Length to width</dt><dd>How many times longer than it is wide a part must be to become a cylinder. 0 lets flat round parts such as gears and washers be cylinders too.</dd></div>
+            <div><dt>Use the part's axes</dt><dd>Works out which way each part points from its mesh. Off: only the scene’s axes and the axes stored with the part are tried.</dd></div>
           </dl>
           <h2 id="every-part-at-once">Every part at once</h2>
           <p>The button <span class="ui">Smart fit all parts</span> in the card <span class="ui">Reduce triangles</span> replaces every part in the scene with a box, a turned box or a cylinder. It removes most of the detail of the model. Use it only when you need the roughest possible stand-in for a whole assembly.</p>
@@ -207,7 +208,7 @@
             <li>Only the selected parts change. Another part with the same shape that stands elsewhere is left as it is. Only a copy that lies on the selected part itself, drawn twice in the same place, is fitted along with it.</li>
             <li>If the view is exploded, Smart fit works on the parts at rest and then puts the explosion back as it was.</li>
           </ul>
-          <aside class="kb-note"><p>A quick way to simplify all fasteners: press <span class="ui">Select fasteners</span> in <a href="../docs/fasteners.html">Fasteners</a>, then run Smart fit with <span class="ui">Cylinder</span>. For the copies of one fastener only, select one, press <span class="ui">Select similar</span> in the card <span class="ui">Selection &amp; actions</span>, then run Smart fit with <span class="ui">Cylinder</span>.</p></aside>
+          <aside class="kb-note"><p>A quick way to simplify all fasteners: press <span class="ui">Select fasteners</span> in <a href="../docs/fasteners.html">Fasteners</a>, then run Smart fit with <span class="ui">Cylinder</span>. For the copies of one fastener only, select one, press <span class="ui">Select similar</span> (the copy icon in the Selection bar of the right sidebar), then run Smart fit with <span class="ui">Cylinder</span>.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/decimate.html">Decimate</a></li>
             <li><a href="../docs/fasteners.html">Fasteners</a></li>
@@ -229,12 +230,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

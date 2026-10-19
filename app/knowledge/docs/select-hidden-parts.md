@@ -24,10 +24,10 @@ When the model will be shown closed, from outside. Not when someone will open a 
 ## What the options mean
 
 - **Whole scene / Selection only**: Check every visible part, or only the parts you selected. With Selection only, the rest of the scene still counts as something that hides them.
-- **Accuracy**: Under **Advanced**. How many directions the scene is looked at from: Fast, Normal or Thorough. More directions find parts that show only through a narrow gap, and take longer.
-- **See-through parts hide what is behind**: Off: a see-through part, such as glass or a clear cover, hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part.
-- **Add to the selection**: Keeps what is selected now and adds the hidden parts to it.
-- **Largest part, of model size**: Keeps only hidden parts up to this share of the model’s size. Empty means any size.
+- **Fast, Normal, Thorough**: Under **Advanced**. How many directions the scene is looked at from. More directions find parts that show only through a narrow gap, and take longer.
+- **Glass blocks the view**: Off: a see-through part, such as glass or a clear cover, hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part.
+- **Add to selection**: Keeps what is selected now and adds the hidden parts to it.
+- **Max part size**: Keeps only hidden parts up to this share of the model’s size. Empty means any size.
 - **Name contains**: Keeps only hidden parts whose name contains this text, such as `screw` or `bearing`. Empty means any name.
 
 ## Undo
@@ -37,8 +37,8 @@ Selecting changes nothing. The delete is one undo step: `Ctrl + Z`.
 ## Tips
 
 - Show all parts first (`Alt + H`). The check looks at visible parts.
-- If a part that you can see through a small opening was selected, run it again with **Accuracy** on Thorough.
-- To remove only the hidden fasteners and keep hidden structure, type part of their name in **Name contains**, or set a small value in **Largest part, of model size**.
+- If a part that you can see through a small opening was selected, run it again with **Thorough** chosen.
+- To remove only the hidden fasteners and keep hidden structure, type part of their name in **Name contains**, or set a small value in **Max part size**.
 
 [Smart optimise](meshoptimiser://docs/smart-optimise) runs this command as one of its steps, **Hidden parts**, with its usual settings.
 

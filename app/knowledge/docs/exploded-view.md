@@ -6,11 +6,11 @@ An exploded view moves every part away from the centre of the model, so parts th
 
 ## Steps
 
-1. Open the card **Exploded view** in the right sidebar, under Inspect. If it is folded, click its header.
+1. Open the card **Exploded view** in the right sidebar. If it is folded, click its header.
 2. Drag the **Amount** slider. The parts move apart. The value is a percentage, and the slider goes up to 300%. You can click the number and type one.
 3. Under **Along**, the buttons X, Y and Z say which directions the parts move in. All three are on to begin with. Switch one off and the parts stop moving along that axis. Switch it on again and they follow.
-4. Under **Quick**, press 25%, 50%, 100% or 200% to jump to that amount.
-5. Press **Reset** to bring every part back.
+4. Above **Along**, **Scene axes** moves the parts apart along the scene’s X, Y and Z. **Part axis** sends each part out along its own axis instead, so a bolt at an angle travels along that angle; the **Along** buttons and the fine tune sliders are greyed out then.
+5. Press the round arrow at the right of the **Along** row (**Put every part back**) to bring every part back.
 
 ## Fine tune each axis
 

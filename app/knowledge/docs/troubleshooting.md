@@ -66,7 +66,7 @@ Large assemblies take time, and the reading of names, colours and the tree is th
 
 ## “Conversion failed”
 
-A STEP file with nothing solid in it gets a plain message that says so. For any other failure, press **Copy log** on the progress card and read the last lines. To see everything the converter prints, drag the STEP file onto `test-converter.bat` or `test-converter.command`. Include the log when you report the problem.
+A STEP file with nothing solid in it gets a plain message that says so. For any other failure, press **Copy log** on the progress card and read the last lines. To see everything the converter prints, drag the STEP file onto `step2glb.bat` or `step2glb.command`; the window stays open and shows everything the converter prints. Include the log when you report the problem.
 
 When the conversion fails because a Python package is not installed, the log and the notice name the package and the command that installs it: `python -m pip install -r requirements.txt`.
 
@@ -76,7 +76,7 @@ A STEP file may have been converted with geometry only. Open it again and choose
 
 ## The view stutters on a heavy model
 
-- Open **Settings**, **Performance**. Keep **Skip tiny parts** and **Lower the resolution if it stutters** on, and try **Quality** on Low.
+- Open **Settings**, **Performance**. Keep **Skip tiny parts** on, switch **Lower the resolution if it stutters** on, and try **Quality** on Low.
 - Make the model lighter. See [A sensible order to work in](meshoptimiser://docs/workflow).
 
 ## Small parts disappear while I turn the view
@@ -89,7 +89,7 @@ The browser needs a fresh permission before the app may read that file. Open it 
 
 ## The exported model is the wrong size or lies on its side
 
-Export again with a different **Unit scale** or the other **Up axis**. A model that came from a glTF already stands Y up, so choose **Keep as in the scene** for it. See [Export](meshoptimiser://docs/export).
+Export again with a different **Unit scale** or the other **Up axis**. Both start at **The format's own**, which writes glTF, GLB and USDZ Y up in metres, OBJ Y up in millimetres, and FBX, STL and PLY Z up in millimetres. **Keep as in the scene** keeps the scene’s Z up, which a glTF reader shows lying on its side. See [Export](meshoptimiser://docs/export).
 
 ## Another program cannot open an FBX I exported long ago
 
@@ -101,6 +101,6 @@ Text formats such as OBJ can run out of memory. Use GLB or STL, which are binary
 
 ## I closed the window and the app is still running
 
-Closing the window does not stop the server. Close the launcher window too, or next time use **Menu**, then **Quit app**.
+The server stops by itself about ten seconds after the last window closes, and the launcher window closes with it. If it is still running, it was started with `--no-browser` or `--keep-running`. Close the launcher window, or use **Menu**, then **Quit app**.
 
 Related: [requirements](not in this knowledge base), [first-start](not in this knowledge base), [faq](meshoptimiser://docs/faq), [self-test](not in this knowledge base), [crash-recovery](meshoptimiser://docs/crash-recovery)

@@ -16,12 +16,14 @@ To change your mind, let go with the pointer in the middle of the ring, or press
 
 ## With something selected
 
-The ring works on the selection, and has four slices.
+The ring works on the selection, and has six slices.
 
+- **Isolate**: Shows only the selected parts. While the view is isolated, the slice reads Show all.
 - **Hide**: Hides the selected parts.
-- **Reduce**: Opens a fan of commands: Decimate −50 %, −25 %, −75 % and −90 % (each shows how many triangles there are before and after), Smart fit, Split and Remove holes.
 - **Delete**: Deletes the selection. It is red, so it is hard to pick by mistake.
-- **More**: Opens a fan of commands: Isolate, Select similar, Select same colour, Group, Duplicate, Merge, Frame, Hide others and Show all.
+- **Reduce**: Opens a fan of commands: Decimate −50 %, −25 %, −75 % and −90 % (each shows how many triangles there are before and after), Smart fit, Split and Remove holes.
+- **Select**: Opens a fan of commands: Select similar, Select same colour, Invert selection and Show in tree.
+- **More**: Opens a fan of commands: Frame, Duplicate, Group, Merge, Centre pivot, Hide others and Show all (Show all is left out while the view is isolated).
 
 ## With nothing selected
 
@@ -29,9 +31,9 @@ The ring works on the whole scene, and has six slices.
 
 - **Fit view**: Zooms to the whole model.
 - **Select all**: Selects every part.
-- **View**: Opens a fan of commands: Camera, Top, Front and Side views, Solid, Wireframe and X-ray, and the ground grid.
-- **Show all**: Shows every hidden part.
-- **File**: Opens a fan of commands: Save screenshot, Save scene and Revert to source file.
+- **View**: Opens a fan of commands: Camera, Top, Front and Side views, Solid, Wireframe and X-ray, the ground grid and Show all.
+- **Save screenshot**: Saves a picture of the view.
+- **File**: Opens a fan of commands: Turntable video, Save scene and Revert to source file.
 - **Clean**: Opens a fan of commands: Recentre on origin, Align to the floor, Align parts, Smart fit all parts, Remove empty parts, Deduplicate geometry and Fix degenerate parts.
 
 ## The fans

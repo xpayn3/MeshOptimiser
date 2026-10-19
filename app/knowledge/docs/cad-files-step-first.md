@@ -36,7 +36,7 @@ MeshOptimiser opens one file. Several programs can also write an assembly as a t
 
 ## If you cannot get a STEP file
 
-Export a mesh instead, as OBJ, FBX, STL or GLB. MeshOptimiser opens those directly. You lose something: the copies of a repeated part are found when a STEP file is converted, so a mesh file arrives with every copy as a mesh of its own, and the model is heavier to start with.
+Export a mesh instead, as OBJ, FBX, STL or GLB. MeshOptimiser opens those directly. You lose something: a mesh is already made of triangles, so how fine the curves are was decided by the program that wrote it. MeshOptimiser does look for repeated parts in a GLB, FBX, OBJ or 3MF file when it opens, but it only finds copies whose triangles are the same after a move.
 
 > Menu names change a little from one version of a CAD program to the next. If your screen differs from these steps, search your program’s own help for “export STEP”.
 

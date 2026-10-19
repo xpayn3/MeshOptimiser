@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -167,7 +168,7 @@
           <h2 id="when-the-internet-is-used">When the internet is used</h2>
           <dl class="table">
             <div><dt>The first start</dt><dd>The launcher downloads the Python add-ons the converter needs (cadquery-ocp, trimesh, numpy). If Python itself is missing and you agree, it downloads Python too.</dd></div>
-            <div><dt>Every later start</dt><dd>Nothing. The libraries the viewer needs are bundled in the <code>vendor</code> folder, so the app opens, edits and exports with no connection at all.</dd></div>
+            <div><dt>Every later start</dt><dd>The app asks the website, xpayn3.github.io, for the newest version and downloads one small file that lists it. Nothing about you, your computer or your models is sent. You can switch it off under <span class="ui">Settings</span>, <span class="ui">Updates</span>. An update itself comes from GitHub, and only when you press <span class="ui">Update now</span>. Apart from that, nothing: the libraries the viewer needs are bundled in the <code>vendor</code> folder, so the app opens, edits and exports with no connection at all.</dd></div>
             <div><dt>A few rarely used converters</dt><dd>Fetched from the internet the first time they are needed: the transcoder for compressed textures, and the converters behind Draco export and some older FBX files.</dd></div>
           </dl>
           <h2 id="what-the-browser-remembers">What the browser remembers</h2>
@@ -182,7 +183,7 @@
           <h2 id="what-is-written-to-disk">What is written to disk</h2>
           <ul class="kb-points">
             <li>Converted GLB files, in the <code>inbox</code> folder.</li>
-            <li>Scenes you save and files you export, where you choose.</li>
+            <li>Scenes you save and files you export, where you choose. Files that Claude’s tools make go in the <code>exports</code> folder.</li>
             <li>The Python environment, in <code>.venv</code>.</li>
           </ul>
           <div class="kb-see"><h2>Related</h2><ul>
@@ -204,12 +205,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

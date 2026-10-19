@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -181,13 +182,13 @@
           <h2 id="clean-the-names">Clean the names</h2>
           <p>Part names travel into the GLB. Names like <code>Gearbox_internal_v7_ACME</code> say more than a picture does. Select the parts and press <kbd>F2</kbd> to rename many at once, or use <span class="ui">Flatten</span> to remove levels of grouping that show how the product is built. See <a href="../docs/parts-tree.html">The parts tree</a>.</p>
           <p>Material names travel too. Look at them in the materials dock (<kbd>Shift</kbd><kbd>M</kbd>), and see <a href="../docs/colours-materials.html">Colours and materials</a>.</p>
-          <p>Leave the extra information off when you convert a STEP file. In the import settings, keep <span class="ui">Layer attributes</span> and <span class="ui">Validation properties (mass, area)</span> switched off, so layers and per-part volume and area are not read in the first place.</p>
+          <p>Leave the extra information off when you convert a STEP file. In the import settings, keep <span class="ui">Keep layers</span> and <span class="ui">Validation properties</span> switched off (both start off; they are under <span class="ui">What to read</span>), so layers and per-part mass and area are not read in the first place.</p>
           <h2 id="export-settings">Export settings</h2>
           <ul class="kb-points">
             <li>Format: GLB.</li>
             <li>Keep <span class="ui">Visible parts only</span> on, which is the default.</li>
             <li>Better still, delete what you do not want to share instead of only hiding it. A deleted part is gone from the file for certain.</li>
-            <li>Choose <span class="ui">Unit scale</span> and <span class="ui">Up axis</span> for the viewer your customer will use. See <a href="../docs/convert-step-to-glb.html">How to convert a STEP file to GLB</a>.</li>
+            <li>The defaults, <span class="ui">The format’s own</span>, suit a glTF viewer. Change <span class="ui">Unit scale</span> and <span class="ui">Up axis</span> only if the viewer your customer will use needs it. See <a href="../docs/convert-step-to-glb.html">How to convert a STEP file to GLB</a>.</li>
           </ul>
           <h2 id="check-the-file-before-you-send-it">Check the file before you send it</h2>
           <ol class="kb-steps">
@@ -201,7 +202,7 @@
             <li>Send the file you exported, and only that.</li>
             <li>Do not send the STEP file. It has the exact surfaces.</li>
             <li>Do not send a saved scene. It keeps your view, your selection and your recolouring, and it is meant for you.</li>
-            <li>Do not send files from the <code>inbox</code> folder. Next to each converted GLB the app keeps a small <code>.params.json</code> record that includes the path of the original file on your disk.</li>
+            <li>Do not send files from the <code>inbox</code> folder. Next to each converted GLB the app keeps a small <code>.params.json</code> record that includes the path of the original file on your disk, and <code>.brep.json</code> and <code>.brep.bin</code> files with the CAD faces and edges.</li>
           </ul>
           <h2 id="what-this-does-not-do">What this does not do</h2>
           <ul class="kb-points">
@@ -229,12 +230,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

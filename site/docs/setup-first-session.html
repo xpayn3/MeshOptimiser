@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -161,7 +162,7 @@
         <h1>Set it up after installing</h1>
         <p class="lead">A checklist for the first session: check the renderer, choose the units, set the look and the performance options, and know where your settings are kept.</p>
         <div class="kb-body">
-          <p>The app works the moment it opens, so none of this is required. It is a short checklist of the choices that are worth a minute on the first day, in the order that is most useful. Everything here is in <span class="ui">Settings</span>: press <kbd>Ctrl</kbd><kbd>,</kbd> (on a Mac, <kbd>Cmd</kbd><kbd>,</kbd>) or use <span class="ui">Menu</span>, then <span class="ui">Settings…</span>. Changes apply as you make them, with nothing to confirm.</p>
+          <p>The app works the moment it opens, so none of this is required. It is a short checklist of the choices that are worth a minute on the first day, in the order that is most useful. Most of it is in <span class="ui">Settings</span>: press <kbd>Ctrl</kbd><kbd>,</kbd> (on a Mac, <kbd>Cmd</kbd><kbd>,</kbd>) or use <span class="ui">Menu</span>, then <span class="ui">Settings…</span>. Changes apply as you make them, with nothing to confirm. The scene’s units and up axis, the background and the CAD lines are on cards of the right sidebar instead.</p>
           <h2 id="1-check-which-renderer-you-have">1. Check which renderer you have</h2>
           <p>The viewer draws with WebGPU when your browser and graphics card support it, and with WebGL2 when they do not. Both give the same picture. WebGPU is faster on heavy models.</p>
           <ol class="kb-steps">
@@ -170,15 +171,15 @@
           </ol>
           <p>If you are on WebGL2 and want WebGPU, update your browser and your graphics driver first.</p>
           <h2 id="2-choose-the-units-you-think-in">2. Choose the units you think in</h2>
-          <p>Under <span class="ui">Scene</span>, <span class="ui">Display units</span> sets the unit for sizes and distances on screen: millimetres, centimetres, metres, inches, feet, or none. A STEP file normally comes in millimetres. This setting belongs to the open scene and is saved with it, so check it again for a scene from a different source.</p>
-          <p>Under <span class="ui">Scene</span>, <span class="ui">Up axis (viewport)</span> is Z for most CAD files and Y for glTF files and some 3D programs. It changes how the model is shown. What the exported file uses is chosen in the Export window.</p>
+          <p>On the <span class="ui">Scene</span> card in the right sidebar, <span class="ui">Display units</span> sets the unit for sizes and distances on screen: millimetres, centimetres, metres, inches, feet, or none. A STEP file normally comes in millimetres. This setting belongs to the open scene and is saved with it, so check it again for a scene from a different source.</p>
+          <p>Also on the <span class="ui">Scene</span> card, <span class="ui">Up axis</span> is Z for most CAD files and Y for glTF files and some 3D programs. It changes how the model is shown. What the exported file uses is chosen in the Export window.</p>
           <h2 id="3-make-it-comfortable-to-look-at">3. Make it comfortable to look at</h2>
           <p>Under <span class="ui">Appearance</span> you can change the accent colour, the surfaces, the typeface, the text size, the roundness of corners and the height of buttons and fields. None of it touches your models. <span class="ui">Reset</span> at the bottom of the section puts everything back.</p>
-          <p>Under <span class="ui">Viewport</span>, check <span class="ui">Background</span> and <span class="ui">Ground grid</span>. Switch <span class="ui">CAD lines</span> off on the <span class="ui">Shading</span> card if you prefer shading without edge lines.</p>
+          <p>Under <span class="ui">Viewport</span> in Settings, check <span class="ui">Ground grid</span>. <span class="ui">Background</span> is on the <span class="ui">Scene</span> card. Switch <span class="ui">CAD lines</span> off on the <span class="ui">Shading</span> card if you prefer shading without edge lines.</p>
           <h2 id="4-set-the-performance-options-for-your-computer">4. Set the performance options for your computer</h2>
           <dl class="table">
             <div><dt>A fast computer, models up to a few hundred thousand triangles</dt><dd>Leave everything as it is.</dd></div>
-            <div><dt>A heavy assembly, or a modest graphics card</dt><dd>Keep <span class="ui">Skip tiny parts</span> and <span class="ui">Lower the resolution if it stutters</span> on. Set <span class="ui">Quality</span> to Low if the view still stutters.</dd></div>
+            <div><dt>A heavy assembly, or a modest graphics card</dt><dd>Keep <span class="ui">Skip tiny parts</span> on, which it is by default, and switch <span class="ui">Lower the resolution if it stutters</span> on, which it is not by default. Set <span class="ui">Quality</span> to Low if the view still stutters.</dd></div>
             <div><dt>Only the exported result matters, not the view</dt><dd>Make the model lighter first. See <a href="../docs/workflow.html">A sensible order to work in</a>.</dd></div>
           </dl>
           <h2 id="5-decide-how-the-app-starts">5. Decide how the app starts</h2>
@@ -186,7 +187,7 @@
           <ul class="kb-points">
             <li><span class="ui">Start screen</span> and <span class="ui">Offer the last file</span> control whether the start screen opens with a Resume button for the file you had last.</li>
             <li><span class="ui">Splash screen</span> is the short splash with the version number. Switch it off if you would rather have the app fade straight in.</li>
-            <li><span class="ui">Warn before leaving with unsaved changes</span> is on by default. It asks before a window with unsaved edits is closed. Leave it on.</li>
+            <li><span class="ui">Warn before closing with a model open</span> is on by default. It asks before the tab is closed or reloaded while a model is open or a scene has changes that are not saved. Leave it on.</li>
             <li><span class="ui">Undo history</span> is 50, 200 or 500 steps. A longer history uses more memory.</li>
           </ul>
           <h2 id="6-learn-the-three-keys-that-find-everything">6. Learn the three keys that find everything</h2>
@@ -224,12 +225,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

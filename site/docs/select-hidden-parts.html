@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -187,10 +188,10 @@
           <h2 id="what-the-options-mean">What the options mean</h2>
           <dl class="table">
             <div><dt>Whole scene / Selection only</dt><dd>Check every visible part, or only the parts you selected. With Selection only, the rest of the scene still counts as something that hides them.</dd></div>
-            <div><dt>Accuracy</dt><dd>Under <span class="ui">Advanced</span>. How many directions the scene is looked at from: Fast, Normal or Thorough. More directions find parts that show only through a narrow gap, and take longer.</dd></div>
-            <div><dt>See-through parts hide what is behind</dt><dd>Off: a see-through part, such as glass or a clear cover, hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part.</dd></div>
-            <div><dt>Add to the selection</dt><dd>Keeps what is selected now and adds the hidden parts to it.</dd></div>
-            <div><dt>Largest part, of model size</dt><dd>Keeps only hidden parts up to this share of the model’s size. Empty means any size.</dd></div>
+            <div><dt>Fast, Normal, Thorough</dt><dd>Under <span class="ui">Advanced</span>. How many directions the scene is looked at from. More directions find parts that show only through a narrow gap, and take longer.</dd></div>
+            <div><dt>Glass blocks the view</dt><dd>Off: a see-through part, such as glass or a clear cover, hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part.</dd></div>
+            <div><dt>Add to selection</dt><dd>Keeps what is selected now and adds the hidden parts to it.</dd></div>
+            <div><dt>Max part size</dt><dd>Keeps only hidden parts up to this share of the model’s size. Empty means any size.</dd></div>
             <div><dt>Name contains</dt><dd>Keeps only hidden parts whose name contains this text, such as <code>screw</code> or <code>bearing</code>. Empty means any name.</dd></div>
           </dl>
           <h2 id="undo">Undo</h2>
@@ -198,8 +199,8 @@
           <h2 id="tips">Tips</h2>
           <ul class="kb-points">
             <li>Show all parts first (<kbd>Alt</kbd><kbd>H</kbd>). The check looks at visible parts.</li>
-            <li>If a part that you can see through a small opening was selected, run it again with <span class="ui">Accuracy</span> on Thorough.</li>
-            <li>To remove only the hidden fasteners and keep hidden structure, type part of their name in <span class="ui">Name contains</span>, or set a small value in <span class="ui">Largest part, of model size</span>.</li>
+            <li>If a part that you can see through a small opening was selected, run it again with <span class="ui">Thorough</span> chosen.</li>
+            <li>To remove only the hidden fasteners and keep hidden structure, type part of their name in <span class="ui">Name contains</span>, or set a small value in <span class="ui">Max part size</span>.</li>
           </ul>
           <p><a href="../docs/smart-optimise.html">Smart optimise</a> runs this command as one of its steps, <span class="ui">Hidden parts</span>, with its usual settings.</p>
           <div class="kb-see"><h2>Related</h2><ul>
@@ -224,12 +225,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

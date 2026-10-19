@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -161,7 +162,7 @@
         <h1>Add gltfpack for smaller files</h1>
         <p class="lead">An optional free tool. With it on your PATH, the converter compresses its GLB files with Meshopt, which can make them many times smaller. How to install it and how to check.</p>
         <div class="kb-body">
-          <p>The converter can compress the models it writes with Meshopt compression, and can simplify them while it does. It does that through a separate free program called gltfpack. The app works without it: the files are simply larger. If gltfpack is installed and findable, compression turns on by itself, and the README of the app puts the saving at about ten times for a typical model.</p>
+          <p>The converter can compress the models it writes with Meshopt compression, and can simplify them while it does. It does that through a separate free program called gltfpack. The app works without it: the files are simply larger. If gltfpack is installed and findable, compression turns on by itself, and the README of the app puts the saving at about ten times for a typical model. This is for the command-line converter, <code>step2glb.py</code>. When the app itself converts a STEP file you open, it always switches this off, so the file the app gets is the same with or without gltfpack. To compress what you export from the app, use Draco or Meshopt in the <span class="ui">Export</span> window.</p>
           <h2 id="what-findable-means">What “findable” means</h2>
           <p>The converter asks the system for a program named <code>gltfpack</code>, the same way a terminal does. It is found when the folder that holds it is on your PATH, which is the list of folders the system searches for programs. That is why an installed gltfpack that is not on the PATH does nothing.</p>
           <h2 id="install-it-with-npm">Install it with npm</h2>
@@ -182,10 +183,10 @@
             <li>Type <code>gltfpack -h</code> and press <kbd>Enter</kbd>. A list of options means it works. “Command not found” or “is not recognized” means the folder is not on the PATH yet.</li>
             <li>Quit MeshOptimiser from <span class="ui">Menu</span>, <span class="ui">Quit app</span>, and start it again with its launcher. The server reads the PATH when it starts, so it has to be restarted to see the new program.</li>
           </ol>
-          <p>Convert a STEP file. The launcher window then shows a line that starts with <code>post:</code> and says gltfpack. Without gltfpack, a conversion that asks for compression prints “gltfpack not on PATH” and carries on without it.</p>
+          <p>Convert a STEP file with the command-line converter (see <a href="../docs/command-line.html">The command-line converter</a>). Its output then shows a line that starts with <code>post:</code> and says gltfpack. Without gltfpack, a conversion that asks for compression prints “gltfpack not on PATH” and carries on without it.</p>
           <h2 id="using-it-from-the-command-line">Using it from the command line</h2>
           <p>The options that use it, such as <code>--meshopt</code> and <code>--simplify</code>, are explained in <a href="../docs/command-line.html">The command-line converter</a>.</p>
-          <aside class="kb-note"><p>Draco compression, an alternative that GLB export offers, needs nothing to be installed: its encoder is bundled with the app.</p></aside>
+          <aside class="kb-note"><p>Draco and Meshopt compression, which the Export window offers for GLB, need nothing to be installed: their encoders are bundled with the app.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/command-line.html">The command-line converter</a></li>
             <li><a href="../docs/install-problems.html">Install problems, message by message</a></li>
@@ -206,12 +207,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

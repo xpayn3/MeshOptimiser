@@ -14,28 +14,29 @@ A STEP file is how engineers share a design. A web page cannot show one. GLB is 
 1. Start the app with `start.bat` (Windows) or `start.command` (macOS).
 2. Drag the STEP file onto the window.
 3. In the **Import settings** window, leave everything as it is and press **Import**. **Standard** under **Surface quality** is the recommended choice. See [Open your first file](meshoptimiser://docs/first-file).
-4. Wait while the progress card works. A big assembly can take several minutes. Repeated parts are found and stored once, and the result is compressed. Open the same file again later, with the same settings, and it appears at once: the converted model is kept.
+4. Wait while the progress card works. A big assembly can take several minutes. A big file is meshed on several cores at once (up to eight processes); reading the STEP file itself uses one. Repeated parts are found and stored once, and the result is compressed. Open the same file again later, with the same settings, and it appears at once: the converted model is kept.
 5. Look at the model. **Properties** on the right shows how heavy it is. Press `Alt + 1` for the normal view.
-6. Press `Ctrl + E` and choose **GLB**. In the Export window, check **Unit scale** and **Up axis** (below).
+6. Press `Ctrl + E` and choose **GLB**. In the Export window, the defaults for **Unit scale** and **Up axis** suit a GLB (see below).
 7. Press **Export GLB**. The file arrives in your downloads folder.
 
 ## Two settings that save a second try
 
-- **Unit scale**: CAD models are usually in millimetres, and glTF and most web viewers expect metres. If the model shows up a thousand times too big in the viewer, export again with **× 0.001 (mm → m)**.
-- **Up axis**: CAD uses Z as up. glTF uses Y. If the model lies on its back in the viewer, export with **Y-up (glTF, OBJ, Maya)**.
+- **Unit scale**: CAD models are usually in millimetres, and glTF and most web viewers expect metres. **The format’s own**, the default, writes a GLB in metres, so the model should arrive at its real size. **× 0.001 (mm → m)** does the same by hand.
+- **Up axis**: CAD uses Z as up. glTF uses Y. **The format’s own**, the default, writes a GLB Y up, so the model should stand on its feet. **Turn Z-up into Y-up (for glTF, OBJ, Maya)** does the same by hand.
 
 Leave **Draco compression** off unless the viewer you use can read it. See [Which format should I choose](meshoptimiser://docs/choose-format).
 
 ## Smoother curves, or fewer triangles
 
-How round a hole looks, and how heavy the GLB is, is decided when the CAD surfaces are turned into triangles. That step is called tessellation. In the **Import settings** window, the four choices under **Surface quality** set it for you. Open **Tessellation** under them to see the numbers, or to type your own.
+How round a hole looks, and how heavy the GLB is, is decided when the CAD surfaces are turned into triangles. That step is called tessellation. In the **Import settings** window, the named choices under **Surface quality** (**Clean**, **Coarse**, **Standard**, **Fine** and **Ultra**) set it for you. Open **Tessellation** under them to see the numbers, or to type your own.
 
 - **Sag**: How far a triangle may stand off the true surface, in millimetres. Smaller is smoother, with more triangles.
 - **Angle**: The most a curve may turn from one triangle to the next, in degrees. Smaller means rounder holes and fillets.
 - **Min edge**: The smallest triangle edge allowed. It keeps tiny fillets and threads from filling up with slivers. 0 is no limit.
-- **Coarse, Standard, Fine, Ultra**: Each sets a sag and an angle: 1 mm and 30°, 0.5 mm and 30°, 0.2 mm and 20°, 0.05 mm and 12°. The finer choices tighten the angle too, which is what rounds small holes.
+- **Clean, Coarse, Standard, Fine, Ultra**: Each sets a sag and an angle: 2 mm and 38°, 1 mm and 30°, 0.5 mm and 30°, 0.2 mm and 20°, 0.05 mm and 12°. **Clean** makes few triangles with fillets in even strips; small holes stay a little polygonal. The finer choices tighten the angle too, which is what rounds small holes.
 - **Custom**: Selected as soon as you type a sag or an angle of your own.
 - **By part size**: Small, medium and large parts each get a sag and an angle, so the housing comes in fine and the screws coarse. You set where small ends and large begins, as a share of the model’s size.
+- **Even strips**: Meshes curved faces along their own directions, so a fillet is a row of even strips, not a scatter of triangles. On by default.
 - **Smooth shading**: Writes the normals of the real CAD surfaces into the GLB. A fillet runs into the faces beside it without a visible seam, and sharp edges stay sharp. On by default.
 - **Swap Y and Z**: In the same window, under Clean-up. For a file that comes in lying on its side.
 

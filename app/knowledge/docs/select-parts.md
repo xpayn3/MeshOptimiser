@@ -15,7 +15,7 @@ Most tools work on the parts you have selected. A selected part gets an outline 
 
 ## Click, Box or Brush
 
-The selection-tool button in the left toolbar chooses what a drag does. Press it and let go over a row of its list to pick that tool, or let go on the button and click a row. With **Edit mesh** on, the same button picks pieces of a mesh instead of whole parts.
+The selection-tool button in the left toolbar chooses what a drag does. A click goes to the next tool. To see the list, hold the button or right-click it: let go over a row to pick that tool, or let go on the button and click a row. With **Edit mesh** on, the same button picks pieces of a mesh instead of whole parts.
 
 - **Click**: The usual way: click a part.
 - **Box**: A plain left drag draws a rectangle. A part is picked only when one of its own triangles is under the rectangle, not when its bounding box is.
@@ -31,7 +31,7 @@ In every tool, `Alt` + drag turns the camera.
 
 ## Let the app select
 
-The card **Selection & actions** in the right sidebar has buttons for the common cases:
+The selection bar under **Properties** in the right sidebar has buttons for All, Invert and Similar. All of these are in the command search (`Ctrl + K`) too:
 
 - **All**: Selects every visible part. `Ctrl + A`.
 - **Invert**: Selects what was not selected, and the other way round. `Ctrl + I`.
@@ -50,7 +50,7 @@ Two tools select for you in a cleverer way: [Select hidden parts](meshoptimiser:
 
 - Press `Shift + S` to scroll the tree to the selected part and open the groups it is in.
 - Press `F` to frame the selection in the viewport.
-- The status bar shows how many parts are selected. Click that number to frame them.
+- The selection bar in the right sidebar counts the selected parts.
 - When none of the selection is in the picture, a faint arrow at the edge of the view points to the side it is on. Click the arrow to frame the selection. See [Move the view](meshoptimiser://docs/move-the-view).
 - **Properties** shows the triangle count of the selection and its share of the scene.
 

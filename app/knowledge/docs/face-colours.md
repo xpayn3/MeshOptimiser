@@ -1,6 +1,6 @@
 # Several colours on one part
 
-Give some faces of a part a colour of their own,. The part stays one part, and the colours go with it into every file.
+Give some faces of a part a colour of their own. The part stays one part, and the colours go with it into every file.
 
 A part has one main material. Some of its faces can wear other materials, each on a selection of faces: a red body with a blue top, a grey housing with a painted logo. It is still one part: it is selected, moved, merged and exported as one, and it stays closed, because the faces in another colour share their edges with the rest.
 
@@ -16,11 +16,11 @@ Or drop a material from the materials dock onto the picked faces, or press its *
 
 ## See and change the colours of a part
 
-With one part selected, **Properties** lists its colours under its material: the main one first, then each colour on some faces, with how many triangles wear it.
+With one part selected, **Properties** shows its colours as cards in the material strip: the main one first, then each colour on some faces. Point at a card to see how many triangles wear it.
 
-- **The swatch**: Opens a colour picker. A face colour takes the new colour; the main one recolours the rest of the part.
-- **The arrow**: Picks those faces in Edit mesh, to see them, change them or colour them again.
-- **The cross**: Gives those faces back to the main material.
+- **Right-click a card**: **Pick these faces** picks those faces in Edit mesh, to see them, change them or colour them again. **Recolour these faces…** gives them another colour.
+- **Give these faces back**: The same menu has **Give these faces back to the main colour**, and a face colour card has a small arrow button that does the same.
+- **The main colour**: Its menu reads **Pick the faces in the main colour** and **Recolour the main colour…**; it has nothing to give back.
 
 A material given to the whole part, from the dock or the colour wheel with no faces picked, becomes its main material. The faces in other colours keep theirs.
 

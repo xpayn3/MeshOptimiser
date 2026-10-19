@@ -31,7 +31,7 @@ Open **Advanced** in the panel.
 - **How sure: Certain**: Only parts with a clear fastener shape: a hex head, a key socket, a hex nut, a washer of standard proportions.
 - **How sure: Likely too**: The default. Also plain two-cylinder screws and headed pins, which have the proportions of a fastener and nothing else to show for it.
 - **Pins, studs and threaded rods**: Plain round bars up to the size limit. Off by default, because a shaft or a roller is a round bar too.
-- **Add to the selection**: Keeps what is selected now and adds the fasteners to it.
+- **Add to selection**: Keeps what is selected now and adds the fasteners to it.
 - **Used at least … times**: Takes a fastener only if the scene holds at least this many of the same shape and size. Fasteners come in sets. 1 takes single ones too.
 - **Smallest thread**: Leaves the fasteners for threads below this alone. 0 means no lower limit.
 - **Reset to defaults**: Puts every option back.

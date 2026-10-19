@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -185,17 +186,17 @@
           </ol>
           <h2 id="what-the-options-mean">What the options mean</h2>
           <dl class="table">
-            <div><dt>Turn, step</dt><dd>How far one press turns the model. 90 gives quarter turns. A small number straightens a model that is slightly tilted.</dd></div>
-            <div><dt>Sits at zero with its: X and Y</dt><dd>Which side of the model goes to 0 on that axis: <span class="ui">Low</span>, <span class="ui">Mid</span> (the middle), <span class="ui">High</span>, or <span class="ui">Keep</span> to leave it where it is. The rows are named after the scene’s floor axes: X and Y when Z is up.</dd></div>
-            <div><dt>Sits at zero with its: Up</dt><dd><span class="ui">Floor</span> stands the model on the grid. <span class="ui">Top</span> hangs it from the grid. <span class="ui">Mid</span> centres it. <span class="ui">Keep</span> leaves its height alone.</dd></div>
+            <div><dt>Turn the model, each press</dt><dd>How far one press turns the model. 90 gives quarter turns. A small number straightens a model that is slightly tilted.</dd></div>
+            <div><dt>Which point of it goes to zero: X and Y</dt><dd>Which side of the model goes to 0 on that axis: <span class="ui">Low</span>, <span class="ui">Mid</span> (the middle), <span class="ui">High</span>, or <span class="ui">Keep</span> to leave it where it is. The rows are named after the scene’s floor axes: X and Y when Z is up.</dd></div>
+            <div><dt>Which point of it goes to zero: Up</dt><dd><span class="ui">Floor</span> stands the model on the grid. <span class="ui">Top</span> hangs it from the grid. <span class="ui">Mid</span> centres it. <span class="ui">Keep</span> leaves its height alone.</dd></div>
             <div><dt>Align to floor</dt><dd>Does it: turns and moves the model as the drawing shows.</dd></div>
             <div><dt>Back to how it was loaded</dt><dd>Puts the model back where and how it was loaded, and puts the card back to its start: no turn waiting, and Mid, Mid and Floor.</dd></div>
           </dl>
           <p>Mid, Mid and Floor is the usual choice: it stands the model on the grid, centred over the origin.</p>
-          <p>To repeat the last choices without opening the card, press <kbd>Ctrl</kbd><kbd>K</kbd> and choose <span class="ui">Align model to the floor (with the last choices)</span>.</p>
+          <p>To repeat the last choices without opening the card, press <kbd>Ctrl</kbd><kbd>K</kbd> and choose <span class="ui">Align model to the floor, as before</span>.</p>
           <h2 id="undo">Undo</h2>
           <p>Pressing <span class="ui">Align to floor</span> is one undo step. <span class="ui">Back to how it was loaded</span> in the card does what its name says.</p>
-          <aside class="kb-note"><p>Which direction is “up” is a setting of the scene: <span class="ui">Up axis (viewport)</span> under <span class="ui">Settings</span>, <span class="ui">Scene</span>. CAD files normally use Z as up. If the whole scene looks turned by a quarter, check that setting before you turn the model.</p></aside>
+          <aside class="kb-note"><p>Which direction is “up” is a setting of the scene: <span class="ui">Up axis</span> in the <span class="ui">Scene</span> card of the right sidebar. CAD files normally use Z as up. If the whole scene looks turned by a quarter, check that setting before you turn the model.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/align-parts.html">Align parts</a></li>
             <li><a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a></li>
@@ -216,12 +217,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

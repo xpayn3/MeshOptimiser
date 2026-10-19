@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -164,30 +165,27 @@
           <p>Before you clean a model up, it helps to know what you are looking at. The Model inspector tells you, and then it tells you what is wrong.</p>
           <p>Open the command search with <kbd>Ctrl</kbd> + <kbd>K</kbd> and type <span class="ui">Model inspector</span>.</p>
           <h2 id="what-the-model-is">What the model is</h2>
-          <p>At the top are tiles with the numbers that matter: how many parts, groups, triangles and points the model has, how big it is, how much memory its meshes use, how many materials it has and how much of it is shared. Under them is a list of the heaviest parts. Click a part in the list and it is selected in the view.</p>
+          <p>At the top are tiles with the numbers that matter: how many parts, groups, triangles and points the model has, how big it is, how much memory its meshes use, how many materials it has and how much of it is shared.</p>
           <h2 id="checks-that-are-instant">Checks that are instant</h2>
           <p>These need no scan. Each one is a row with a count and a <span class="ui">Select</span> button.</p>
           <dl class="table">
             <div><dt>Parts with no material</dt><dd>Parts that would draw in a plain grey. <span class="ui">Select</span> picks them, and the <span class="ui">Materials</span> button gives them one.</dd></div>
             <div><dt>Parts with no triangles</dt><dd>Empty parts. They carry nothing and can be deleted.</dd></div>
             <div><dt>Tiny parts</dt><dd>Parts too small to see at the size of the model. <span class="ui">Delete small parts…</span> removes them.</dd></div>
-            <div><dt>Heavy parts</dt><dd>The parts that hold most of the triangles. <span class="ui">Decimate</span> takes triangles out of them.</dd></div>
+            <div><dt>Heavy parts</dt><dd>Parts that each hold more than a twentieth of all the triangles. <span class="ui">Decimate</span> takes triangles out of them.</dd></div>
             <div><dt>Hidden parts</dt><dd>Parts you have hidden. <span class="ui">Show all</span> brings them back.</dd></div>
           </dl>
           <h2 id="scan-the-geometry">Scan the geometry</h2>
-          <p>Press <span class="ui">Scan the geometry</span>. The inspector reads every mesh once, with a progress bar, and you can press <span class="ui">Stop</span> at any time. A mesh with more than a million triangles is skipped and reported as too big for the scan. When it finishes, you see only the problems it found.</p>
+          <p>Press <span class="ui">Scan the geometry</span>. The inspector reads every mesh once, with a progress bar, and you can press <span class="ui">Stop</span> at any time. A mesh with more than a million triangles is skipped and reported as too big for the scan. When it finishes, each check shows how many it found. Open a row with its arrow to list the parts, worst first: a click selects a part, a double-click frames it.</p>
           <dl class="table">
             <div><dt>Parts turned inside out</dt><dd>Every face of the part points inward. The part looks dark, or see-through from outside. <span class="ui">Fix normals…</span> turns it right.</dd></div>
             <div><dt>Faces turned the wrong way</dt><dd>One face, or a few, point the opposite way to their neighbours. <span class="ui">Fix normals…</span> lines them up.</dd></div>
             <div><dt>Triangles with no area</dt><dd>Triangles squashed flat to a line or a point. <span class="ui">Repair mesh…</span> removes them.</dd></div>
             <div><dt>The same triangle twice</dt><dd>Two triangles sitting on each other. <span class="ui">Repair mesh…</span> keeps one.</dd></div>
-            <div><dt>Holes and cracks</dt><dd>Edges that belong to only one triangle, so the surface is open there. <span class="ui">Remove holes…</span> closes the ones it can.</dd></div>
             <div><dt>Edges shared by three or more triangles</dt><dd>A seam where more than two surfaces meet, which most programs cannot treat as a solid.</dd></div>
             <div><dt>Pinched corners</dt><dd>A point where the surface touches itself, like a bow-tie.</dd></div>
-            <div><dt>Parts in several pieces</dt><dd>One part that is really two or more separate lumps. <span class="ui">Remove floating pieces…</span> finds the loose ones.</dd></div>
-            <div><dt>Needle triangles</dt><dd>Triangles that are almost as thin as a line. They make shading look rough.</dd></div>
           </dl>
-          <aside class="kb-note"><p>A hollow inside a part (a closed shell with its faces pointing inward, inside another shell) is correct, so the scan does not call it a fault.</p></aside>
+          <aside class="kb-note"><p>A hollow inside a part (a closed shell with its faces pointing inward, inside another shell) is correct, so the scan does not call it a fault. The scan also leaves out open edges, parts in several pieces and needle triangles, because a CAD sheet or a fine fillet has them by design.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/fix-normals.html">Fix normals: faces that point the wrong way</a></li>
             <li><a href="../docs/fill-holes.html">Remove holes</a></li>
@@ -208,12 +206,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

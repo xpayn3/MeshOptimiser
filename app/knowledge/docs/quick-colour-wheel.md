@@ -1,8 +1,8 @@
 # Quick colour wheel: colour a part without a dialog
 
-Hold a key, move, let go. The selected parts take the colour as you go.
+Hold a key, move, click. The selected parts take the colour as you go.
 
-Select one or more parts, point at the model, and hold `C`. A colour wheel opens at your pointer. Nothing changes until the pointer moves.
+Select one or more parts, point at the model, and hold `C`. A colour wheel opens at your pointer, placed so that the colour the part has now lies under it. Nothing changes until the pointer moves.
 
 - **The angle**: Is the hue: the colour itself, red to yellow to green to blue and round.
 - **The distance from the middle**: Is the saturation: the middle is white, and the rim is the full colour.
@@ -10,13 +10,13 @@ Select one or more parts, point at the model, and hold `C`. A colour wheel opens
 
 The selected parts change as you move, so you see the result on the model and not on a swatch. A small strip under the wheel shows the colour it was, the colour it is now, its hex code and the brightness.
 
-While the wheel is open the pointer is hidden over it, and a dot shows where the colour is. The selection outline and the move gizmo are put away so that they do not cover the colour, and they come back when you let go. Inside the middle hole the dot stays on the edge of the hole, on the side the pointer is.
+While the wheel is open the pointer is hidden over it, and a dot shows where the colour is. The selection outline and the move gizmo are put away so that they do not cover the colour, and they come back when the wheel closes. Inside the middle hole the dot stays on the edge of the hole, on the side the pointer is.
 
 ## Keep it or cancel it
 
-- Let go of `C`, or click, to keep the colour. It is one step in the undo list.
-- Press `Esc` to put the old colour back.
-- Or move the pointer far outside the wheel. The dot jumps to your pointer, turns black, and a **Cancel** pill appears. Let go there and the old colour comes back.
+- Click to keep the colour. It is one step in the undo list.
+- Let go of `C` or press `Esc` to put the old colour back.
+- A press of the right or the middle mouse button puts the old colour back too.
 
 > The wheel changes the material of the selected parts. If a material is shared with parts you did not select, they change colour too, as they always do when a shared material is edited.
 

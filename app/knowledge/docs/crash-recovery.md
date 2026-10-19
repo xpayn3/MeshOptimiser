@@ -17,7 +17,7 @@ Saving the scene clears the copy, and so does undoing back to the saved state. C
 ## When the app comes back
 
 1. The app notices that the last run did not end properly and says **MeshOptimiser closed unexpectedly last time**, with the name of the scene and how long ago the copy was made.
-2. Press **Recover** and the scene opens as a scene with changes that are not saved, with the unit and up axis it had. Press **Reopen last file** for the file you had open, **Safe mode** if the crashes keep coming, **Delete the copy** to let it go, or **Not now** to leave it for later.
+2. Press **Recover** (the button carries the scene’s name, or the number of scenes) and the scene opens as a scene with changes that are not saved, with the unit and up axis it had. Press **Reopen** (the button carries the file’s name) for the file you had open, **Safe mode** if the crashes keep coming, **Delete the copy** to let it go, or **Not now** to leave it for later.
 3. The same scene is on the start screen, first in the list of recent files: a wide yellow card tagged **Continue** (more than one are tagged **Recovered**), marked “not saved”. Click it to bring the scene back, or the × to delete the copy.
 4. Save the recovered scene to keep it. Until you do, it stays a scene with changes that are not saved.
 

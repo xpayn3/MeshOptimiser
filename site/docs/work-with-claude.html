@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html" aria-current="page">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -184,8 +185,8 @@
           </ul>
           <h2 id="what-stays-in-your-hands">What stays in your hands</h2>
           <ul class="kb-points">
-            <li>Anything that changes the model shows an <span class="ui">Allow</span> or <span class="ui">Don’t allow</span> prompt first. Looking, selecting, hiding, isolating, exploding and moving the camera do not.</li>
-            <li>Deleting always asks, even when you switch asking off for the rest.</li>
+            <li>By default, anything that changes the model shows an <span class="ui">Allow</span> or <span class="ui">Don’t allow</span> prompt first. Looking, selecting, hiding, isolating, exploding and moving the camera do not.</li>
+            <li>Each kind of change can be set to <span class="ui">Allow</span>, <span class="ui">Ask first</span> or <span class="ui">Block</span> in <span class="ui">Settings</span>, <span class="ui">Claude</span>. Switching <span class="ui">Ask before Claude edits</span> off in the badge’s dropdown lets everything through without asking, deleting included; <span class="ui">Always ask before deleting</span> puts the question back for deleting alone.</li>
             <li>Every change is a step in the undo history. <kbd>Ctrl</kbd><kbd>Z</kbd> takes it back. See <a href="../docs/undo-redo.html">Undo and redo</a>.</li>
             <li>Nothing happens until you switch <span class="ui">Let Claude connect</span> on, and nothing can reach the app after you switch it off.</li>
           </ul>
@@ -193,18 +194,18 @@
           <dl class="table">
             <div><dt>Let Claude connect</dt><dd>The app listens for Claude while this is on. Off, it asks for nothing and nobody can reach it.</dd></div>
             <div><dt>Connect when the app opens</dt><dd>If it was on last time, it switches itself on again when you open the app.</dd></div>
-            <div><dt>Change the model</dt><dd>Reduce triangles, fill holes, remove hidden faces, repair, clean up, merge, split and duplicate.</dd></div>
+            <div><dt>Change the model</dt><dd>Reduce triangles, remove holes, remove hidden faces, repair, clean up, merge, split and duplicate.</dd></div>
             <div><dt>Move, rename and group</dt><dd>Move, turn and scale parts, recentre the model, stand it on the floor, rename parts, make and dissolve groups.</dd></div>
             <div><dt>Delete parts</dt><dd>Delete chosen parts, or every part under a size.</dd></div>
             <div><dt>Open files and save exports</dt><dd>Open a file from this computer, save exports and turntable videos into the app’s exports folder.</dd></div>
-            <div><dt>Ask before Claude edits</dt><dd>The <span class="ui">Allow</span> or <span class="ui">Don’t allow</span> prompt before every change to the model.</dd></div>
-            <div><dt>Always ask before deleting</dt><dd>Deleting still asks when the switch above is off.</dd></div>
+            <div><dt>Ask before Claude edits</dt><dd>The <span class="ui">Allow</span> or <span class="ui">Don’t allow</span> prompt before every change to the model. It is in the badge’s dropdown and in <span class="ui">Claude mode</span>, not in Settings, and sets all four kinds above at once.</dd></div>
+            <div><dt>Always ask before deleting</dt><dd>In the badge’s dropdown. Keeps the prompt for <span class="ui">Delete parts</span> alone when the switch above is off.</dd></div>
             <div><dt>Show the Claude pill in the top bar</dt><dd>A small pill that says when Claude is listening, working or waiting for you.</dd></div>
             <div><dt>Show a note when Claude acts</dt><dd>A short message names what Claude is doing.</dd></div>
           </dl>
-          <p>A switch that is off refuses the request, and Claude is told why.</p>
+          <p>In Settings, each of the four kinds of change has three buttons: <span class="ui">Allow</span> (just do it), <span class="ui">Ask first</span> (the prompt; this is how it starts) and <span class="ui">Block</span> (turned off). A kind that is blocked, or a switch that is off, refuses the request, and Claude is told why.</p>
           <h2 id="the-badge-in-the-top-bar">The badge in the top bar</h2>
-          <p>While Claude is connected, a <span class="ui">Claude connected</span> badge sits at the right of the top bar. Click it for a dropdown: whether the app is listening, working or waiting for you, the number of requests, how many were done, declined or failed, the last three requests with how long each took, and three switches: <span class="ui">Let Claude connect</span>, <span class="ui">Ask before Claude edits</span> and <span class="ui">Always ask before deleting</span>. <span class="ui">Copy command</span> copies the connect command, <span class="ui">Console</span> opens the console, and <span class="ui">More…</span> opens Settings, Claude. <span class="ui">Esc</span> or a click elsewhere closes it.</p>
+          <p>While Claude is connected, a <span class="ui">Claude connected</span> badge sits at the right of the top bar. Click it for a dropdown: whether the app is listening, working or waiting for you, the number of requests, how many were done, declined or failed, the last three requests with how long each took, and three switches: <span class="ui">Let Claude connect</span>, <span class="ui">Ask before Claude edits</span> and <span class="ui">Always ask before deleting</span>. <span class="ui">Copy command</span> copies the connect command, <span class="ui">Console</span> opens the console, and <span class="ui">More…</span> opens Settings, Claude. <kbd>Esc</kbd> or a click elsewhere closes it.</p>
           <h2 id="what-claude-asked-for">What Claude asked for</h2>
           <p>At the bottom of the Claude section, <span class="ui">This session</span> counts the requests and names the ones asked for most, with how long each takes, and <span class="ui">Recent requests</span> lists what Claude asked for and what happened: done, you said no, turned off, or failed. <span class="ui">Copy report</span> puts the numbers and the recent requests on the clipboard, for a bug report. Every request and every change of the connection is also written to the console (the button in the status bar), tagged claude, and to the window that runs the app.</p>
           <h2 id="knowing-where-it-stands">Knowing where it stands</h2>
@@ -223,8 +224,8 @@
           <p>Claude does not start from nothing. The app gives it the know-how of an experienced user, so it works in the order a person would and asks the questions a person would ask.</p>
           <ul class="kb-points">
             <li>Six playbooks: how to optimise (the rules and the order of work), recipes by goal (web viewer, AR, a game engine, 3D printing, sending to a customer, a review), judgement (what makes a scene heavy, what each step costs in looks, when to ask), the tools by job, what is safe, and what to do when something fails.</li>
-            <li>About fifty of the app’s own help articles, the same ones you can read here. Claude searches them by words or by a symptom, and reads only the one it needs.</li>
-            <li>Ready-made jobs it can start from: optimise for the web, lighten it in one go, take the bolts out, make it safe to send, review the scene.</li>
+            <li>More than seventy of the app’s own help articles, the same ones you can read here. Claude searches them by words or by a symptom, and reads only the one it needs.</li>
+            <li>Ready-made jobs it can start from: optimise for the web, lighten it in one go, take the bolts out, make it safe to send, pictures for a client, review the scene.</li>
             <li>A hint on every tool that says whether it only reads or changes the model, which Claude’s own program uses to decide what to ask.</li>
           </ul>
           <h2 id="does-it-save-tokens">Does it save tokens?</h2>
@@ -238,7 +239,7 @@
             <li>Claude says the app is not listening: the app is not open in a browser, or <span class="ui">Let Claude connect</span> is off. Open the app and switch it on.</li>
             <li>The top bar pill is missing: switch <span class="ui">Let Claude connect</span> on in Settings, or turn on <span class="ui">Show the Claude pill in the top bar</span>.</li>
             <li>The pill says another window took over: the app was opened in a second window and switched it on there. Switch it on again in the window you want.</li>
-            <li>A request says it was turned off in Settings: switch on the matching one of the four switches.</li>
+            <li>A request says it was turned off in Settings: set the matching one of the four kinds of change to <span class="ui">Allow</span> or <span class="ui">Ask first</span>.</li>
             <li>A long job such as Fit to budget on a large model can take minutes. Keep the app open and in front.</li>
             <li>The Claude section is missing from Settings: update the app. The connection is part of version 0.22.0 and later.</li>
             <li>Stuck or odd after an update: in Settings, Claude, <span class="ui">Reconnect</span> starts the connection from scratch (the small refresh button in the badge’s dropdown does the same). <span class="ui">Restart the server…</span> stops and starts the app’s server; open scenes stay and the connection comes back by itself.</li>
@@ -265,12 +266,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Quick colour wheel: colour a part without a dialog — MeshOptimiser Docs</title>
-  <meta name="description" content="Hold a key, move, let go. The selected parts take the colour as you go." />
+  <meta name="description" content="Hold a key, move, click. The selected parts take the colour as you go." />
   <link rel="icon" type="image/svg+xml" href="../Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/docs/quick-colour-wheel" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Quick colour wheel: colour a part without a dialog — MeshOptimiser Docs" />
-  <meta property="og:description" content="Hold a key, move, let go. The selected parts take the colour as you go." />
+  <meta property="og:description" content="Hold a key, move, click. The selected parts take the colour as you go." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -159,21 +160,21 @@
       <article class="kb-article">
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#look">Look and arrange</a></p>
         <h1>Quick colour wheel: colour a part without a dialog</h1>
-        <p class="lead">Hold a key, move, let go. The selected parts take the colour as you go.</p>
+        <p class="lead">Hold a key, move, click. The selected parts take the colour as you go.</p>
         <div class="kb-body">
-          <p>Select one or more parts, point at the model, and hold <kbd>C</kbd>. A colour wheel opens at your pointer. Nothing changes until the pointer moves.</p>
+          <p>Select one or more parts, point at the model, and hold <kbd>C</kbd>. A colour wheel opens at your pointer, placed so that the colour the part has now lies under it. Nothing changes until the pointer moves.</p>
           <dl class="table">
             <div><dt>The angle</dt><dd>Is the hue: the colour itself, red to yellow to green to blue and round.</dd></div>
             <div><dt>The distance from the middle</dt><dd>Is the saturation: the middle is white, and the rim is the full colour.</dd></div>
             <div><dt>The scroll wheel</dt><dd>Sets the brightness. The percentage shows under the wheel.</dd></div>
           </dl>
           <p>The selected parts change as you move, so you see the result on the model and not on a swatch. A small strip under the wheel shows the colour it was, the colour it is now, its hex code and the brightness.</p>
-          <p>While the wheel is open the pointer is hidden over it, and a dot shows where the colour is. The selection outline and the move gizmo are put away so that they do not cover the colour, and they come back when you let go. Inside the middle hole the dot stays on the edge of the hole, on the side the pointer is.</p>
+          <p>While the wheel is open the pointer is hidden over it, and a dot shows where the colour is. The selection outline and the move gizmo are put away so that they do not cover the colour, and they come back when the wheel closes. Inside the middle hole the dot stays on the edge of the hole, on the side the pointer is.</p>
           <h2 id="keep-it-or-cancel-it">Keep it or cancel it</h2>
           <ul class="kb-points">
-            <li>Let go of <kbd>C</kbd>, or click, to keep the colour. It is one step in the undo list.</li>
-            <li>Press <kbd>Esc</kbd> to put the old colour back.</li>
-            <li>Or move the pointer far outside the wheel. The dot jumps to your pointer, turns black, and a <span class="ui">Cancel</span> pill appears. Let go there and the old colour comes back.</li>
+            <li>Click to keep the colour. It is one step in the undo list.</li>
+            <li>Let go of <kbd>C</kbd> or press <kbd>Esc</kbd> to put the old colour back.</li>
+            <li>A press of the right or the middle mouse button puts the old colour back too.</li>
           </ul>
           <aside class="kb-note"><p>The wheel changes the material of the selected parts. If a material is shared with parts you did not select, they change colour too, as they always do when a shared material is edited.</p></aside>
           <p>The key works over the view. It does not work while you are typing in a field or while a window is open. If nothing is selected, the app asks you to select a part first.</p>
@@ -195,12 +196,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

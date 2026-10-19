@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -170,7 +171,7 @@
           <h2 id="does-my-file-leave-my-computer">Does my file leave my computer?</h2>
           <p>No. The viewer and the converter both run on your machine. See <a href="../docs/privacy-offline.html">Privacy and offline use</a>.</p>
           <h2 id="do-i-need-an-internet-connection">Do I need an internet connection?</h2>
-          <p>Only for the first start, which downloads the Python add-ons. After that the app runs offline, and so does the help window (<kbd>F1</kbd>). A few rarely used converters are fetched the first time they are needed.</p>
+          <p>Only for the first start, which downloads the Python add-ons. After that the app runs offline, and so does the help window (<kbd>F1</kbd>). The one thing it does by itself is look for a newer version when it opens; you can switch that off under <span class="ui">Settings</span>, <span class="ui">Updates</span>. A few rarely used converters are fetched the first time they are needed.</p>
           <h2 id="which-browsers-work">Which browsers work?</h2>
           <p>Chrome is the best choice. A recent Edge or Firefox works too, and Safari on a Mac can lag. The viewer uses WebGPU and falls back to WebGL2. For the app to open in a window of its own, the launcher needs Chrome, Edge or Brave. Installing it as an app is offered by Chrome and Edge.</p>
           <h2 id="which-systems-does-it-run-on">Which systems does it run on?</h2>
@@ -188,13 +189,13 @@
           <h2 id="can-it-write-step-files">Can it write STEP files?</h2>
           <p>No. It reads STEP and writes mesh formats: GLB, glTF, FBX, USDZ, OBJ, STL and PLY, and a parts list as CSV.</p>
           <h2 id="where-is-the-converted-file">Where is the converted file?</h2>
-          <p>In the folder <code>inbox</code> inside the app folder. To put a file where you want it, save a scene or export.</p>
+          <p>In the folder <code>inbox</code> inside the app folder, where it stays for about a day. To keep a file where you want it, save a scene or export.</p>
           <h2 id="can-i-undo-everything">Can I undo everything?</h2>
           <p>Every editing action can be undone with <kbd>Ctrl</kbd><kbd>Z</kbd>. By default the history goes back 200 steps, and <span class="ui">Settings</span>, <span class="ui">General</span> can make it 50 or 500. <span class="ui">Revert to source…</span> in the <span class="ui">Menu</span> reloads the file as it was. See <a href="../docs/undo-redo.html">Undo and redo</a>.</p>
           <h2 id="why-do-i-have-to-start-it-with-a-launcher">Why do I have to start it with a launcher?</h2>
           <p>Because the converter is a Python program, and a web page cannot start one. The launcher starts a small local server that connects the two.</p>
           <h2 id="how-do-i-update">How do I update?</h2>
-          <p>Download the new zip and unpack it into a new folder. See <a href="../docs/stop-restart-update.html">Stop, restart and update</a>.</p>
+          <p>Open <span class="ui">Settings</span>, <span class="ui">Updates</span> and press <span class="ui">Check now</span>. When a newer version is offered, press <span class="ui">Update now</span>. A release that changes the launcher files needs the new zip, unpacked into a new folder. See <a href="../docs/stop-restart-update.html">Stop, restart and update</a>.</p>
           <h2 id="where-do-i-find-help-inside-the-app">Where do I find help inside the app?</h2>
           <p>Press <kbd>F1</kbd>. The help window holds these same articles, with a search. See <a href="../docs/help-window.html">The help window</a>.</p>
           <h2 id="where-do-i-report-a-bug-or-ask-for-a-feature">Where do I report a bug or ask for a feature?</h2>
@@ -218,12 +219,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

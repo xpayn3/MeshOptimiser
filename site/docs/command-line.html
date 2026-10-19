@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -186,7 +187,7 @@
           </dl>
           <h2 id="input-and-output">Input and output</h2>
           <dl class="table">
-            <div><dt><code>input</code></dt><dd>One or more STEP files.</dd></div>
+            <div><dt><code>input</code></dt><dd>One or more STEP, IGES or BREP files.</dd></div>
             <div><dt><code>--out</code>, <code>-o</code></dt><dd>The file to write. Only with a single input file. Without it, the GLB is written next to the input.</dd></div>
             <div><dt><code>--force</code></dt><dd>Convert again even if an output that is newer than the input already exists. Without it, the converter skips a file that was already converted with the same settings.</dd></div>
           </dl>
@@ -197,6 +198,10 @@
             <div><dt><code>--angular</code></dt><dd>The angular deflection, in radians: a second limit on how coarsely curved surfaces are cut into triangles. The default is 0.5, about 28.6°.</dd></div>
             <div><dt><code>--tiers</code></dt><dd>Tessellate by part size. Give the two limits between small, medium and large parts, in percent of the size of the whole model, then a quality in millimetres and an angle in degrees for small, for medium and for large parts. For example <code>--tiers 5,30:2,60:0.2,30:0.05,10</code>.</dd></div>
             <div><dt><code>--min-edge</code></dt><dd>The smallest triangle edge the mesher may make, in the units of the file. It stops tiny fillets and threads from filling up with slivers. The default, 0, is no limit.</dd></div>
+            <div><dt><code>--size-cap</code></dt><dd>A part’s quality is never coarser than this share of its own diagonal, so small round parts are not left polygonal. The default is 0.002 (0.2 %). 0 turns it off. It is ignored with <code>--relative</code> and <code>--tiers</code>.</dd></div>
+            <div><dt><code>--grid</code></dt><dd>Mesh curved faces along their own directions: a fillet in even strips, a curved panel in a grid, not a scatter of triangles. The import window calls it Even strips.</dd></div>
+            <div><dt><code>--no-surfaces</code></dt><dd>Leave out the parts that are surfaces only (open shells) and keep the solids.</dd></div>
+            <div><dt><code>--brep</code></dt><dd>Also write the CAD faces and the true CAD edges beside the GLB (<code>&lt;name&gt;.glb.brep.json</code> and <code>.brep.bin</code>), which the viewer uses for CAD edit.</dd></div>
             <div><dt><code>--no-normals</code></dt><dd>Do not write the normals of the CAD surfaces into the GLB. The viewer then works out the shading from the triangles. Without this option the normals are written, which is what makes fillets blend smoothly into the faces beside them.</dd></div>
             <div><dt><code>--swap-yz</code></dt><dd>Turn the model a quarter turn about the X axis, for a Z-up CAD file that should stand in a Y-up scene.</dd></div>
             <div><dt><code>--min-size</code></dt><dd>Leave out parts whose size is below this percentage of the model’s diagonal. The default, 0, keeps everything.</dd></div>
@@ -221,6 +226,8 @@
             <div><dt><code>--no-step-names</code></dt><dd>Skip product names. Parts get generic names in the tree.</dd></div>
             <div><dt><code>--no-step-props</code></dt><dd>Skip validation properties such as mass and area.</dd></div>
             <div><dt><code>--props</code></dt><dd>Work out the volume and surface area of every solid. Slow on big files.</dd></div>
+            <div><dt><code>--split-colours</code></dt><dd>A body whose faces carry several colours becomes one piece per colour, open along the colour seams, instead of one body with several materials.</dd></div>
+            <div><dt><code>--no-extras</code></dt><dd>Do not write the CAD information (names, assembly path, colour, part number, layers, material, volume and area) into the GLB.</dd></div>
           </dl>
           <h2 id="compression-and-reduction">Compression and reduction</h2>
           <p>These options use gltfpack, a separate free tool that has to be installed and on your PATH. Without it they are skipped, with a warning.</p>
@@ -232,7 +239,16 @@
           </dl>
           <h2 id="speed">Speed</h2>
           <dl class="table">
-            <div><dt><code>--parallel</code></dt><dd>Use this many worker processes for building the meshes. The default, 0, does one at a time.</dd></div>
+            <div><dt><code>--parallel</code></dt><dd>Use this many worker processes for building the meshes in the plain reader (see <code>--no-colors</code>). The default, 0, does one at a time.</dd></div>
+            <div><dt><code>--mesh-jobs</code></dt><dd>Use this many worker processes to mesh the parts when colours and names are read, which is the normal case. Without it the app chooses by the size of the model: under 5,000 CAD faces everything is meshed in one process, above that in up to eight processes, half the cores of the computer. <code>0</code> or <code>1</code> meshes in one process. It has no effect together with <code>--brep</code> or <code>--split-colours</code>.</dd></div>
+          </dl>
+          <h2 id="several-files-and-levels-of-detail">Several files and levels of detail</h2>
+          <dl class="table">
+            <div><dt><code>--batch</code></dt><dd>Convert every STEP, IGES and BREP file in this folder with the options given, one process per file, so a file that fails does not stop the rest. It prints a table, writes <code>batch-report.csv</code>, and exits with 1 if any file failed. With <code>--out</code>, that is the folder the GLB files go to.</dd></div>
+            <div><dt><code>--recursive</code></dt><dd>With <code>--batch</code>: include the sub-folders.</dd></div>
+            <div><dt><code>--file-timeout</code></dt><dd>With <code>--batch</code>: give up on a file after this many seconds. The default, 0, is no limit.</dd></div>
+            <div><dt><code>--lod</code></dt><dd>Levels of detail as percentages of the triangles, for example <code>--lod 100,50,25</code>. The first level is written to <code>&lt;name&gt;.glb</code>, the others to <code>&lt;name&gt;_lod1.glb</code>, <code>&lt;name&gt;_lod2.glb</code> and so on. Cannot be combined with <code>--simplify</code>.</dd></div>
+            <div><dt><code>--lod-error</code></dt><dd>The error limit of the level-of-detail simplifier, as a fraction of each mesh’s size. The default is 0.01.</dd></div>
           </dl>
           <h2 id="without-typing">Without typing</h2>
           <p>The folder also holds <code>step2glb.bat</code> (Windows) and <code>step2glb.command</code> (macOS). Drag a STEP file onto one of them to convert it with the default settings, without opening the viewer.</p>
@@ -241,8 +257,10 @@
           <dl class="table">
             <div><dt><code>--tab</code></dt><dd>Open the app in an ordinary browser tab instead of a window of its own.</dd></div>
             <div><dt><code>--no-browser</code></dt><dd>Start the server and open nothing. Type the printed address into a browser yourself.</dd></div>
-            <div><dt><code>--open</code>, <code>-o</code></dt><dd>Open this file at start. Accepts STEP, GLB and glTF files. For a STEP file it asks about quality first.</dd></div>
+            <div><dt><code>--open</code>, <code>-o</code></dt><dd>Open this file at start. Accepts STEP, IGES, BREP, GLB and glTF files. For a STEP file it asks about quality first.</dd></div>
             <div><dt><code>--port</code></dt><dd>Use this port instead of 4242.</dd></div>
+            <div><dt><code>--keep-running</code></dt><dd>Keep the server running after its window is closed. Without it, a server that opened the window stops about ten seconds after the last window closes.</dd></div>
+            <div><dt><code>--exit-when-closed</code></dt><dd>Stop the server when its window is closed, also with <code>--no-browser</code>.</dd></div>
           </dl>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/first-file.html">Open your first file</a></li>
@@ -263,12 +281,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

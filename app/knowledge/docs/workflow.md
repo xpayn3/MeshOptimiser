@@ -4,7 +4,7 @@ A suggested routine for a first clean-up: look, delete what is not needed, simpl
 
 This is a suggestion, not a rule. It follows from what the tools do: deleting a part costs nothing in quality, so delete first. Reducing a mesh costs detail, so reduce only what you decided to keep. And there is no point in simplifying a part you are about to delete.
 
-If you want the shortest way, [Smart optimise](meshoptimiser://docs/smart-optimise) follows this same order for you: one button, one undo. The steps below are for when you want to look at the result of each tool before the next one.
+If you want the shortest way, [Smart optimise](meshoptimiser://docs/smart-optimise) follows much the same order for you, but tidies up and removes exact copies first: one button, one undo. The steps below are for when you want to look at the result of each tool before the next one.
 
 1. Open the file and look at it. Read the totals in **Properties**. See [How to read the numbers](meshoptimiser://docs/read-the-numbers).
 2. If the model lies on its side or sits far from the grid, stand it up with [Align to floor](meshoptimiser://docs/align-to-floor).
@@ -16,7 +16,7 @@ If you want the shortest way, [Smart optimise](meshoptimiser://docs/smart-optimi
 8. Close holes with [Remove holes](meshoptimiser://docs/fill-holes). If small loose pieces are left beside a part, take them out with [Remove floating pieces](meshoptimiser://docs/remove-floating-pieces).
 9. Replace other filler parts with stand-ins, using [Smart fit](meshoptimiser://docs/smart-fit).
 10. Reduce the heavy parts that remain with [Decimate](meshoptimiser://docs/decimate), or bring the whole scene to a number with [Fit to budget](meshoptimiser://docs/fit-to-budget).
-11. Tidy up: **Remove empty parts** and **Delete empty groups** in the card **Quick fixes**.
+11. Tidy up: **Empty parts** and **Empty groups** in the card **Quick fixes**.
 12. Look at the whole model again in the normal view (`Alt + 1`) and in clay (`5`). Open the **Optimisation report** to see what you saved.
 13. Save the scene, so you can come back to it. See [Save a scene](meshoptimiser://docs/save-scene).
 14. Export the file for the program it is meant for. See [Export](meshoptimiser://docs/export).

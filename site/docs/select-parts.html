@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -172,7 +173,7 @@
             <div><dt><kbd>Esc</kbd></dt><dd>Select nothing. A click on empty space does the same.</dd></div>
           </dl>
           <h2 id="click-box-or-brush">Click, Box or Brush</h2>
-          <p>The selection-tool button in the left toolbar chooses what a drag does. Press it and let go over a row of its list to pick that tool, or let go on the button and click a row. With <span class="ui">Edit mesh</span> on, the same button picks pieces of a mesh instead of whole parts.</p>
+          <p>The selection-tool button in the left toolbar chooses what a drag does. A click goes to the next tool. To see the list, hold the button or right-click it: let go over a row to pick that tool, or let go on the button and click a row. With <span class="ui">Edit mesh</span> on, the same button picks pieces of a mesh instead of whole parts.</p>
           <dl class="table">
             <div><dt>Click</dt><dd>The usual way: click a part.</dd></div>
             <div><dt>Box</dt><dd>A plain left drag draws a rectangle. A part is picked only when one of its own triangles is under the rectangle, not when its bounding box is.</dd></div>
@@ -186,7 +187,7 @@
             <div><dt><kbd>Shift</kbd><kbd>Click</kbd></dt><dd>Select every row between the last one you clicked and this one</dd></div>
           </dl>
           <h2 id="let-the-app-select">Let the app select</h2>
-          <p>The card <span class="ui">Selection &amp; actions</span> in the right sidebar has buttons for the common cases:</p>
+          <p>The selection bar under <span class="ui">Properties</span> in the right sidebar has buttons for All, Invert and Similar. All of these are in the command search (<kbd>Ctrl</kbd><kbd>K</kbd>) too:</p>
           <dl class="table">
             <div><dt>All</dt><dd>Selects every visible part. <kbd>Ctrl</kbd><kbd>A</kbd>.</dd></div>
             <div><dt>Invert</dt><dd>Selects what was not selected, and the other way round. <kbd>Ctrl</kbd><kbd>I</kbd>.</dd></div>
@@ -204,7 +205,7 @@
           <ul class="kb-points">
             <li>Press <kbd>Shift</kbd><kbd>S</kbd> to scroll the tree to the selected part and open the groups it is in.</li>
             <li>Press <kbd>F</kbd> to frame the selection in the viewport.</li>
-            <li>The status bar shows how many parts are selected. Click that number to frame them.</li>
+            <li>The selection bar in the right sidebar counts the selected parts.</li>
             <li>When none of the selection is in the picture, a faint arrow at the edge of the view points to the side it is on. Click the arrow to frame the selection. See <a href="../docs/move-the-view.html">Move the view</a>.</li>
             <li><span class="ui">Properties</span> shows the triangle count of the selection and its share of the scene.</li>
           </ul>
@@ -232,12 +233,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

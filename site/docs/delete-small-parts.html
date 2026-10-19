@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -174,9 +175,9 @@
           <p>Early, when the model is for looking at as a whole and the small hardware does not matter. Do not use it when the fasteners are the point of the picture.</p>
           <h2 id="steps">Steps</h2>
           <ol class="kb-steps">
-            <li>Open the card <span class="ui">Delete small parts</span> in the right sidebar, under Clean up.</li>
+            <li>Open the card <span class="ui">Delete small parts</span> in the right sidebar.</li>
             <li>Drag the slider <span class="ui">Smaller than</span>. The value is a share of the whole model’s size. It starts at 2%.</li>
-            <li>Read the line under it. It says how many parts would go and how long that is, for example “710 parts under 70.5 mm corner to corner”.</li>
+            <li>Read the line under it. It says how many parts would go and how long that is, for example “710 parts under 70.5 mm”.</li>
             <li>Press <span class="ui">Isolate</span>. Only the parts that would be deleted are shown, so you can check them.</li>
             <li>Drag the slider again if needed. While the small parts are isolated, the view follows the slider.</li>
             <li>Press <span class="ui">Delete</span>. The button says how many small parts it will remove. When no part is under the threshold, the button is off.</li>
@@ -186,11 +187,11 @@
           <dl class="table">
             <div><dt>Smaller than</dt><dd>The threshold, in percent of the model’s size. A part below it counts as small.</dd></div>
             <div><dt>Measured by: Diagonal</dt><dd>The distance from corner to corner of the part’s bounding box. The usual choice.</dd></div>
-            <div><dt>Measured by: Longest side</dt><dd>The part’s longest side. It keeps long thin parts such as rods and pipes, and is stricter with flat ones.</dd></div>
+            <div><dt>Measured by: Longest</dt><dd>The part’s longest side. It keeps long thin parts such as rods and pipes, and is stricter with flat ones.</dd></div>
             <div><dt>Measured by: Volume</dt><dd>The volume of the part’s bounding box. It catches thin sheets and wires however long they are.</dd></div>
           </dl>
           <h2 id="hidden-parts-are-left-alone">Hidden parts are left alone</h2>
-          <p>Only parts that are on show are looked at: the ones with an open eye in the parts tree. A part you hid is not counted, not isolated and not deleted. If there are hidden parts, the line under the slider says how many it skipped, for example “3 hidden parts are left alone”. Hiding or showing a part updates the count at once. While the small parts are isolated, the card goes on choosing from the parts that were on show before you pressed <span class="ui">Isolate</span>.</p>
+          <p>Only parts that are on show are looked at: the ones with an open eye in the parts tree. A part you hid is not counted, not isolated and not deleted. If there are hidden parts, the line under the slider says how many it skipped, for example “710 parts under 70.5 mm · 3 hidden left alone”. Hiding or showing a part updates the count at once. While the small parts are isolated, the card goes on choosing from the parts that were on show before you pressed <span class="ui">Isolate</span>.</p>
           <h2 id="see-the-small-parts-without-deleting-them">See the small parts without deleting them</h2>
           <p>The <span class="ui">Highlight</span> button on the card tints every part under the threshold, in the view and in the parts tree, so you can see what would go. The same switch is <span class="ui">Highlight small parts</span> under <span class="ui">Settings</span>, <span class="ui">Viewport</span>.</p>
           <h2 id="undo">Undo</h2>
@@ -218,12 +219,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

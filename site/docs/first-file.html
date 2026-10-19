@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -161,7 +162,7 @@
         <h1>Open your first file</h1>
         <p class="lead">Drop a file on the window. What the import settings mean, what conversion does, how to follow its progress, and where the result is kept.</p>
         <div class="kb-body">
-          <p>The app opens STEP (<code>.step</code>, <code>.stp</code>), GLB, glTF, FBX, OBJ, 3MF and STL files. A STEP file is converted first. The other formats open directly.</p>
+          <p>The app opens STEP (<code>.step</code>, <code>.stp</code>), IGES, BREP, GLB, glTF, FBX, OBJ, 3MF and STL files. A STEP, IGES or BREP file is converted first. The other formats open directly.</p>
           <h2 id="open-a-file">Open a file</h2>
           <ol class="kb-steps">
             <li>Drag the file from your file manager onto the app window. You can drop it on the start screen or on the 3D view. While you hold it over the view, the words <span class="ui">Drop to open</span> appear.</li>
@@ -175,34 +176,37 @@
           <p>A STEP file holds exact surfaces. The converter, running in Python on your computer, turns it into a GLB file made of triangles. Along the way it:</p>
           <ul class="kb-points">
             <li>reads the names and colours of the parts and the tree they are arranged in;</li>
-            <li>tessellates the surfaces, which means it covers them with triangles;</li>
+            <li>tessellates the surfaces, which means it covers them with triangles (a big file is meshed by several worker processes at once);</li>
             <li>finds parts that have the same shape and stores that shape once (instancing);</li>
             <li>leaves out parts below a size you choose, if you ask for it;</li>
-            <li>compresses the result with Meshopt, if the tool gltfpack is installed.</li>
+            <li>writes a plain GLB. It does not compress it: Draco and Meshopt compression are choices in the Export window.</li>
           </ul>
           <h2 id="the-import-settings-for-a-step-file">The import settings for a STEP file</h2>
           <dl class="table">
-            <div><dt>Surface quality</dt><dd>How closely the triangles follow curved surfaces: <span class="ui">Coarse</span>, <span class="ui">Standard</span>, <span class="ui">Fine</span> or <span class="ui">Ultra</span>. Coarse is the fastest and shows facets on curves. Ultra is slow and very smooth. Standard is the recommended one. <span class="ui">Custom</span> means your own numbers, under Tessellation.</dd></div>
+            <div><dt>Surface quality</dt><dd>How closely the triangles follow curved surfaces: <span class="ui">Clean</span>, <span class="ui">Coarse</span>, <span class="ui">Standard</span>, <span class="ui">Fine</span> or <span class="ui">Ultra</span>. Clean makes few triangles and lays them in even strips along fillets. Coarse is the fastest and shows facets on curves. Ultra is slow and very smooth. Standard is the recommended one. <span class="ui">Custom</span> means your own numbers, under Tessellation.</dd></div>
             <div><dt>Tessellation</dt><dd>The numbers behind that choice. Click the row to open it. It is explained below.</dd></div>
             <div><dt>Colours and structure</dt><dd><span class="ui">Colours &amp; hierarchy</span> reads colours, names and the assembly tree. <span class="ui">Geometry only</span> is the fastest and gives you neither colours nor a tree. It suits huge files where you only need the shape.</dd></div>
             <div><dt>What to read</dt><dd>Five switches for extra information in the file: <span class="ui">Instance overrides</span>, <span class="ui">Keep layers</span>, <span class="ui">Materials</span>, <span class="ui">Product names</span> and <span class="ui">Validation properties</span>. Each one adds a pass over the file. Instance overrides is the slowest on assemblies with many repeated parts. <span class="ui">Keep layers</span> keeps the CAD layer each part is on: it shows in the Properties card and <span class="ui">Select by layer</span> in the command search selects every part on one.</dd></div>
+            <div><dt>A part per colour</dt><dd>Off by default: a part painted in several colours stays one part, with a material for each colour. On: each colour becomes a part of its own, open along the colour seams.</dd></div>
             <div><dt>Drop small parts</dt><dd>Leaves out parts smaller than this share of the model during conversion. 0 keeps everything.</dd></div>
             <div><dt>Share identical shapes</dt><dd>Stores a repeated shape once. Leave it on.</dd></div>
+            <div><dt>Surface parts</dt><dd>Keeps parts that are open surfaces with no solid inside, such as sheet covers and shields. On by default. Off keeps only the solids.</dd></div>
             <div><dt>Swap Y and Z</dt><dd>Stands a model up that comes in lying on its side.</dd></div>
             <div><dt>Convert again</dt><dd>Ignores a stored conversion of the same file, if there is one, and converts from scratch.</dd></div>
             <div><dt>Add to the open scene</dt><dd>Adds the file to the scene that is open, instead of opening it as a scene of its own.</dd></div>
             <div><dt>Fit the view</dt><dd>Moves the camera so the whole model is in view when it has loaded.</dd></div>
             <div><dt>Don't ask again for this format</dt><dd>Skips this window next time and uses the same answers. Leave it unticked until you know which settings you want.</dd></div>
           </dl>
-          <p>IGES and BREP files, two other CAD formats, get the same window. FBX, OBJ, 3MF and STL files get a shorter version of it, with only the last three choices. GLB and glTF files open without it.</p>
+          <p>IGES and BREP files, two other CAD formats, get the same window. FBX, OBJ, 3MF and STL files get a shorter version of it, with only <span class="ui">Keep texture coordinates (UVs)</span>, <span class="ui">Add to the open scene</span> and <span class="ui">Fit the view</span>. GLB and glTF files open without it.</p>
           <h2 id="tessellation-how-the-surfaces-become-triangles">Tessellation: how the surfaces become triangles</h2>
-          <p>Tessellation is the step that covers the exact CAD surfaces with triangles. You do not have to open this block: the four choices of <span class="ui">Surface quality</span> fill it in for you. Open it when curves come in too faceted, or the model comes in too heavy.</p>
+          <p>Tessellation is the step that covers the exact CAD surfaces with triangles. You do not have to open this block: the choices of <span class="ui">Surface quality</span> fill it in for you. Open it when curves come in too faceted, or the model comes in too heavy.</p>
           <dl class="table">
             <div><dt>Sag</dt><dd>How far a triangle may stand off the true surface, in millimetres. Smaller is smoother, and makes more triangles.</dd></div>
             <div><dt>Angle</dt><dd>The most a curve may turn from one triangle to the next, in degrees. Smaller means rounder holes and rounder fillets (a fillet is a rounded edge).</dd></div>
             <div><dt>Min edge</dt><dd>The smallest triangle edge allowed, in millimetres. It keeps tiny fillets and threads from filling up with thin slivers. 0 is no limit.</dd></div>
-            <div><dt>The four choices and Custom</dt><dd>Each choice sets the sag and the angle: Coarse is 1 mm and 30°, Standard 0.5 mm and 30°, Fine 0.2 mm and 20°, Ultra 0.05 mm and 12°. Type a number of your own and <span class="ui">Custom</span> is selected.</dd></div>
-            <div><dt>By part size</dt><dd>Fine on the large parts, coarse on the small ones. Small, medium and large parts each get a sag and an angle of their own, so the housing comes in fine and the screws coarse. Two fields, <span class="ui">Small under</span> and <span class="ui">large from</span>, say where the limits are, as a share of the model’s size: 5% and 30% to begin with. While it is on, the four choices are greyed out. <span class="ui">Min edge</span> still applies.</dd></div>
+            <div><dt>The five choices and Custom</dt><dd>Each choice sets the sag and the angle: Clean is 2 mm and 38°, Coarse is 1 mm and 30°, Standard 0.5 mm and 30°, Fine 0.2 mm and 20°, Ultra 0.05 mm and 12°. Type a number of your own and <span class="ui">Custom</span> is selected.</dd></div>
+            <div><dt>By part size</dt><dd>Fine on the large parts, coarse on the small ones. Small, medium and large parts each get a sag and an angle of their own, so the housing comes in fine and the screws coarse. Two fields, <span class="ui">Small under</span> and <span class="ui">large from</span>, say where the limits are, as a share of the model’s size: 5% and 30% to begin with. While it is on, the choices are greyed out. <span class="ui">Min edge</span> still applies.</dd></div>
+            <div><dt>Even strips</dt><dd>Meshes curved faces along their own directions, so a fillet is a row of even strips instead of a scatter of triangles. On by default.</dd></div>
             <div><dt>Smooth shading</dt><dd>Takes the normals, the directions the light is worked out from, from the real CAD surfaces. A fillet then runs into the faces beside it without a visible seam, and sharp edges stay sharp. On by default.</dd></div>
           </dl>
           <aside class="kb-note"><p>A coarser setting here makes fewer triangles at the source. That usually looks better than reducing a fine mesh afterwards.</p></aside>
@@ -240,12 +244,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

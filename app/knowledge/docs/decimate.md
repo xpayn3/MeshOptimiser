@@ -13,7 +13,7 @@ On the heavy parts you found in [How to read the numbers](meshoptimiser://docs/r
 ## Steps
 
 1. Select the parts to reduce.
-2. Open the card **Reduce triangles** in the right sidebar, under Reduce.
+2. Open the card **Reduce triangles**: press `Ctrl + K` and type `Reduce triangles`, or find it in the `…` list.
 3. In the list beside **Decimate**, choose how much to remove: −25%, −50%, −75% or −90%.
 4. Press **Preview…** under it. A table shows each part with its triangle count now and after.
 5. Press **Decimate**. The button shows how many parts are selected.
@@ -25,6 +25,8 @@ On the heavy parts you found in [How to read the numbers](meshoptimiser://docs/r
 2. Type the number of triangles that everything selected may have together.
 3. A line under the field says what will happen, in the form “12,400 → about 6,200 triangles”.
 4. Press **Decimate**. Each selected part gives up the same share.
+
+Choose **Within…** in the list to give a distance instead: type the largest number of millimetres any point of the surface may move, and triangles are taken out for as long as that holds. The switch **Smart: tidy flat faces**, on at first, tidies the flat faces before and after the reduction.
 
 ## What it keeps
 

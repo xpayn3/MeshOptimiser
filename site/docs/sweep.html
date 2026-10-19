@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html" aria-current="page">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -166,16 +167,16 @@
             <li>Draw the path with the Draw tool (see <a href="../docs/draw-lines.html">Draw lines and shapes</a>). If the profile should be a drawn shape, draw that too.</li>
             <li>Open the Sweep card from the search: press <kbd>Ctrl</kbd><kbd>K</kbd>, type <code>sweep</code> and choose <span class="ui">Sweep…</span>. It has no button on the bottom toolbar.</li>
             <li>Pick the <span class="ui">Path</span> in the list.</li>
-            <li>Choose the <span class="ui">Profile</span>: a <span class="ui">Circle</span> (give its size), a <span class="ui">Rectangle</span> (width and height) or another <span class="ui">Line</span> from the list.</li>
+            <li>Choose the <span class="ui">Profile</span>: a <span class="ui">Circle</span> (give its diameter), a <span class="ui">Rectangle</span> (width and height) or <span class="ui">A line</span> from the list.</li>
             <li>Press <span class="ui">Sweep</span>.</li>
           </ol>
           <p>The result is a normal part called Sweep, with a row in the tree, and one undo step.</p>
           <h2 id="advanced">Advanced</h2>
           <dl class="table">
-            <div><dt>Scale</dt><dd>How big the profile is at the start and at the end, as a percentage. 100 and 50 make a pipe that narrows.</dd></div>
+            <div><dt>Size at the start, Size at the end</dt><dd>How big the profile is where the path starts and where it ends, as a percentage. 100 and 50 make a pipe that narrows.</dd></div>
             <div><dt>Twist</dt><dd>How far the profile turns along the path, in degrees.</dd></div>
             <div><dt>Close the ends</dt><dd>Puts a lid on each end so the part is solid.</dd></div>
-            <div><dt>Hard-edge angle</dt><dd>Corners sharper than this are kept sharp; gentler ones are shaded smooth.</dd></div>
+            <div><dt>Hard edges from</dt><dd>Corners sharper than this are kept sharp; gentler ones are shaded smooth.</dd></div>
           </dl>
           <aside class="kb-note"><p>The sweep follows the line as it is drawn, as short straight pieces. A line with a coarse Interpolation (see Properties of a line) gives a coarse pipe.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
@@ -197,12 +198,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

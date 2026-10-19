@@ -8,7 +8,7 @@ Voxel remesh puts the part on a grid of small cubes (voxels), works out which cu
 
 1. Select the parts.
 2. Open the command search (**Ctrl + K**) and run **Voxel remesh**.
-3. The view switches to Wireframe so you can see the new triangles, and the **Voxel remesh** card opens. Drag a setting and let go: the part is built again from the original.
+3. The Wireframe goes on the part being rebuilt (the rest of the model stays as it was) so you can see the new triangles, and the **Voxel remesh** card opens. Drag a setting and let go: the part is built again from the original.
 4. Press **Done** or `Esc`. The view goes back to how it was. One undo step (**Ctrl + Z**) takes the whole thing back.
 
 ## What the settings mean

@@ -5,7 +5,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "A free app that runs on your own computer. It turns a heavy CAD file into a light 3D file and lets you inspect, clean up and export it.",
-  "chars": 3161
+  "chars": 3173
  },
  {
   "slug": "glossary",
@@ -13,7 +13,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "A plain-language glossary: STEP, mesh, triangle, GLB, instancing, decimation, WebGPU, virtual environment and the other terms these pages use.",
-  "chars": 6839
+  "chars": 6930
  },
  {
   "slug": "first-file",
@@ -21,7 +21,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "Drop a file on the window. What the import settings mean, what conversion does, how to follow its progress, and where the result is kept.",
-  "chars": 6718
+  "chars": 7498
  },
  {
   "slug": "cad-files-step-first",
@@ -29,7 +29,7 @@
   "group": "cad",
   "groupTitle": "Getting your model out of your CAD program",
   "summary": "MeshOptimiser opens STEP, not SolidWorks, Inventor, Creo or CATIA files. Why, which STEP version to pick, and where to find the steps for your program.",
-  "chars": 3057
+  "chars": 3148
  },
  {
   "slug": "step-from-inventor",
@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 8205
+  "chars": 10234
  },
  {
   "slug": "move-the-view",
@@ -77,7 +77,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Orbit, pan and zoom with the mouse, frame a part with F, and switch between the camera, Top, Front and Side views.",
-  "chars": 3406
+  "chars": 3550
  },
  {
   "slug": "select-parts",
@@ -85,7 +85,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Click, add with Shift, toggle with Ctrl, drag a box, or let the app select by shape, colour or name.",
-  "chars": 4828
+  "chars": 4939
  },
  {
   "slug": "hide-isolate",
@@ -93,7 +93,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Hide parts that are in the way, look at a few parts on their own, and bring everything back with one key.",
-  "chars": 1644
+  "chars": 1709
  },
  {
   "slug": "parts-tree",
@@ -101,7 +101,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Search, rename, group and reorder the parts of a model, rename many at once, and flatten a hierarchy that is deeper than you need.",
-  "chars": 7610
+  "chars": 8409
  },
  {
   "slug": "organise-the-tree",
@@ -117,7 +117,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Press Ctrl + K or Shift + C to find any command, part, library part or setting by name, turn a switch without leaving the list, and work out a sum or convert a length.",
-  "chars": 7734
+  "chars": 8118
  },
  {
   "slug": "quick-wand",
@@ -125,7 +125,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Hold W and a ring of commands opens under the pointer. Flick toward one and let go.",
-  "chars": 3485
+  "chars": 3733
  },
  {
   "slug": "undo-redo",
@@ -133,7 +133,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Every editing action can be taken back with Ctrl + Z. What counts as one step, and how to go back to the file as it was opened.",
-  "chars": 2477
+  "chars": 2517
  },
  {
   "slug": "scene-tabs",
@@ -141,7 +141,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Each tab is a scene of its own. Open several files side by side, drop a file to add it or open it in a tab, drag tabs into order, and save from the tab’s dot.",
-  "chars": 3313
+  "chars": 3491
  },
  {
   "slug": "settings",
@@ -149,7 +149,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
-  "chars": 11895
+  "chars": 13976
  },
  {
   "slug": "read-the-numbers",
@@ -157,7 +157,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "What a triangle count tells you, where the app shows it, how to find the heaviest parts, and how to see what your work has saved.",
-  "chars": 3465
+  "chars": 3471
  },
  {
   "slug": "heavy-parts",
@@ -165,7 +165,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "A list of the parts that hold the most triangles, heaviest first, with a count beside its title. Tick the ones you do not need and delete them in one step.",
-  "chars": 3151
+  "chars": 3084
  },
  {
   "slug": "smart-optimise",
@@ -173,7 +173,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "One card, one button: every clean-up the app has, run one after another on the whole scene. Choose how far to go, read the plan, press Optimise.",
-  "chars": 4991
+  "chars": 5803
  },
  {
   "slug": "delete-small-parts",
@@ -181,7 +181,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Remove the screws, washers and clips that are too small to matter, with a slider and a preview of what will go.",
-  "chars": 3311
+  "chars": 3289
  },
  {
   "slug": "select-hidden-parts",
@@ -189,7 +189,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Find every part that cannot be seen from outside the model, such as screws inside a housing, and delete them in one step.",
-  "chars": 3247
+  "chars": 3182
  },
  {
   "slug": "remove-hidden-faces",
@@ -197,7 +197,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Delete the faces that can never be seen from outside, such as the inside of a housing or the faces where two parts press together.",
-  "chars": 4076
+  "chars": 4043
  },
  {
   "slug": "fasteners",
@@ -205,7 +205,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Find every bolt, screw, nut and washer by its shape, whatever the parts are called, then isolate or delete them in one step.",
-  "chars": 4519
+  "chars": 4515
  },
  {
   "slug": "stacked-copies",
@@ -221,7 +221,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Close bolt holes, slots, pockets and lettering in flat faces. Each closed hole removes the triangles of its walls.",
-  "chars": 6444
+  "chars": 6644
  },
  {
   "slug": "remove-floating-pieces",
@@ -229,7 +229,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Delete the small loose pieces of a part that touch nothing: a plug, a shaving, a dot of a thread. The biggest piece of each part always stays.",
-  "chars": 2393
+  "chars": 2379
  },
  {
   "slug": "remesh",
@@ -253,7 +253,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Replace a detailed part with a simple stand-in of the same size and position: a box, a cylinder, a few boxes, or blocks that keep its outline.",
-  "chars": 3996
+  "chars": 3988
  },
  {
   "slug": "decimate",
@@ -261,7 +261,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Remove a share of the triangles from the selected parts while keeping their shape. Choose a percentage or a target, and preview first.",
-  "chars": 2833
+  "chars": 3167
  },
  {
   "slug": "fit-to-budget",
@@ -269,7 +269,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Type the number of triangles the whole scene may have. The densest meshes are reduced first until the total fits.",
-  "chars": 2391
+  "chars": 2468
  },
  {
   "slug": "cleanup",
@@ -277,7 +277,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Small one-click repairs: remove empty parts and empty groups, fix shading, recentre the model and make moves permanent.",
-  "chars": 2944
+  "chars": 2983
  },
  {
   "slug": "model-inspector",
@@ -285,7 +285,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "One window that shows what is in the model and finds the faults in it: faces turned the wrong way, holes, doubled triangles. Each fault has a button that fixes it.",
-  "chars": 3116
+  "chars": 2917
  },
  {
   "slug": "fix-normals",
@@ -316,8 +316,8 @@
   "title": "Quick colour wheel: colour a part without a dialog",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Hold a key, move, let go. The selected parts take the colour as you go.",
-  "chars": 1851
+  "summary": "Hold a key, move, click. The selected parts take the colour as you go.",
+  "chars": 1828
  },
  {
   "slug": "workflow",
@@ -325,7 +325,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "A suggested routine for a first clean-up: look, delete what is not needed, simplify what remains, check, save and export.",
-  "chars": 3331
+  "chars": 3367
  },
  {
   "slug": "view-modes",
@@ -333,7 +333,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Six ways to draw the same model: solid, wireframe, X-ray, heatmap, clay and CAD. One key each, plus the Shading card for the clay and CAD looks.",
-  "chars": 5786
+  "chars": 5929
  },
  {
   "slug": "colours-materials",
@@ -341,15 +341,15 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Open the materials dock to see every material in the scene, recolour all the parts that share one, assign a material with a button or by dragging it onto a part, and let the dock float as a window.",
-  "chars": 5688
+  "chars": 5993
  },
  {
   "slug": "face-colours",
   "title": "Several colours on one part",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Give some faces of a part a colour of their own,. The part stays one part, and the colours go with it into every file.",
-  "chars": 3043
+  "summary": "Give some faces of a part a colour of their own. The part stays one part, and the colours go with it into every file.",
+  "chars": 3272
  },
  {
   "slug": "axis-center",
@@ -365,7 +365,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Use the gizmo to move, turn and resize parts, drag a part over other surfaces with Dynamic place, type exact values in the transform card, and measure the distance between two points.",
-  "chars": 8059
+  "chars": 8293
  },
  {
   "slug": "simplify-round-faces",
@@ -389,7 +389,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Three small repairs for meshes that came out of a CAD program: close the hairline cracks between faces, get rid of needle-thin triangles, and patch openings so the patch follows the curve round them.",
-  "chars": 2870
+  "chars": 2941
  },
  {
   "slug": "reshape-mesh",
@@ -397,7 +397,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodies joined into one.",
-  "chars": 3040
+  "chars": 3111
  },
  {
   "slug": "booleans",
@@ -413,7 +413,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a part as one clean, closed, even surface, the way Blender’s Voxel remesh does. Overlapping bodies become one and hollows inside are filled. Good for a watertight stand-in of a messy part.",
-  "chars": 2152
+  "chars": 2206
  },
  {
   "slug": "round-parts",
@@ -421,7 +421,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a turned part (a spool, a bushing, a pulley) clean from its profile, with its ridges and grooves filled. A fan or a gear can be made one solid round shape, and a drive belt loses its ribs.",
-  "chars": 2193
+  "chars": 2246
  },
  {
   "slug": "lettering",
@@ -437,7 +437,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.",
-  "chars": 9149
+  "chars": 9723
  },
  {
   "slug": "align-to-floor",
@@ -445,7 +445,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Stand a model upright on the grid, centred over the origin, when it arrived on its side or far away from the centre of the scene. A small drawing shows the result first.",
-  "chars": 3795
+  "chars": 3818
  },
  {
   "slug": "align-parts",
@@ -453,7 +453,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Line the selected parts up along an axis, or space them evenly, with one press. Each press is one undo step.",
-  "chars": 3621
+  "chars": 3623
  },
  {
   "slug": "exploded-view",
@@ -461,7 +461,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Push the parts of an assembly apart with one slider, choose the directions, and put them back with one click.",
-  "chars": 2023
+  "chars": 2267
  },
  {
   "slug": "animate",
@@ -469,7 +469,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Make parts or groups spin, swing, shake, travel along a path or oscillate like a piston, watch it on a timeline, and take it out as a video or inside a GLB.",
-  "chars": 4550
+  "chars": 4651
  },
  {
   "slug": "library",
@@ -477,7 +477,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Add standard parts to a scene from a drawer under the viewport: 112 bolts, nuts, pipes, profiles, machine parts, electronics and brackets. Look at a part and set its size before it goes in.",
-  "chars": 7469
+  "chars": 7514
  },
  {
   "slug": "draw-lines",
@@ -485,7 +485,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Draw curves, rectangles, circles and polygons on the floor or on a face, edit their points, and use them as paths.",
-  "chars": 4814
+  "chars": 4841
  },
  {
   "slug": "sweep",
@@ -493,7 +493,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Turn a path and a profile into a solid part: a pipe, a rail, a ring.",
-  "chars": 1542
+  "chars": 1581
  },
  {
   "slug": "screenshots",
@@ -501,7 +501,15 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Save a picture of the viewport as a PNG, at the size of the view or at any resolution up to poster size.",
-  "chars": 1644
+  "chars": 1792
+ },
+ {
+  "slug": "photo-mode",
+  "title": "Photo mode",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Draw the model the slow, pretty way, with studio light, a soft floor shadow and a few picture effects, and save a PNG up to four times the size of the view.",
+  "chars": 2384
  },
  {
   "slug": "save-scene",
@@ -509,7 +517,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "Save your work as a scene file so you can carry on later. What a scene file is, how to name it with the file-name buttons, and how it differs from an export.",
-  "chars": 4547
+  "chars": 4768
  },
  {
   "slug": "crash-recovery",
@@ -517,7 +525,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "While a scene has changes that are not saved, a copy is kept inside your browser. If the app crashes, it offers the scene back the next time it starts.",
-  "chars": 3029
+  "chars": 3119
  },
  {
   "slug": "export",
@@ -525,7 +533,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "Write the model to GLB, glTF, FBX, USDZ, OBJ, STL, PLY or a parts list, name the file, and set the scale, up axis and origin the next program needs.",
-  "chars": 8945
+  "chars": 10334
  },
  {
   "slug": "choose-format",
@@ -533,7 +541,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "A short guide by purpose: the web, Blender, game engines, AR on an iPhone, 3D printing, or a parts list.",
-  "chars": 2311
+  "chars": 2692
  },
  {
   "slug": "convert-step-to-glb",
@@ -541,7 +549,7 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Convert a STEP CAD file to a small GLB for the web, on your own computer and for free. The model is never uploaded. Drop it in, check it, export.",
-  "chars": 5494
+  "chars": 6080
  },
  {
   "slug": "remove-bolts-from-step-assembly",
@@ -549,7 +557,7 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Take the bolts, screws, nuts and washers out of a CAD assembly before it goes on the web. Select one, select the rest, check, delete, and undo if needed.",
-  "chars": 4037
+  "chars": 3832
  },
  {
   "slug": "notes",
@@ -557,7 +565,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "A note is a task about a place or a part: a title, what it is about, who it is for, how urgent and when, with comments under it. Save the scene and whoever opens it sees every note, answers it and signs off, and the file shows who did what.",
-  "chars": 8039
+  "chars": 8610
  },
  {
   "slug": "make-model-safe-to-send",
@@ -565,15 +573,15 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Show your product without handing over your design. Remove hidden parts and fasteners, simplify what is left, clean the names and export a small GLB.",
-  "chars": 4569
+  "chars": 4737
  },
  {
   "slug": "shortcuts",
   "title": "Keyboard shortcuts",
   "group": "reference",
   "groupTitle": "Reference",
-  "summary": "Every keyboard shortcut and mouse action in MeshOptimiser v0.24.0, grouped by what it does.",
-  "chars": 8100
+  "summary": "Every keyboard shortcut and mouse action in MeshOptimiser, grouped by what it does.",
+  "chars": 8256
  },
  {
   "slug": "file-formats",
@@ -581,7 +589,7 @@
   "group": "reference",
   "groupTitle": "Reference",
   "summary": "Which files the app opens and which it writes, and what each format keeps: the parts tree, materials and vertex colours.",
-  "chars": 2501
+  "chars": 2514
  },
  {
   "slug": "privacy-offline",
@@ -589,7 +597,7 @@
   "group": "reference",
   "groupTitle": "Reference",
   "summary": "MeshOptimiser runs on your own computer. What stays local, when the internet is used, and what the browser remembers.",
-  "chars": 1955
+  "chars": 2330
  },
  {
   "slug": "troubleshooting",
@@ -597,7 +605,7 @@
   "group": "help",
   "groupTitle": "Help",
   "summary": "Fixes for the usual problems: Python not found, a blocked launcher on macOS, missing modules, a blank view and slow conversions.",
-  "chars": 6556
+  "chars": 6903
  },
  {
   "slug": "faq",
@@ -605,6 +613,6 @@
   "group": "help",
   "groupTitle": "Help",
   "summary": "Short answers: cost and licence, privacy, browsers, file sizes, whether Python is needed, and where to report a bug.",
-  "chars": 4045
+  "chars": 4356
  }
 ]

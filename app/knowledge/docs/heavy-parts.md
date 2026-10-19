@@ -10,18 +10,18 @@ Only parts with more than 10,000 triangles are listed. The heaviest is at the to
 
 The bar is a rounded pill, coloured by rank from red for the heaviest to green for the lightest, and it grows in from the left when the list is drawn. Ticked rows that touch join into one shape.
 
-The card is in the right sidebar, under Inspect. Beside its title is a small number: how many parts are over the limit. You can read it while the card is folded. It goes down as you delete or reduce parts, and it reads 0, dimmed, when no part is that big.
+The card is in the right sidebar. Beside its title is a small number: how many parts are over the limit. You can read it while the card is folded. It goes down as you delete or reduce parts, and it reads 0, dimmed, when no part is that big.
 
 ## Steps
 
-1. Open the card **Heavy parts** in the right sidebar, under Inspect.
+1. Open the card **Heavy parts** in the right sidebar.
 2. Click a row to tick it. The part is selected in the viewport. Click the row again to take the tick off. Rows you ticked before stay ticked.
 3. To tick a run of rows, click the first one, then hold `Shift` and click the last.
 4. To see where a part is, right-click its row. The view moves to the part. The ticks stay as they are.
 5. Press the button under the list. It says what it will remove, for example “Delete 3 parts · 171.3k triangles”. It cannot be pressed until a row is ticked.
 6. If you removed too much, press `Ctrl + Z`. The whole delete is one undo step.
 
-> A tick is the same thing as selecting the part. A part that you selected in the viewport or in the tree is ticked in the list too, if it is listed. The button deletes only the ticked rows, never a selected part that is not on the list.
+> Ticking a row also selects the part, but selecting a part in the viewport or in the tree does not tick its row. The button deletes only the ticked rows, never a part that is selected but not ticked.
 
 ## What to do with a heavy part
 

@@ -14,7 +14,7 @@ These tools keep the part where it is but change the triangles it is made of. Ea
 
 1. Select the parts.
 2. Open the command search (**Ctrl + K**) and type the tool’s name.
-3. The tool runs on each selected part, and a card opens with its settings. Change one and the tool runs again from the parts as they were, in the same undo step.
+3. The tool runs on each selected part, and a card opens with its settings, and the Wireframe goes on those parts so you see the triangles change. Change one and the tool runs again from the parts as they were, in the same undo step.
 4. Press **Done** or `Esc` to close the card. One undo step (**Ctrl + Z**) takes it all back.
 
 On a part from a STEP file opened with its CAD faces (see [CAD faces and edges](meshoptimiser://docs/cad-edges)), Remesh evenly and Smooth surface keep the CAD file’s own edges sharp, whatever their angle, and leave the seams inside one round face smooth.

@@ -36,7 +36,7 @@ You do not need to learn these before you start. Come back to this page when a w
 - **Decimation**: Removing triangles from a mesh while keeping its overall shape. It is lossy: detail that is removed does not come back, except through undo.
 - **Lossy**: An action that throws detail away to save size.
 - **Compression**: Packing the same data into a smaller file. Meshopt and Draco are two methods for 3D files.
-- **Meshopt**: A compression method for GLB files. The converter applies it through a separate tool called gltfpack, when that tool is installed.
+- **Meshopt**: A compression method for GLB files. The command-line converter applies it through a separate tool called gltfpack, when that tool is installed. The Export window has a Meshopt switch of its own, which needs no extra tool.
 - **Draco**: Another compression method for GLB files. It is a switch in the Export window.
 - **Scene**: Everything in one tab of the app: the parts, their materials, the camera and the undo history.
 - **BOM**: Bill of materials: a parts list. The CSV export writes one.

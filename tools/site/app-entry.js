@@ -20,7 +20,7 @@ window.labApps = [
     ],
     site: {
       // the latest features, newest first, for the Latest list beside the docs: [name, docs slug, 'Alpha' when it is an early version]
-      docsLatest: [['The axis of a part', 'axis-center'], ['Animate', 'animate', 'Alpha'], ['Claude mode', 'claude-mode', 'Alpha'], ['Locked groups', 'select-parts'], ['Pivot points in Export', 'export'], ['Make unique', 'move-rotate-scale']],
+      docsLatest: [['Photo mode', 'photo-mode'], ['Several colours on one part', 'face-colours'], ['Remove lettering and logos', 'lettering'], ['Simplify round faces', 'simplify-round-faces'], ['Animate', 'animate', 'Alpha'], ['Claude mode', 'claude-mode', 'Alpha']],
       path: 'site/',
       // the standalone copy of the site (github.io); the Lab links here
       url: 'https://xpayn3.github.io/MeshOptimiser/',

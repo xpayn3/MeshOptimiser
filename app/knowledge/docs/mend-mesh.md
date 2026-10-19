@@ -14,7 +14,7 @@ A CAD program cuts each face of a model into triangles on its own. Where two fac
 
 1. Select the parts to mend.
 2. Open the command search (**Ctrl + K**) and type the tool’s name: **Close cracks**, **Remove slivers** or **Patch holes**.
-3. The tool runs on each selected part, and a card opens with its one setting. Change the setting and the tool runs again from the parts as they were, in the same undo step.
+3. The tool runs on each selected part, and a card opens with its one setting, and the Wireframe goes on those parts so you see the triangles change. Change the setting and the tool runs again from the parts as they were, in the same undo step.
 4. Press **Done** or `Esc` to close the card. One undo step (**Ctrl + Z**) takes the whole change back.
 
 The settings are remembered for next time. The parts keep their texture coordinates where the surface did not change.

@@ -26,7 +26,7 @@ When something is selected and none of it is in the picture, a faint arrow sits 
 
 ## Standard views
 
-The pill at the top centre of the viewport names the current view. Click it to choose another.
+The small pill in the top left corner of the viewport shows the current view as an icon: a camera for the free camera, or a cube with the face looked at for Top, Front and Side. Click it to choose another.
 
 - `Ctrl + 1`: Cam: the free camera with perspective
 - `Ctrl + 2`: Top
@@ -37,7 +37,7 @@ Top, Front and Side are flat views without perspective, like a technical drawing
 
 ## The view cube
 
-The small cube in the top right corner turns with the model. Click one of its faces, or the dot at the end of an axis, to look straight along that axis: Top, Bottom, Front, Back, Side or Left. The view pill shows the name.
+The small cube in the top right corner turns with the model. Click one of its faces, or the dot at the end of an axis, to look straight along that axis: Top, Bottom, Front, Back, Side or Left. When the view is Top, Front or Side, the camera pill shows it.
 
 ## The floor grid
 

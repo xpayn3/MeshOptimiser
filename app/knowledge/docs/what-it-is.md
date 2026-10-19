@@ -25,7 +25,7 @@ You do not have to run the two halves yourself. One launcher starts everything, 
 
 ## What you can do with it
 
-- Open STEP, GLB, glTF, FBX, OBJ, 3MF and STL files.
+- Open STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF and STL files.
 - See how heavy a model is, and which parts make it heavy.
 - Delete parts nobody will see, close holes, simplify parts and reduce triangles.
 - Rename, group and tidy the list of parts.

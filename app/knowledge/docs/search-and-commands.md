@@ -61,16 +61,17 @@ What the search looks through, and how loosely it reads what you type, can be ch
 
 Some tools have no button in the sidebar, or no key of their own. The search is the easy way to reach them. Type a few letters of the name:
 
-- **Smart optimise**: Runs every clean-up in one go. See [Smart optimise](meshoptimiser://docs/smart-optimise).
+- **Smart optimise…**: Opens the Smart optimise card, which runs every clean-up in one go. See [Smart optimise](meshoptimiser://docs/smart-optimise).
+- **Reduce triangles…**: Opens the Reduce triangles card. See [Fit to budget](meshoptimiser://docs/fit-to-budget) and [Decimate](meshoptimiser://docs/decimate).
 - **Select fasteners…**: Finds the bolts, screws, nuts and washers. See [Fasteners](meshoptimiser://docs/fasteners).
 - **Find stacked copies…**: Finds parts that sit on an identical copy of themselves. See [Stacked copies](meshoptimiser://docs/stacked-copies).
 - **Select hidden parts…**: Finds the parts that cannot be seen from outside. See [Select hidden parts](meshoptimiser://docs/select-hidden-parts).
-- **Align model to the floor…**: Opens the card that stands the model on the floor. **Align model to the floor (with the last choices)** does it at once, without opening the card. See [Align to floor](meshoptimiser://docs/align-to-floor).
+- **Align model to the floor…**: Opens the card that stands the model on the floor. **Align model to the floor, as before** does it at once, without opening the card. See [Align to floor](meshoptimiser://docs/align-to-floor).
 - **Align and spread parts…**: Opens the Align parts card, which lines the selected parts up or spaces them evenly. See [Align parts](meshoptimiser://docs/align-parts).
-- **Dynamic place**: Turns on dragging the selected part over other surfaces (`D`). See [Move, rotate and scale](meshoptimiser://docs/move-rotate-scale).
+- **Dynamic place on surfaces**: Turns on dragging the selected part over other surfaces (`D`). See [Move, rotate and scale](meshoptimiser://docs/move-rotate-scale).
 - **Remove floating pieces…**: Deletes the small loose pieces of a part. See [Remove floating pieces](meshoptimiser://docs/remove-floating-pieces).
 - **Sweep…**: Opens the Sweep card, which has no button on the toolbar. See [Sweep](meshoptimiser://docs/sweep).
-- **Fit to triangle budget**: Takes you to the budget field so you can type a number.
+- **Fit to triangle budget**: Opens the Reduce triangles card with the budget field ready, so you can type a number.
 - **Optimisation report**: Shows the model as it was opened against what it is now.
 - **Duplicate scene, Close other scenes, Close all scenes**: Work on the scene tabs. See [Scene tabs](meshoptimiser://docs/scene-tabs).
 - **Revert to source file…**: Throws away every edit and loads the file again.
@@ -88,11 +89,11 @@ Type a sum or a length and the search works it out. `Enter` copies the answer, r
 
 ## The list of all commands
 
-The `…` button at the right end of the bottom toolbar opens every command that acts on the model in one list, with its shortcut. A command that cannot run right now is dimmed. Hover over it to see why, for example because nothing is selected.
+The `…` button at the right end of the bottom toolbar opens every command that acts on the model in one list, with its shortcut. A command that cannot run right now is dimmed. Hover over it to see why, for example because nothing is selected. A right-click on a button of a toolbar floating in the view (or between its buttons) opens the same list at the pointer.
 
 ## Command cards
 
-Some commands have settings: Split, Remove holes, Remove floating pieces, Remesh, Smart fit, Select hidden parts, Fasteners, Stacked copies, Align to floor, Align parts and Dynamic place. They open as a card over the bottom left of the viewport.
+Some commands have settings: Split, Remove holes, Remove floating pieces, Remesh, Smart fit, Smart optimise, Reduce triangles, Select hidden parts, Fasteners, Stacked copies, Align to floor, Align parts and Dynamic place. They open as a card over the bottom left of the viewport.
 
 - `Enter`: Run the open card
 - `Esc`: Put the card away. A second press clears the selection.

@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -207,16 +208,17 @@
           <h2 id="commands-worth-knowing">Commands worth knowing</h2>
           <p>Some tools have no button in the sidebar, or no key of their own. The search is the easy way to reach them. Type a few letters of the name:</p>
           <dl class="table">
-            <div><dt>Smart optimise</dt><dd>Runs every clean-up in one go. See <a href="../docs/smart-optimise.html">Smart optimise</a>.</dd></div>
+            <div><dt>Smart optimise…</dt><dd>Opens the Smart optimise card, which runs every clean-up in one go. See <a href="../docs/smart-optimise.html">Smart optimise</a>.</dd></div>
+            <div><dt>Reduce triangles…</dt><dd>Opens the Reduce triangles card. See <a href="../docs/fit-to-budget.html">Fit to budget</a> and <a href="../docs/decimate.html">Decimate</a>.</dd></div>
             <div><dt>Select fasteners…</dt><dd>Finds the bolts, screws, nuts and washers. See <a href="../docs/fasteners.html">Fasteners</a>.</dd></div>
             <div><dt>Find stacked copies…</dt><dd>Finds parts that sit on an identical copy of themselves. See <a href="../docs/stacked-copies.html">Stacked copies</a>.</dd></div>
             <div><dt>Select hidden parts…</dt><dd>Finds the parts that cannot be seen from outside. See <a href="../docs/select-hidden-parts.html">Select hidden parts</a>.</dd></div>
-            <div><dt>Align model to the floor…</dt><dd>Opens the card that stands the model on the floor. <span class="ui">Align model to the floor (with the last choices)</span> does it at once, without opening the card. See <a href="../docs/align-to-floor.html">Align to floor</a>.</dd></div>
+            <div><dt>Align model to the floor…</dt><dd>Opens the card that stands the model on the floor. <span class="ui">Align model to the floor, as before</span> does it at once, without opening the card. See <a href="../docs/align-to-floor.html">Align to floor</a>.</dd></div>
             <div><dt>Align and spread parts…</dt><dd>Opens the Align parts card, which lines the selected parts up or spaces them evenly. See <a href="../docs/align-parts.html">Align parts</a>.</dd></div>
-            <div><dt>Dynamic place</dt><dd>Turns on dragging the selected part over other surfaces (<kbd>D</kbd>). See <a href="../docs/move-rotate-scale.html">Move, rotate and scale</a>.</dd></div>
+            <div><dt>Dynamic place on surfaces</dt><dd>Turns on dragging the selected part over other surfaces (<kbd>D</kbd>). See <a href="../docs/move-rotate-scale.html">Move, rotate and scale</a>.</dd></div>
             <div><dt>Remove floating pieces…</dt><dd>Deletes the small loose pieces of a part. See <a href="../docs/remove-floating-pieces.html">Remove floating pieces</a>.</dd></div>
             <div><dt>Sweep…</dt><dd>Opens the Sweep card, which has no button on the toolbar. See <a href="../docs/sweep.html">Sweep</a>.</dd></div>
-            <div><dt>Fit to triangle budget</dt><dd>Takes you to the budget field so you can type a number.</dd></div>
+            <div><dt>Fit to triangle budget</dt><dd>Opens the Reduce triangles card with the budget field ready, so you can type a number.</dd></div>
             <div><dt>Optimisation report</dt><dd>Shows the model as it was opened against what it is now.</dd></div>
             <div><dt>Duplicate scene, Close other scenes, Close all scenes</dt><dd>Work on the scene tabs. See <a href="../docs/scene-tabs.html">Scene tabs</a>.</dd></div>
             <div><dt>Revert to source file…</dt><dd>Throws away every edit and loads the file again.</dd></div>
@@ -233,9 +235,9 @@
           </dl>
           <figure class="kb-figure"><a class="zoom" href="../Images/apps/meshoptimiser-search-sum.webp" data-group="article" data-caption="The search works out a sum or a length. Enter copies the answer."><img src="../Images/apps/meshoptimiser-search-sum.webp" alt="MeshOptimiser: The search works out a sum or a length. Enter copies the answer." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>The search works out a sum or a length. Enter copies the answer.</figcaption></figure>
           <h2 id="the-list-of-all-commands">The list of all commands</h2>
-          <p>The <code>…</code> button at the right end of the bottom toolbar opens every command that acts on the model in one list, with its shortcut. A command that cannot run right now is dimmed. Hover over it to see why, for example because nothing is selected.</p>
+          <p>The <code>…</code> button at the right end of the bottom toolbar opens every command that acts on the model in one list, with its shortcut. A command that cannot run right now is dimmed. Hover over it to see why, for example because nothing is selected. A right-click on a button of a toolbar floating in the view (or between its buttons) opens the same list at the pointer.</p>
           <h2 id="command-cards">Command cards</h2>
-          <p>Some commands have settings: Split, Remove holes, Remove floating pieces, Remesh, Smart fit, Select hidden parts, Fasteners, Stacked copies, Align to floor, Align parts and Dynamic place. They open as a card over the bottom left of the viewport.</p>
+          <p>Some commands have settings: Split, Remove holes, Remove floating pieces, Remesh, Smart fit, Smart optimise, Reduce triangles, Select hidden parts, Fasteners, Stacked copies, Align to floor, Align parts and Dynamic place. They open as a card over the bottom left of the viewport.</p>
           <dl class="kb-keys">
             <div><dt><kbd>Enter</kbd></dt><dd>Run the open card</dd></div>
             <div><dt><kbd>Esc</kbd></dt><dd>Put the card away. A second press clears the selection.</dd></div>
@@ -264,12 +266,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

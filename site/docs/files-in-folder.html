@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -179,13 +180,15 @@
           <h2 id="folders-the-app-creates-inside-app">Folders the app creates (inside app)</h2>
           <dl class="table">
             <div><dt><code>.venv</code></dt><dd>The app’s own Python environment, created on the first run. It can take up to about 2 GB. It is safe to delete: the launcher builds it again, which takes a few minutes. On macOS the folder is hidden in Finder, because its name starts with a dot.</dd></div>
-            <div><dt><code>inbox</code></dt><dd>Where STEP files are converted. The finished GLB files stay here.</dd></div>
+            <div><dt><code>inbox</code></dt><dd>Where STEP files are converted. The finished GLB files stay here for a day. Inside it, the folder <code>cache</code> keeps converted models, so opening the same STEP file with the same settings again is quick. It never holds more than 3 GB.</dd></div>
+            <div><dt><code>exports</code></dt><dd>Where the files that Claude’s tools make for you are saved: exports, saved scenes, pictures and videos.</dd></div>
           </dl>
-          <aside class="kb-note"><p>The <code>inbox</code> folder is not emptied automatically, so it grows with every conversion. With the app closed, you can delete the files in it that you no longer need.</p></aside>
+          <aside class="kb-note"><p>The app clears the <code>inbox</code> folder itself: the converted files that are more than a day old are removed when it starts and every hour after. Files you put there yourself are left alone. With the app closed, you can also delete what you no longer need.</p></aside>
           <h2 id="the-app-itself-inside-app">The app itself (inside app)</h2>
           <dl class="table">
             <div><dt><code>serve.py</code></dt><dd>The small local server. It hands the app’s pages to your browser and starts the converter when you drop a STEP file.</dd></div>
             <div><dt><code>step2glb.py</code></dt><dd>The converter from STEP to GLB.</dd></div>
+            <div><dt><code>gridmesh.py</code></dt><dd>A part of the converter: the even strips on curved faces.</dd></div>
             <div><dt><code>index.html</code></dt><dd>The viewer’s page.</dd></div>
             <div><dt><code>js</code></dt><dd>The viewer’s scripts. <code>app.js</code> is the program; the others are parts of it, such as <code>holefill.js</code> (the hole filler behind Remove holes), <code>mesh-worker.js</code> (a background worker so the window stays usable while Remove holes and Decimate run) and <code>cloner.js</code> (linear, grid and radial arrays of a part).</dd></div>
             <div><dt><code>vendor</code></dt><dd>The libraries the viewer needs, bundled so that it starts without the internet.</dd></div>
@@ -217,12 +220,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

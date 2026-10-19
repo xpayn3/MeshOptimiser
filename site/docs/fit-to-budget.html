@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -166,7 +167,7 @@
           <p>Near the end, after you have deleted the parts that are not needed. Deleting is free. Reducing costs detail, so reduce only what is left.</p>
           <h2 id="steps">Steps</h2>
           <ol class="kb-steps">
-            <li>Open the card <span class="ui">Reduce triangles</span> in the right sidebar.</li>
+            <li>Open the card <span class="ui">Reduce triangles</span>: press <kbd>Ctrl</kbd><kbd>K</kbd> and type <code>Fit to triangle budget</code>, which opens it with the budget field ready.</li>
             <li>Type the budget in the field beside <span class="ui">Fit to budget</span>. You can write <code>150000</code>, <code>150k</code> or <code>1.5m</code>.</li>
             <li>Press <span class="ui">Preview…</span>. A table lists the meshes that will be reduced, with their triangle count now and after, and an estimate of the new total.</li>
             <li>Press <span class="ui">Fit to budget</span>.</li>
@@ -178,12 +179,12 @@
             <li>The preview is an estimate. A mesh can stop a little short of its share.</li>
             <li>Every mesh keeps at least 16 triangles. If the budget is lower than the scene can reach, the app goes as far as it can and says that the budget was not reached.</li>
             <li>If the scene is already under the budget, the app says so and changes nothing.</li>
-            <li><span class="ui">Keep sharp edges</span>, under Decimate, applies here too: rims, steps and corners keep their vertices while the budget is met.</li>
+            <li><span class="ui">Keep sharp edges</span>, at the top of the same card, applies here too: rims, steps and corners keep their vertices while the budget is met.</li>
           </ul>
           <h2 id="undo">Undo</h2>
           <p>The whole step is one undo: <kbd>Ctrl</kbd><kbd>Z</kbd> restores every mesh.</p>
           <aside class="kb-note"><p>If the result looks too rough, undo, delete more of what is not needed (see <a href="../docs/select-hidden-parts.html">Select hidden parts</a> and <a href="../docs/delete-small-parts.html">Delete small parts</a>), and run it again. The same budget then leaves more triangles for the parts that remain.</p></aside>
-          <p><a href="../docs/smart-optimise.html">Smart optimise</a> can do this as its last step, together with the other clean-ups. The whole run is then one undo step. Its card is just above the Reduce triangles card in the sidebar.</p>
+          <p><a href="../docs/smart-optimise.html">Smart optimise</a> can do this as its last step, together with the other clean-ups. The whole run is then one undo step. Open its card with <span class="ui">Smart optimise…</span> in the search.</p>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/decimate.html">Decimate</a></li>
             <li><a href="../docs/smart-optimise.html">Smart optimise</a></li>
@@ -205,12 +206,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

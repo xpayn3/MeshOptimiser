@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -169,16 +170,18 @@
             <li>The eye at the right hides or shows the row.</li>
             <li>Click the small box in front of a group to open or close it.</li>
           </ul>
-          <h2 id="the-three-buttons">The three buttons</h2>
+          <h2 id="the-buttons-above-the-tree">The buttons above the tree</h2>
           <dl class="table">
-            <div><dt>Collapse</dt><dd>Closes every group. When every group is closed, the button says <span class="ui">Expand</span> and opens them all. The small arrow beside it, or a right-click on the button, opens a menu with more choices. See below.</dd></div>
-            <div><dt>Rename</dt><dd>Renames many parts at once. <kbd>F2</kbd>.</dd></div>
-            <div><dt>Flatten</dt><dd>Removes levels of grouping.</dd></div>
+            <div><dt>Collapse</dt><dd>A click, or a right-click, opens a menu to close or open every group, the groups you selected, or the groups from the selected row on. See below.</dd></div>
+            <div><dt>Rename</dt><dd>Renames many parts at once. A click, or a right-click, opens a menu: <span class="ui">Batch rename…</span> first (<kbd>F2</kbd> opens it too), then your saved rules and the built-in ones. A rule opens the window with its settings filled in.</dd></div>
+            <div><dt>Flatten</dt><dd>Removes levels of grouping. A click, or a right-click, opens a menu: <span class="ui">Advanced flatten…</span> first, then quick choices such as flattening the deepest level.</dd></div>
+            <div><dt>Transform</dt><dd>Shows or hides the Transform card at the foot of the sidebar. See <a href="../docs/move-rotate-scale.html">Move, rotate, scale</a>.</dd></div>
+            <div><dt>Recentre, Centre pivot, Bake transforms</dt><dd>One press each. See <a href="../docs/cleanup.html">Clean up</a> and <a href="../docs/axis-center.html">The axis of a part</a>.</dd></div>
           </dl>
           <h2 id="collapse-and-expand-part-of-the-tree">Collapse and expand part of the tree</h2>
-          <p>A big assembly has many groups. Sometimes you want to close only some of them. Click the arrow beside <span class="ui">Collapse</span> to choose. Select a part or a group in the tree first, for the choices that need a selection.</p>
+          <p>A big assembly has many groups. Sometimes you want to close only some of them. Click <span class="ui">Collapse</span> to choose. Select a part or a group in the tree first, for the choices that need a selection.</p>
           <dl class="table">
-            <div><dt>Collapse the whole tree</dt><dd>Closes every group. The same as pressing <span class="ui">Collapse</span>.</dd></div>
+            <div><dt>Collapse the whole tree</dt><dd>Closes every group.</dd></div>
             <div><dt>Collapse the selection</dt><dd>Closes the groups you selected and every group inside them. For a selected part, it closes the group the part is in.</dd></div>
             <div><dt>Collapse from here on</dt><dd>Closes the first selected row and every group after it in the tree. The groups above stay as they are, so the row you are on stays in view.</dd></div>
             <div><dt>Expand the whole tree</dt><dd>Opens every group.</dd></div>
@@ -212,8 +215,8 @@
           <p>CAD files often come with names like <code>Part_0031_geom</code>. Batch rename changes many names in one go.</p>
           <ol class="kb-steps">
             <li>Select the parts to rename.</li>
-            <li>Press <kbd>F2</kbd> or the <span class="ui">Rename</span> button. The <span class="ui">Batch rename</span> window opens.</li>
-            <li>Choose a tab. <span class="ui">Find &amp; Replace</span> swaps one piece of text for another. <span class="ui">Pattern</span> builds each name from pieces such as <code>{name}</code>, <code>{parent}</code> and <code>{counter:003}</code>. <span class="ui">Presets</span> has ready-made rules, such as lower-casing every name or removing a number at the end.</li>
+            <li>Press <kbd>F2</kbd>, or press the <span class="ui">Rename</span> button and choose <span class="ui">Batch rename…</span>. The <span class="ui">Batch rename</span> window opens.</li>
+            <li>Choose a tab. <span class="ui">Replace</span> swaps one piece of text for another. <span class="ui">Quick</span> adds text before or after the name, changes the letters (UPPER, lower, Title Case, snake_case and more), cleans up and numbers the names. <span class="ui">Pattern</span> builds each name from pieces such as <code>{name}</code>, <code>{parent}</code> and <code>{counter:003}</code>. <span class="ui">Presets</span> has ready-made rules, such as lower-casing every name or removing a number at the end.</li>
             <li>Look at the <span class="ui">Preview</span>. It shows every name before and after.</li>
             <li>Press <span class="ui">Apply</span>, or <kbd>Ctrl</kbd><kbd>Enter</kbd>.</li>
           </ol>
@@ -227,7 +230,7 @@
           <h2 id="drag-and-drop">Drag and drop</h2>
           <p>Drag a row onto a group to move it into that group, or between two rows to change the order. A group cannot be dropped into itself.</p>
           <h2 id="flatten">Flatten</h2>
-          <p>A STEP file can have groups inside groups ten levels deep. Flatten removes levels you do not need. Press <span class="ui">Flatten</span> to open the <span class="ui">Advanced flatten</span> window.</p>
+          <p>A STEP file can have groups inside groups ten levels deep. Flatten removes levels you do not need. Press <span class="ui">Flatten</span> and choose <span class="ui">Advanced flatten…</span> to open the <span class="ui">Advanced flatten</span> window; the other choices in that menu do the common cases in one step.</p>
           <dl class="table">
             <div><dt>Scope</dt><dd>The whole tree, or only the groups you selected.</dd></div>
             <div><dt>Total flatten</dt><dd>Removes every group inside the scope. All parts end up side by side.</dd></div>
@@ -265,12 +268,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

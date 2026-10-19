@@ -12,7 +12,7 @@ Press `Shift + M`, or click the palette button on the bottom toolbar. The dock s
 
 - Type in **Filter…** to filter by name, by colour (as a hex code such as `#ff6600`) or by type.
 - Choose the order: **Most used**, **Most triangles**, **Name** or **Colour**.
-- Switch between a grid and a list with the two small buttons.
+- Switch between a grid and a list with the two small buttons. Right-click them for a slider that sets the size of the pictures (44 to 96 px); double-click the slider for the usual size.
 - Select a part in the viewport and look at **Properties**: it shows the part’s material. The small badge in the corner of that card is the number of parts that use the material.
 
 ## Let the dock float as a window
@@ -75,6 +75,6 @@ A right-click on a material gives the same commands, and one to copy its colour 
 - A new material is named after its colour, and the name follows the colour when you change it.
 - Every change in the dock is an undo step.
 - Drag the top edge of the dock to make it taller. Double-click the edge to reset it.
-- While it is docked at the bottom, the dock shares its place with the library and the console, and they take turns. A floating dock stays open.
+- While it is docked at the bottom, the dock shares its place with the library and the console, and they take turns. A floating dock stays open. With **Same height for every dock** on (it is, to begin with, under **Settings**, **General**), the materials dock, the library and Animate keep the height you drag one of them to.
 
 Related: [view-modes](meshoptimiser://docs/view-modes), [select-parts](meshoptimiser://docs/select-parts), [export](meshoptimiser://docs/export)

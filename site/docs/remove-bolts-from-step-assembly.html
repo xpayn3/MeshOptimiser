@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -169,7 +170,7 @@
           <ol class="kb-steps">
             <li>Open the STEP file. See <a href="../docs/first-file.html">Open your first file</a>.</li>
             <li>Click one bolt in the viewport or in the parts tree.</li>
-            <li>In the card <span class="ui">Selection &amp; actions</span> in the right sidebar, press <span class="ui">Select similar</span>. Every part with the same shape as the bolt is selected, so all copies of that bolt are selected at once.</li>
+            <li>In the <span class="ui">Selection</span> bar of the right sidebar, press <span class="ui">Select similar</span> (the copy icon). Every part with the same shape as the bolt is selected, so all copies of that bolt are selected at once.</li>
             <li>Press <kbd>S</kbd> to isolate the selection. Look at it. Only the bolts should be left on screen.</li>
             <li>Press <kbd>S</kbd> again to come back, then press <kbd>Del</kbd> to delete them.</li>
             <li>Do the same for the next kind of bolt, then for the nuts and the washers. Bolts of different lengths are different shapes, so each size is one round.</li>
@@ -178,11 +179,10 @@
           <p>Every delete is one undo step. <kbd>Ctrl</kbd><kbd>Z</kbd> brings the bolts back. The <span class="ui">Optimisation report</span> shows how many triangles you saved.</p>
           <h2 id="other-ways-to-find-the-hardware">Other ways to find the hardware</h2>
           <dl class="table">
-            <div><dt>By name</dt><dd>In <span class="ui">Selection &amp; actions</span>, press <span class="ui">By name</span> and type <code>bolt|screw|nut|washer</code>. It selects every part with one of those words in its name, in capitals or not. This only works when the CAD names are honest, and they often are not: <code>Part_0031</code> tells you nothing. A short word such as nut can also match other names, so isolate before you delete.</dd></div>
+            <div><dt>By name</dt><dd>Open the command search (<kbd>Shift</kbd><kbd>C</kbd>), choose <span class="ui">Select by name (regex)</span> and type <code>bolt|screw|nut|washer</code>. It selects every part with one of those words in its name, in capitals or not. This only works when the CAD names are honest, and they often are not: <code>Part_0031</code> tells you nothing. A short word such as nut can also match other names, so isolate before you delete.</dd></div>
             <div><dt>Delete small parts</dt><dd>Removes every part below a size you set, with a preview. Hardware is small, but so are other things. Press <span class="ui">Isolate</span> and look before you delete. See <a href="../docs/delete-small-parts.html">Delete small parts</a>.</dd></div>
             <div><dt>Select hidden parts</dt><dd>Finds the screws inside a housing, because nobody can see them. To keep hidden structure and remove only hardware, type part of the name in <span class="ui">Name contains</span>. See <a href="../docs/select-hidden-parts.html">Select hidden parts</a>.</dd></div>
           </dl>
-          <p>The next version of the app adds a Fasteners tool that finds bolts, screws, nuts and washers by their shape, whatever they are called. It is in the project’s repository and not in the released version, so this page does not rely on it.</p>
           <h2 id="when-you-want-the-bolts-to-stay">When you want the bolts to stay</h2>
           <p>If the bolts must be visible but light, do not delete them. Select them the same way, then use <a href="../docs/smart-fit.html">Smart fit</a> with <span class="ui">Cylinder</span>. A bolt becomes a plain cylinder of the same size in the same place.</p>
           <h2 id="after-they-are-gone">After they are gone</h2>
@@ -213,12 +213,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

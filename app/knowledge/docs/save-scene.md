@@ -41,6 +41,7 @@ A button that is in use shows a minus sign instead of the plus. You can also typ
 - **Whole scene**: On: every part. Off: only the selected parts. It is dimmed when nothing is selected, and says how many parts are selected.
 - **Include hidden parts**: Hidden parts are written too, and come back hidden when you open the scene again. It says how many are hidden.
 - **Remember the view and settings**: Stores the camera, the display settings, flags and measurements in the file. Other programs ignore them.
+- **Include the notes**: Shown only when the scene has notes. On: the notes go in the file, with who wrote what, the replies and every edit. Other programs ignore them. Turn it off for a file that goes outside your team.
 - **Save as a copy**: Writes the file without making it this scene’s file. The scene keeps its unsaved mark, and the next save goes where it went before.
 
 A file that holds only some of the scene (only the selection, or no hidden parts) is never the scene’s own file. The app turns on **Save as a copy** for you.

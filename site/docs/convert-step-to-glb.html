@@ -132,6 +132,7 @@
         <a href="../docs/draw-lines.html">Draw lines and shapes</a>
         <a href="../docs/sweep.html">Sweep a profile along a line</a>
         <a href="../docs/screenshots.html">Screenshots</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
         <h2>Work with Claude</h2>
         <a href="../docs/work-with-claude.html">Work with Claude</a>
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
@@ -172,26 +173,27 @@
             <li>Start the app with <code>start.bat</code> (Windows) or <code>start.command</code> (macOS).</li>
             <li>Drag the STEP file onto the window.</li>
             <li>In the <span class="ui">Import settings</span> window, leave everything as it is and press <span class="ui">Import</span>. <span class="ui">Standard</span> under <span class="ui">Surface quality</span> is the recommended choice. See <a href="../docs/first-file.html">Open your first file</a>.</li>
-            <li>Wait while the progress card works. A big assembly can take several minutes. Repeated parts are found and stored once, and the result is compressed. Open the same file again later, with the same settings, and it appears at once: the converted model is kept.</li>
+            <li>Wait while the progress card works. A big assembly can take several minutes. A big file is meshed on several cores at once (up to eight processes); reading the STEP file itself uses one. Repeated parts are found and stored once, and the result is compressed. Open the same file again later, with the same settings, and it appears at once: the converted model is kept.</li>
             <li>Look at the model. <span class="ui">Properties</span> on the right shows how heavy it is. Press <kbd>Alt</kbd><kbd>1</kbd> for the normal view.</li>
-            <li>Press <kbd>Ctrl</kbd><kbd>E</kbd> and choose <span class="ui">GLB</span>. In the Export window, check <span class="ui">Unit scale</span> and <span class="ui">Up axis</span> (below).</li>
+            <li>Press <kbd>Ctrl</kbd><kbd>E</kbd> and choose <span class="ui">GLB</span>. In the Export window, the defaults for <span class="ui">Unit scale</span> and <span class="ui">Up axis</span> suit a GLB (see below).</li>
             <li>Press <span class="ui">Export GLB</span>. The file arrives in your downloads folder.</li>
           </ol>
           <h2 id="two-settings-that-save-a-second-try">Two settings that save a second try</h2>
           <dl class="table">
-            <div><dt>Unit scale</dt><dd>CAD models are usually in millimetres, and glTF and most web viewers expect metres. If the model shows up a thousand times too big in the viewer, export again with <span class="ui">× 0.001 (mm → m)</span>.</dd></div>
-            <div><dt>Up axis</dt><dd>CAD uses Z as up. glTF uses Y. If the model lies on its back in the viewer, export with <span class="ui">Y-up (glTF, OBJ, Maya)</span>.</dd></div>
+            <div><dt>Unit scale</dt><dd>CAD models are usually in millimetres, and glTF and most web viewers expect metres. <span class="ui">The format’s own</span>, the default, writes a GLB in metres, so the model should arrive at its real size. <span class="ui">× 0.001 (mm → m)</span> does the same by hand.</dd></div>
+            <div><dt>Up axis</dt><dd>CAD uses Z as up. glTF uses Y. <span class="ui">The format’s own</span>, the default, writes a GLB Y up, so the model should stand on its feet. <span class="ui">Turn Z-up into Y-up (for glTF, OBJ, Maya)</span> does the same by hand.</dd></div>
           </dl>
           <p>Leave <span class="ui">Draco compression</span> off unless the viewer you use can read it. See <a href="../docs/choose-format.html">Which format should I choose</a>.</p>
           <h2 id="smoother-curves-or-fewer-triangles">Smoother curves, or fewer triangles</h2>
-          <p>How round a hole looks, and how heavy the GLB is, is decided when the CAD surfaces are turned into triangles. That step is called tessellation. In the <span class="ui">Import settings</span> window, the four choices under <span class="ui">Surface quality</span> set it for you. Open <span class="ui">Tessellation</span> under them to see the numbers, or to type your own.</p>
+          <p>How round a hole looks, and how heavy the GLB is, is decided when the CAD surfaces are turned into triangles. That step is called tessellation. In the <span class="ui">Import settings</span> window, the named choices under <span class="ui">Surface quality</span> (<span class="ui">Clean</span>, <span class="ui">Coarse</span>, <span class="ui">Standard</span>, <span class="ui">Fine</span> and <span class="ui">Ultra</span>) set it for you. Open <span class="ui">Tessellation</span> under them to see the numbers, or to type your own.</p>
           <dl class="table">
             <div><dt>Sag</dt><dd>How far a triangle may stand off the true surface, in millimetres. Smaller is smoother, with more triangles.</dd></div>
             <div><dt>Angle</dt><dd>The most a curve may turn from one triangle to the next, in degrees. Smaller means rounder holes and fillets.</dd></div>
             <div><dt>Min edge</dt><dd>The smallest triangle edge allowed. It keeps tiny fillets and threads from filling up with slivers. 0 is no limit.</dd></div>
-            <div><dt>Coarse, Standard, Fine, Ultra</dt><dd>Each sets a sag and an angle: 1 mm and 30°, 0.5 mm and 30°, 0.2 mm and 20°, 0.05 mm and 12°. The finer choices tighten the angle too, which is what rounds small holes.</dd></div>
+            <div><dt>Clean, Coarse, Standard, Fine, Ultra</dt><dd>Each sets a sag and an angle: 2 mm and 38°, 1 mm and 30°, 0.5 mm and 30°, 0.2 mm and 20°, 0.05 mm and 12°. <span class="ui">Clean</span> makes few triangles with fillets in even strips; small holes stay a little polygonal. The finer choices tighten the angle too, which is what rounds small holes.</dd></div>
             <div><dt>Custom</dt><dd>Selected as soon as you type a sag or an angle of your own.</dd></div>
             <div><dt>By part size</dt><dd>Small, medium and large parts each get a sag and an angle, so the housing comes in fine and the screws coarse. You set where small ends and large begins, as a share of the model’s size.</dd></div>
+            <div><dt>Even strips</dt><dd>Meshes curved faces along their own directions, so a fillet is a row of even strips, not a scatter of triangles. On by default.</dd></div>
             <div><dt>Smooth shading</dt><dd>Writes the normals of the real CAD surfaces into the GLB. A fillet runs into the faces beside it without a visible seam, and sharp edges stay sharp. On by default.</dd></div>
             <div><dt>Swap Y and Z</dt><dd>In the same window, under Clean-up. For a file that comes in lying on its side.</dd></div>
           </dl>
@@ -225,12 +227,12 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
-        <a href="../docs/axis-center.html">The axis of a part</a>
+        <a href="../docs/photo-mode.html">Photo mode</a>
+        <a href="../docs/face-colours.html">Several colours on one part</a>
+        <a href="../docs/lettering.html">Remove lettering and logos</a>
+        <a href="../docs/simplify-round-faces.html">Simplify round faces</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
-        <a href="../docs/select-parts.html">Locked groups</a>
-        <a href="../docs/export.html">Pivot points in Export</a>
-        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>

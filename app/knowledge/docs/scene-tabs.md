@@ -36,6 +36,7 @@ A menu opens with the things you can do with tabs:
 - **Duplicate scene**: Opens a copy of that tab’s scene in a new tab. It is dimmed when the scene is empty.
 - **Close all**: Closes every tab. `Ctrl + Shift + F4`.
 - **Close others**: Closes every tab except this one.
+- **Show in Explorer**: Shows the file the scene was opened from in your file manager. It is dimmed for a scene that did not come from a file, and it needs the app’s own server.
 - **Open…**: Opens a file, as `Ctrl + O` does.
 - **Open recent**: A list of the files you opened lately.
 

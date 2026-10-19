@@ -12,7 +12,7 @@ A turned part is one profile spun round an axis. Its ridges and grooves cost man
 
 1. Select the round parts.
 2. Open the command search (**Ctrl + K**) and run **Fill round grooves**, **Fill solid round** or **Belt: remove ribs**.
-3. The view switches to Wireframe and the **Round part** card opens. **Segments around** sets how many facets go round the axis. **Smooth up to** sets which edges are shaded smooth. Each change shows at once.
+3. The **Round part** card opens, with the Wireframe on the parts being rebuilt only. **Segments around** sets how many facets go round the axis (a belt does not have this setting). **Smooth up to** sets which edges are shaded smooth. Each change shows at once.
 4. Press **Done** or `Esc`. The view goes back to how it was. One undo step (**Ctrl + Z**) takes the part back.
 
 > A part that is not round round one axis is left as it was, with the reason: bolt holes in a flange, a flat or a key way would be lost if it were spun. A belt that is not flat enough, or too thick for its length, is refused the same way.

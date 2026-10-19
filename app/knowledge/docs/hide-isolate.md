@@ -4,7 +4,7 @@ Hide parts that are in the way, look at a few parts on their own, and bring ever
 
 Hiding is how you look inside a model. A hidden part is still in the scene. It is only not drawn.
 
-- `H`: Hide the selected parts
+- `H`: Hide the selected parts. When every selected part is already hidden, H shows them again.
 - `Shift + H`: Hide the rest: everything that is not selected
 - `Alt + H`: Show all parts again
 - `S`: Isolate the selection. When the selection is already the only thing on show, S shows everything again.

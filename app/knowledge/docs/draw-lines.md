@@ -6,7 +6,7 @@ MeshOptimiser can draw lines. A line is a curve you place yourself, point by poi
 
 ## Start drawing
 
-1. Press `L`, or click **Draw** on the bottom toolbar. The card opens bottom left in the viewport.
+1. Press `L`, or click the pencil on the tool strip at the left edge of the view. The card opens bottom left in the viewport.
 2. Choose a tool at the top of the card, and the kind of curve: **Bezier**, **Cubic**, **B-spline** or **Linear**.
 3. Click in the viewport. The keys that do something right now are listed at the bottom right.
 4. Press `Esc` to put the tool away.

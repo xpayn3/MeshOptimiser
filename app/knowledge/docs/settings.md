@@ -4,7 +4,7 @@ One window with its sections and a search. What each section holds, in a sentenc
 
 Open it with `Ctrl + ,` or **Menu**, then **Settings…**. Changes apply as you make them. A click anywhere on a row with a switch turns the switch. There is nothing to confirm: press **Done** or `Esc` to close the window.
 
-The list at the left has the sections. The field at the top searches every section at once. Press `Ctrl + F` to jump to it. While a search is typed, `Esc` clears it first. At the bottom of the list are links to **Help & docs** and **Keyboard shortcuts**, and the version number.
+The list at the left has the sections. The field at the top searches every section at once. Press `Ctrl + F` to jump to it. While a search is typed, `Esc` clears it first. At the bottom of the list are links to **Help & docs** and **Keyboard shortcuts**, and the version number. Inside a section the settings are in cards, one for each group; click the title of a card to fold it (it stays folded next time). A section with three or more cards has chips under its title that jump to them.
 
 ## General
 
@@ -16,11 +16,12 @@ How the app starts and behaves.
 - **Fit the view after loading**: Move the camera so a newly opened model fills the view.
 - **Same sidebars in every tab**: Keep the sidebar widths when you switch tabs.
 - **Confirm destructive actions**: Ask before deletes and other steps that are hard to take back.
-- **Warn before leaving with unsaved changes**: Closing or reloading the window asks first when a scene has changes that are not saved. On by default.
+- **Warn before closing with a model open**: Closing the tab (`Ctrl + W`) or reloading asks first while a model is open or a scene has changes that are not saved. The question is the browser’s own. On by default.
+- **Same height for every dock**: Materials, Library and Animate keep the height you drag one of them to when you switch between them. Off: each one keeps its own. The Console always keeps its own. On by default.
 - **Undo history**: How many steps `Ctrl + Z` can go back: **Short** (50), **Normal** (200) or **Long** (500). A longer history uses more memory. See [Undo and redo](meshoptimiser://docs/undo-redo).
 - **Delete groups when they become empty**: Remove a group automatically when an action empties it. Off by default.
 - **Keep a recovery copy**: While a scene has changes that are not saved, a copy of it is kept inside this browser every minute, every 2 minutes (the default) or every 5 minutes, and only when something changed. If the app crashes, it offers the scene back. **Off** stops it. See [Get your scene back after a crash](meshoptimiser://docs/crash-recovery).
-- **New scenes: Unit and Up axis**: What a scene you start from now on shows sizes in (mm, cm, m, in, ft, or none), and which way is up (Z-up for CAD, Y-up for glTF and Unity). It applies to every new tab and every reload. The scene you have open keeps its own; change that one under **Scene**.
+- **New scenes: Unit and Up axis**: What a scene you start from now on shows sizes in (mm, cm, m, in, ft, or none), and which way is up (Z-up for CAD, Y-up for glTF and Unity). It applies to every new tab and every reload. The scene you have open keeps its own; change that one in the **Scene** card of the right sidebar.
 
 ## Search
 
@@ -47,10 +48,11 @@ The look of the interface. It does not change the model or the 3D view. **Reset*
 
 - **Accent**: The colour of buttons, selections and highlights. Choose one of nine colours, or the last swatch to pick any colour. That swatch opens the app’s own colour picker. While you drag in it, the Settings window steps aside so you see the colour on the real interface, and `Esc` goes back to the accent you had. The picker can be moved wherever it is opened: drag the strip along its top, or the hint along its bottom.
 - **Surfaces**: The greys the interface is built from: **Graphite**, **Midnight**, **Warm** or **Black**.
-- **Font**: The typeface of the interface: **Inter**, **System**, **Mono** or **Serif**.
+- **Font**: The typeface of the interface: **Default** (Inter), **Geist**, **Space Grotesk**, **System**, **Mono** or **Serif**.
 - **Text size**: Everything written in the interface, from **Small** to **Larger**. Buttons and fields grow with it.
-- **Corners**: How round the corners of buttons and cards are: **Sharp**, **Default** or **Round**.
+- **Corners**: How round the corners of buttons and cards are: **Sharp** or **Default**.
 - **Density**: The height of buttons, fields and dropdowns: **Compact**, **Default** or **Roomy**.
+- **Colour the hierarchy icons**: Groups amber, parts green, copies that share geometry purple and cloners blue in the parts tree. Off: all grey, and only the selection is coloured. On by default.
 - **Interface animations**: Fades, slides and the movement of the splash screen. Off: everything just appears.
 
 ## Viewport
@@ -65,7 +67,10 @@ What the 3D view draws around the model.
 - **FPS counter and Renderer stats**: Small read-outs of how fast the view is drawing.
 - **Show origin points**: Shows a dot at the origin of each group in the viewport. Off by default.
 - **Fog**: Fades the grid and distant parts into the background, with start, end and intensity.
-- **Background**: Dark, Studio gradient, Neutral grey, White, or HDRI environment. An HDRI is a picture of surroundings that lights the model. There are four built-in ones (Studio, Outdoor, Sunset, Overcast), or load your own `.hdr` or `.exr` file.
+- **Link the list and the view on hover**: Point at a part in the tree and it lights up in the view. On by default.
+- **Glow on the selection**: A soft light on the surface of the selected parts, brightest at their edges, so they stand out in a busy model. Off: the thin outline alone. On by default.
+- **Wireframe: Lines**: **Quads** draws the polygons you edit: two flat triangles that make a four-sided cell show as one cell. **Triangles** draws every edge of the mesh. It changes what is drawn, not the mesh.
+- **Wireframe: Flat within**: **Strict**, **Normal** or **Loose**: for parts that have polygons of their own, how far neighbouring triangles may turn away from each other and still count as one polygon.
 
 ## Camera
 
@@ -90,6 +95,8 @@ The mouse moves are explained in [Move the view](meshoptimiser://docs/move-the-v
 - **Share materials by colour**: Let parts of the same colour share one material. It applies the next time a model is loaded.
 - **Skip tiny parts**: While the view moves, leave out parts that would be only a few pixels across.
 - **Lower the resolution if it stutters**: While a heavy scene moves, draw it a little coarser, and sharp again when it stops.
+- **Graphics**: Says whether the browser draws with the graphics card or in software, and what to do if it is software.
+- **Memory**: What the page holds, the geometry of everything open and the undo history, read when the section opens. **Refresh** reads them again.
 
 ## Claude
 
@@ -101,13 +108,15 @@ Look for a newer version, choose how the app tells you, and go back to the one b
 
 ## Scene
 
-These belong to the open scene and are saved with it. `Ctrl + ;` opens this section directly, and so does **Scene settings…** in the menu.
+Not a section of this window: these belong to the open scene, are saved with it, and are in the **Scene** card at the bottom of the right sidebar. `Ctrl + ;` opens that card, and so does **Scene settings…** in the search.
 
 - **Display units**: The unit used for sizes and distances on screen: millimetres, centimetres, metres, inches, feet, or none.
-- **Up axis (viewport)**: Which direction is up: Z, as CAD programs have it, or Y, as glTF and some 3D programs have it. It changes how the scene is shown. The exported file follows the choice in the Export window.
+- **Up axis**: Which direction is up: Z, as CAD programs have it, or Y, as glTF and some 3D programs have it. It changes how the scene is shown. The exported file follows the choice in the Export window.
 - **Scene scale (×)**: A multiplier for the whole scene on screen. 0.001 turns millimetres into metres.
-- **Cell size**: The size of a grid cell. **Auto** fits the model.
+- **Grid cell size**: The size of a grid cell. **Auto** fits the model.
 - **Snap gizmo to grid**: The move tool jumps from one grid cell to the next.
+- **Shadows**: The sun casts shadows of the parts on each other.
+- **Background**: Dark, Studio gradient, Neutral grey, White, or HDRI environment. An HDRI is a picture of surroundings that lights the model. Nine come with the app, shown as small pictures (Studio, Soft, Loft, Daylight, Outdoor, Sunset, Venice, Overcast and Grey sky), or load your own `.hdr` or `.exr` file with **Load HDRI…**. With **Show as background** off, the HDRI still lights the model and shows in its reflections, but the background is the plain colour.
 
 The light has no settings here. The sun is turned with the **Sun direction gizmo** in the viewport.
 

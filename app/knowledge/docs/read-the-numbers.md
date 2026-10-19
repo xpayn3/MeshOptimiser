@@ -41,7 +41,7 @@ A few parts often hold a large share of the triangles. Start with those.
 
 ## Heatmap
 
-Press `Alt + 4` for the heatmap view. Each part is coloured by how densely it is covered in triangles for its size. Dense parts stand out in warm colours. A small part in a hot colour carries far more detail than it needs. Press `1` to go back to the normal view.
+Press `Alt + 4` for the heatmap view. Each part is coloured by how densely it is covered in triangles for its size. Dense parts stand out in warm colours. A small part in a hot colour carries far more detail than it needs. Press `Alt + 1` to go back to the normal view.
 
 ## The optimisation report
 

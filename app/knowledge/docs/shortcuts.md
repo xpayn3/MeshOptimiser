@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-Every keyboard shortcut and mouse action in MeshOptimiser v0.24.0, grouped by what it does.
+Every keyboard shortcut and mouse action in MeshOptimiser, grouped by what it does.
 
 On macOS, use `⌘` wherever this page says `Ctrl`.
 
@@ -41,6 +41,7 @@ Inside the app, press `?` for the same list with a search field and a picture of
 - `M`: Measure
 - `N`: Add a note: click a spot on the model, then write
 - `L`: Draw lines and shapes
+- `C`: Quick colour wheel: hold it over the model with parts selected, move, and let go. It colours the selected parts.
 - `Enter`: Run the open command card
 - `Esc`: Put the open command card away. A second press clears the selection.
 
@@ -115,6 +116,7 @@ These work in the piece modes of [Edit mesh](meshoptimiser://docs/edit-mesh). `1
 - `W`: Quick wand: hold it over the viewport, flick toward a command, let go. A quick tap leaves the ring open.
 - `Shift + L`: Library drawer
 - `Shift + M`: Materials drawer
+- `Shift + A`: Animate: switch it on or off
 - ```: Console
 - `Ctrl + ,`: Settings
 - `F1`: Help window
