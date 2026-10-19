@@ -3,10 +3,10 @@
  "stable": {
   "version": "0.35.0",
   "date": "2026-10-19",
-  "headline": "One part can wear several colours, STEP files open the way Cinema 4D shows them, and Photo mode draws the model for pictures.",
+  "headline": "One part can wear several colours, STEP files open with clean even strips, and Photo mode draws the model for pictures.",
   "notes": [
    "One part can wear several colours: pick polygons in Edit mesh and press Colour; files from other programs come in the same way.",
-   "STEP files open like Cinema 4D: even strips on fillets, a Clean quality, and CAD edit to pick whole CAD faces.",
+   "STEP files open with clean, even strips on fillets, a Clean quality, and CAD edit to pick whole CAD faces.",
    "Remove holes, Untriangulate, Simplify round faces, Remove fillets and Remove lettering read the CAD faces of a STEP.",
    "Photo mode, five photographed environments and a shorter Scene card.",
    "Close open edges, Untriangulate into quads, and a Decimate that keeps the shape closer.",

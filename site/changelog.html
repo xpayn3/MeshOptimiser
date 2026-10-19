@@ -59,14 +59,28 @@
             <strong>v0.35.0<b class="rel-code">Vipava</b></strong><em>Latest</em><span>19 Oct 2026</span><span>214 fixes</span>
           </div>
           <div class="log-body">
-            <p>One part can wear several colours, as in Cinema 4D. STEP files open the way Cinema 4D shows them, with clean even strips on fillets, and Photo mode draws the model for pictures. 214 fixes.</p>
+            <p>One part can wear several colours. STEP files open with clean, even strips on fillets, and Photo mode draws the model for pictures. 214 fixes, from textures and UVs to models from Blender.</p>
             <ul>
               <li><b class="is-new">New</b><span>Several colours on one part. Pick polygons in Edit mesh and press Colour, or drop a material on them. The part stays one closed part, each colour is a card in its material strip, and files from other programs come in the same way and go out in every format.</span></li>
-              <li><b class="is-new">New</b><span>STEP like Cinema 4D. Clean, even strips on fillets, a Clean quality, and CAD edit to pick whole CAD faces, take them out and remesh.</span></li>
+              <li><b class="is-new">New</b><span>Cleaner STEP meshes. Clean, even strips on fillets, a Clean quality, and CAD edit to pick whole CAD faces, take them out and remesh.</span></li>
               <li><b class="is-new">New</b><span>Tools that read the CAD faces of a STEP: Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos.</span></li>
               <li><b class="is-new">New</b><span>Photo mode, five photographed environments as picture cards, and a shorter Scene card.</span></li>
               <li><b class="is-new">New</b><span>Close open edges, Untriangulate into quads, and a Decimate that keeps the shape closer.</span></li>
-              <li><b class="is-fix">Fix</b><span>Models from Blender open upright at their real size, textures and UVs survive the mesh tools and the exports, and undo and redo are sound after Claude’s steps.</span></li>
+              <li><b class="is-fix">Fix</b><span>A STEP with faces painted in different colours came in as one colour or in pieces. It is one closed part now, and colours set on a part’s label come through.</span></li>
+              <li><b class="is-fix">Fix</b><span>An OBJ came in without its colours, and a textured GLB, OBJ or FBX opened with its textures gone. Both keep their colours, opacity and pictures now.</span></li>
+              <li><b class="is-fix">Fix</b><span>The CAD edges of a STEP part went away when the part was changed, and undo brought a part back without its CAD faces. They now stay through the tools and through undo, and a GLB saved from the app carries them.</span></li>
+              <li><b class="is-fix">Fix</b><span>A STEP that is a surface model, or holds only triangles, would not open or came out inside-out. Both open correctly; faces the mesher gave up on are counted and reported.</span></li>
+              <li><b class="is-fix">Fix</b><span>The STEP cache never worked. Converting the same file again is now more than twice as fast, and a native crash no longer leaves the conversion running for ever.</span></li>
+              <li><b class="is-fix">Fix</b><span>Small round parts from a STEP came out polygonal and a few percent too small, and long triangles met in a point on flat panels. Both are meshed properly now.</span></li>
+              <li><b class="is-fix">Fix</b><span>A model from Blender (or any Y-up glTF, OBJ or FBX) opened lying on its back, and a GLB a thousand times too small. Files open upright at their real size and export in each format’s own way.</span></li>
+              <li><b class="is-fix">Fix</b><span>The mesh tools threw away a part’s texture coordinates, and an FBX export had none. UVs now survive the tools and every export, and are no longer written upside down between formats.</span></li>
+              <li><b class="is-fix">Fix</b><span>Remove holes took minutes on a hole with thousands of points and left stray lines inside a part. It is fast, and a new switch removes what is sealed inside.</span></li>
+              <li><b class="is-fix">Fix</b><span>Remove lettering found nothing on a cast, curved face and left slivers where letters had been. Marks are found by their shape and the caps are clean.</span></li>
+              <li><b class="is-fix">Fix</b><span>Voxel remesh could leave edges with four faces, Convex hull cut corners, and Repair mesh made some parts worse. They now match Blender’s results on the test parts.</span></li>
+              <li><b class="is-fix">Fix</b><span>Split blew a part into hundreds of pieces, and Merge left mirrored parts inside out and lost textures. Both are fixed.</span></li>
+              <li><b class="is-fix">Fix</b><span>Undoing a step Claude made could take one of my own earlier steps with it, and a dry run could change the model with no way back. Undo, redo and dry runs are sound now.</span></li>
+              <li><b class="is-fix">Fix</b><span>Exporting an exploded view wrote parts together and apart, and mirrored parts came out inside-out in OBJ, STL, PLY and FBX. Both export correctly.</span></li>
+              <li><b class="is-fix">Fix</b><span>Photo mode glitches, a car paint that went pitch black, and lighting from the side are fixed; a change in Settings &gt; Appearance reaches every open tab.</span></li>
             </ul>
           </div>
         </li>
