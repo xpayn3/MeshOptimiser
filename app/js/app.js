@@ -30483,9 +30483,16 @@ function wireUI() {
       pop.innerHTML = '';
       _LastTool.items.forEach(it => {
         const row = document.createElement('button');
-        row.type = 'button'; row.className = 'vp-prim-pop-item';
-        row.innerHTML = '<i data-lucide="' + (it.icon || 'bolt') + '"></i>';
-        row.appendChild(document.createTextNode(it.label));
+        row.type = 'button'; row.className = 'vp-prim-pop-item vp-last-item';
+        // text only, and the command's shortcut at the right when it has one
+        const act = it.kind === 'a' ? _Actions.list.find(x => x.id === it.id) : null;
+        const lbl = document.createElement('span'); lbl.className = 'vp-last-label'; lbl.textContent = it.label;
+        row.appendChild(lbl);
+        if (act && act.kbd) {
+          const keys = document.createElement('span'); keys.className = 'cmdk-keys vp-last-keys';
+          keys.innerHTML = String(act.kbd).split('+').map(k => '<kbd class="kbd-chip">' + escapeHtml(k) + '</kbd>').join('<span class="sc-plus">+</span>');
+          row.appendChild(keys);
+        }
         row.addEventListener('click', () => { closePop(); try { _LastTool.run(it); } catch (e) { console.warn('[last tool]', e); } });
         pop.appendChild(row);
       });
@@ -31224,7 +31231,13 @@ function wireUI() {
     if (_typingTarget(e) || _modalOpen()) return;
     {
       const hit = _KEYMAP[_comboOf(e)];
-      if (hit) { e.preventDefault(); try { hit(); } catch (err) { console.warn('[keys]', err); } return; }
+      if (hit) {
+        e.preventDefault();
+        // a tool run by its key is a tool used: the recent list (the button at the left of the viewport toolbar) notes the command that owns this key
+        try { const combo = _comboOf(e), act = _Actions.list.find(a => a.kbd === combo); if (act) _LastTool.noteAction(act); } catch (_) {}
+        try { hit(); } catch (err) { console.warn('[keys]', err); }
+        return;
+      }
     }
     const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
     if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {

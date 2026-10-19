@@ -950,6 +950,25 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .toggle input:checked+.switch{background:var(--ac)}
 .toggle input:checked+.switch::after{transform:translateX(14px)}
 /* the right sidebar: every switch is the small one, as in Photo mode */
+/* the command cards (Dynamic place, Fill holes, ...) use the same small switch as the right sidebar */
+.section-cmd .toggle .switch{width:var(--switch-w);height:var(--switch-h)}
+.section-cmd .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
+.section-cmd .toggle input:checked+.switch::after{transform:translateX(var(--switch-travel))}
+/* the number rows of the Remesh / Untriangulate card sit close: the card's own 6px gap is all there is between two fields */
+.section-cmd{--cmd-row-gap:4px}   /* the space between two rows of a command card (switch or number), in every card */
+.section-cmd[data-cmd="remesh"] .remesh-pane{gap:var(--cmd-row-gap)!important}
+:is(.section-cmd[data-cmd="remesh"] .remesh-pane>:is(.toggle,.cmd-num),#_a#_b#_c){box-sizing:border-box;height:32px;min-height:0;padding:0;margin-top:0;--fld-h:32px}
+/* and the rows of a card's main section (Dynamic place, Lettering, Pivot, Fasteners, ...): the same 32px, and --cmd-row-gap between two of them (the section's own gap is 6px) */
+:is(.section-cmd :is(.section-b,.fa-kinds)>:is(.toggle,.cmd-num),#_a#_b#_c){box-sizing:border-box;height:32px;min-height:0;padding:0;--fld-h:32px}
+:is(.section-cmd :is(.section-b,.fa-kinds)>:is(.toggle,.cmd-num)+:is(.toggle,.cmd-num),#_a#_b#_c){margin-top:calc(var(--cmd-row-gap) - var(--space-sm))}
+/* where the section has no gap of its own (Floating, Pivot, Place) the 2px is the rows' own; the Fasteners kinds list has its 2px already */
+:is(.section-cmd:is([data-cmd="floating"],[data-cmd="pivot"],[data-cmd="place"]) .section-b>:is(.toggle,.cmd-num)+:is(.toggle,.cmd-num),#_a#_b#_c){margin-top:var(--cmd-row-gap)}
+:is(.section-cmd .fa-kinds>:is(.toggle,.cmd-num)+:is(.toggle,.cmd-num),#_a#_b#_c){margin-top:calc(var(--cmd-row-gap) - var(--space-2xs))}
+:is(.section-cmd .small-card>:is(.toggle,.cmd-num)+:is(.toggle,.cmd-num),#_a#_b#_c){margin-top:calc(var(--cmd-row-gap) - var(--space-lg))}
+/* the Advanced list of a command card (Remove holes, ...): every row, switch or number field, is the same 32px high with the same --cmd-row-gap between,
+   so the labels at the left stand evenly (:is(...,#_a#_b#_c) outranks the shared rows below, as elsewhere in this sheet) */
+:is(.section-cmd .cmd-adv-b,#_a#_b#_c){gap:var(--cmd-row-gap)}
+:is(.section-cmd .cmd-adv-b>:is(.toggle,.cmd-num),#_a#_b#_c){box-sizing:border-box;height:32px;min-height:0;padding:0;--fld-h:32px}
 #sidebar-right .toggle .switch{width:var(--switch-w);height:var(--switch-h)}
 #sidebar-right .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
 #sidebar-right .toggle input:checked+.switch::after{transform:translateX(var(--switch-travel))}
@@ -2414,6 +2433,8 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* The selected row's label and icon are the accent blue itself. */
 .tree-node.selected .tree-label{color:var(--ac)}
 .tree-node.selected .tree-typeicon{color:var(--ac)}
+.vp-last-item{justify-content:space-between;gap:var(--space-xl)}
+.vp-last-keys{margin-left:auto}
 /* Shape names stay on one line; the picker grows to fit the longest. */
 #vp-add-pop{width:max-content;min-width:160px}
 .vp-prim-pop-item{white-space:nowrap}
@@ -7151,10 +7172,10 @@ window.moSplash = function (msg, pct) {
         <details class="cmd-adv" id="fit-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
-            <div class="cmd-num" title="How round a part must be, looking down its axis, to become a cylinder. 1 is a perfect circle, a hexagon is 0.87, a square 0.71."><span>Roundness for a cylinder</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-circ" value="0.85"></label></div>
-            <div class="cmd-num" title="A cylinder is chosen only if its volume is at most this share of the best box's volume. A cylinder in its own box is 0.79."><span>Cylinder to box volume</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-waste" value="0.82"><span>×</span></label></div>
-            <div class="cmd-num" title="How many times longer than it is wide a part must be to become a cylinder. 0 lets flat round parts (gears, washers) be cylinders too."><span>Shortest cylinder, length to width</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-aspect" value="0"><span>×</span></label></div>
-            <div class="toggle" title="Work out which way each part points from its mesh. Off: only the scene's axes and the axes stored with the part are tried."><span id="fit-pca-lbl">Find the part's own axes</span><label><input type="checkbox" id="fit-pca" aria-labelledby="fit-pca-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="How round a part must be, looking down its axis, to become a cylinder. 1 is a perfect circle, a hexagon is 0.87, a square 0.71."><span>Cylinder roundness</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-circ" value="0.85"></label></div>
+            <div class="cmd-num" title="A cylinder is chosen only if its volume is at most this share of the best box's volume. A cylinder in its own box is 0.79."><span>Cylinder vs box volume</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-waste" value="0.82"><span>×</span></label></div>
+            <div class="cmd-num" title="How many times longer than it is wide a part must be to become a cylinder. 0 lets flat round parts (gears, washers) be cylinders too."><span>Length to width</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-aspect" value="0"><span>×</span></label></div>
+            <div class="toggle" title="Work out which way each part points from its mesh. Off: only the scene's axes and the axes stored with the part are tried."><span id="fit-pca-lbl">Use the part's axes</span><label><input type="checkbox" id="fit-pca" aria-labelledby="fit-pca-lbl" checked><span class="switch"></span></label></div>
             <button type="button" class="cmd-link" id="fit-reset">Reset to defaults</button>
           </div>
         </details>
