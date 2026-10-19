@@ -1,26 +1,31 @@
 {
  "schema": 1,
  "stable": {
-  "version": "0.35.0",
+  "version": "0.35.1",
   "date": "2026-10-19",
-  "headline": "One part can wear several colours, STEP files open with clean even strips, and Photo mode draws the model for pictures.",
+  "headline": "Big STEP files mesh on all cores, calmer command cards, smoother drags",
   "notes": [
-   "One part can wear several colours: pick polygons in Edit mesh and press Colour; files from other programs come in the same way.",
-   "STEP files open with clean, even strips on fillets, a Clean quality, and CAD edit to pick whole CAD faces.",
-   "Remove holes, Untriangulate, Simplify round faces, Remove fillets and Remove lettering read the CAD faces of a STEP.",
-   "Photo mode, five photographed environments and a shorter Scene card.",
-   "Close open edges, Untriangulate into quads, and a Decimate that keeps the shape closer.",
-   "214 fixes: models from Blender open upright at real size, textures and UVs survive the tools, undo is sounder."
+   "Big STEP files are meshed on all cores: the V8 import goes from 103 s to 81 s.",
+   "A tool’s card shows the Wireframe on the part in work only.",
+   "Command cards: small switches, even rows, no picture on top.",
+   "A brighter default light and a plain-text recent-tools list.",
+   "No more stalls while idle, scrubbing or dragging on a big model.",
+   "Fixes for Edit mesh dots, the far floor grid and a part that stopped drawing."
   ],
   "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
   "archive": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.0/meshoptimiser-app-0.35.0.zip",
-   "sha256": "a4e9ec4f3f8d21f1c76075fc851bc7ef15dc4a7ea53066fe8ee512b201f5050e",
-   "size": 11932831
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.1/meshoptimiser-app-0.35.1.zip",
+   "sha256": "9331db44a088f2d7fa8e3076d0b742e1b09c825fe90ea385ddf6bef8f86e269f",
+   "size": 11928316
   },
   "requirements_sha256": "f1a93ffe65235c3537c454bcad32277ba82c666c35ece65e2fe598556d0f2f7d",
   "requirements_changed": false,
   "launcher": 4,
-  "min_from": ""
+  "min_from": "",
+  "installer": {
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.1/MeshOptimiser-v0.35.1.zip",
+   "sha256": "fe07d8064bafd91b0727fb51426bf77a21947fb4dd072c5c34dab851543ed89c",
+   "size": 11971145
+  }
  }
 }
