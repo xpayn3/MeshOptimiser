@@ -565,20 +565,6 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 .prop-material-row{display:flex;align-items:center;height:90px;margin:0 0 var(--space-xl);padding:var(--space-7) 0;box-sizing:border-box;border-radius:var(--r-2xl);overflow:hidden;background:color-mix(in srgb,var(--tx) 3%,transparent)}
 .prop-material-row>.prop-mat-strip{flex:1;min-width:0}
 /* the face colours of one part of several colours (a material on some of its faces, as Cinema 4D has it): one row each */
-.prop-facecols{margin:calc(-1 * var(--space-md)) 0 var(--space-xl);display:flex;flex-direction:column;gap:var(--space-2xs)}
-.prop-fc-head{display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-2xs) var(--space-2xs);font-size:var(--fs-11);color:var(--tx3)}
-.prop-fc-count{font-variant-numeric:tabular-nums}
-.prop-fc-row{display:flex;align-items:center;gap:var(--space-md);height:var(--btn-h-sm);padding:0 var(--space-2xs);border-radius:var(--r-sm);font-size:var(--fs-12);color:var(--tx2)}
-.prop-fc-row:hover{background:var(--s1)}
-.prop-fc-sw{position:relative;flex:none;width:var(--icon-md);height:var(--icon-md);border-radius:var(--r-pill);box-shadow:inset 0 0 0 1px var(--s4);cursor:pointer;overflow:hidden}
-.prop-fc-sw input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;cursor:pointer}
-.prop-fc-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx)}
-.prop-fc-n{flex:none;color:var(--tx3);font-variant-numeric:tabular-nums}
-.prop-fc-btn,.prop-fc-gap{flex:none;width:var(--btn-h-sm);height:var(--btn-h-sm)}
-.prop-fc-btn{display:grid;place-items:center;padding:0;border:0;border-radius:var(--r-sm);background:transparent;color:var(--tx3);cursor:pointer}
-.prop-fc-btn:hover{background:var(--s2);color:var(--tx)}
-.prop-fc-btn:disabled{opacity:.4;cursor:default;background:transparent}
-.prop-fc-btn i,.prop-fc-btn svg{width:var(--icon-sm);height:var(--icon-sm)}
 .prop-mat-empty{flex:1;text-align:center;font-size:var(--fs-11);color:var(--tx3)}
 .prop-mat-strip{display:flex;gap:var(--space-xs);height:100%;box-sizing:border-box;padding:2px var(--space-7);scroll-padding:0 var(--space-7);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
 .prop-mat-strip.is-dragging{cursor:grabbing;scroll-snap-type:none}
@@ -8807,7 +8793,7 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=102"></script>
-<script type="module" src="js/app.js?v=20261076-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1"></script>
+<script type="module" src="js/app.js?v=20261077-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

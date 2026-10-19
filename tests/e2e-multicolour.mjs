@@ -174,12 +174,18 @@ try {
     check('CAD view: undo makes the top white again', g && sig(g.colours) === 'white:2,yellow:10', g && g.colours);
     const list = await evalJS(`JSON.stringify(window.__moAgent.faceGroupsOf(${top.id}))`);
     check('faceGroupsOf lists main and the face colour', JSON.parse(list).length === 2, list);
-    // the Properties card lists the face colours of the selected part
+    // the Properties card shows each face colour of the selected part as a card of its material strip, and a right-click on one
+    // offers what acts on those faces
     await evalJS(`(() => { window.state.selected.clear(); window.state.selected.add(${top.id}); window.refreshPropertiesPanel && window.refreshPropertiesPanel(); return true; })()`);
     await tool('select_parts', { ids: [top.id] }).catch(() => {});
     await sleep(400);
-    const rows = await evalJS("document.querySelectorAll('.prop-facecols .prop-fc-row').length");
-    check('Properties: two face colour rows', rows === 2, rows);
+    const cards = await evalJS("JSON.stringify([...document.querySelectorAll('#sidebar-right .prop-mat-strip .prop-mat-btn.is-face')].map(c => c.dataset.fcMi))");
+    check('Properties: two face colour cards in the material strip, the main one first', cards === '["0","1"]', cards);
+    check('Properties: no face colour list under the strip', await evalJS("!document.querySelector('.prop-facecols')"));
+    const menu = await evalJS(`(() => { const c = document.querySelector('#sidebar-right .prop-mat-strip .prop-mat-btn[data-fc-mi="1"]'); if (!c) return null;
+      const r = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 5, clientY: r.top + 5 }));
+      const m = document.getElementById('ctx-menu'); const t = m && m.style.display === 'block' ? m.textContent : null; if (m) m.style.display = 'none'; return t; })()`);
+    check('Properties: right-click a face colour card: Pick, Recolour, Give back', !!menu && /Pick these faces/.test(menu) && /Recolour these faces/.test(menu) && /Give these faces back to the main colour/.test(menu), menu);
   }
   {
     // Edit mesh: the side faces of Painted picked, then the Colour button's wheel colours them

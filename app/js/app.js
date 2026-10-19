@@ -20129,7 +20129,6 @@ function refreshPropertiesPanel() {
 
   let nameHtml = `<span class="prop-name" style="color:var(--tx3)">No selection</span>`;
   let materialHtml = '';
-  let faceColHtml = '';        // (one part of several colours: its face colours, under its material)
   let matNote = '';          // "3 materials", on the title line, when more than one is in play
   let tagsHtml = '';
   let tris = '—', verts = '—', bbox = '—', diag = '—', pct = '—', vol = '—';
@@ -20172,7 +20171,8 @@ function refreshPropertiesPanel() {
   // count under it. `own` is the selection's one material: it opens through
   // the selected part and its name renames in place (double-click); a tile
   // among several opens the material it carries.
-  const _matChip = (m, n, own) => {
+  // fc: { partId, mi, tris } when the card is one of the face colours of one part (mi 0 its main colour)
+  const _matChip = (m, n, own, fc) => {
     const matHex = '#' + (m.color?.getHexString?.() || 'cccccc');
     let thumbHtml;
     try {
@@ -20189,11 +20189,14 @@ function refreshPropertiesPanel() {
     // the badge in the card's corner: the number alone, shortened from a thousand up (the tooltip has the words and the whole number)
     const partsShort = n < 1000 ? String(n) : n < 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : n < 1e6 ? Math.round(n / 1000) + 'k' : (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
     const hint = 'Click to see it in the Materials panel · double-click to edit · right-click for more';
-    return `<div class="prop-mat-btn${own ? '' : ' prop-mat-multi-row'}" data-action="edit-material"${own ? '' : ` data-mat-uuid="${m.uuid}"`} title="${escapeHtml(name)} · ${escapeHtml(type)} · ${parts}\n${hint}">
+    const fcLine = fc ? `\n${fc.mi === 0 ? 'Main colour of this part' : 'Faces of this part'}: ${fmtNum(fc.tris)} triangles` : '';
+    const fcAttrs = fc ? ` data-part-id="${fc.partId}" data-fc-mi="${fc.mi}"` : '';
+    const delTitle = fc && fc.mi > 0 ? 'Give these faces back to the main colour of the part (one undo step)' : 'Remove this material from the selected parts: they are left with no material (one undo step)';
+    return `<div class="prop-mat-btn${own ? '' : ' prop-mat-multi-row'}${fc ? ' is-face' : ''}" data-action="edit-material"${own ? '' : ` data-mat-uuid="${m.uuid}"`}${fcAttrs} title="${escapeHtml(name)} · ${escapeHtml(type)} · ${parts}${fcLine}\n${hint}">
       ${thumbHtml}
       <span class="prop-mat-name"${own ? ' data-mat-name' : ''}>${escapeHtml(name)}</span>
       <span class="prop-mat-sub" aria-label="${parts}">${partsShort}</span>
-      <button type="button" class="prop-mat-del" data-action="remove-material" aria-label="Remove material" title="Remove this material from the selected parts: they are left with no material (one undo step)"><i data-lucide="trash-2"></i></button>
+      <button type="button" class="prop-mat-del" data-action="remove-material" aria-label="${fc && fc.mi > 0 ? 'Give these faces back to the main colour' : 'Remove material'}" title="${delTitle}"><i data-lucide="${fc && fc.mi > 0 ? 'undo-2' : 'trash-2'}"></i></button>
     </div>`;
   };
 
@@ -20217,25 +20220,14 @@ function refreshPropertiesPanel() {
     nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instance (×' + _shareN + ')' : _shareN > 1 ? 'Original of ' + _shareN + ' instances' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
                `<span class="prop-name" title="${_safeName}">${_safeName}</span>${_lockBadge}`;
     const mat = _matOfPart(p);
-    if (mat && !p.isPrimitive && !p.isSpline) {
-      materialHtml = `<div class="prop-mat-strip">${_matChip(mat, _countPartsUsingMaterial(mat), true)}</div>`;
-    }
-    // A part of several colours (C4D: a material on a polygon selection) lists them: the swatch recolours one, the arrow picks its faces
-    // in Edit mesh, the cross gives them back to the main material. Each is one undo step.
+    // A part of several colours (C4D: a material on a polygon selection) shows each colour as a card of the strip, the main one first;
+    // right-click a card to pick its faces, recolour them or give them back to the main colour (each one undo step).
     const fg = (!p.isPrimitive && !p.isSpline && p.mesh) ? _faceGroupsOf(p) : null;
-    if (fg) {
-      const row = (g) => {
-        const hex = '#' + (g.mat && g.mat.color ? g.mat.color.getHexString() : 'aaaaaa');
-        const nm = g.mi === 0 ? 'Main' : (g.mat && g.mat.name && g.mat.name.trim()) || hex.toUpperCase();
-        return `<div class="prop-fc-row" data-fc-mi="${g.mi}">
-          <label class="prop-fc-sw" style="background:${hex}" title="${g.mi === 0 ? 'Recolour the main material of this part' : 'Recolour these faces'}"><input type="color" value="${hex}" data-fc="colour" aria-label="Colour"></label>
-          <span class="prop-fc-name" title="${escapeHtml(nm)}">${escapeHtml(nm)}</span>
-          <span class="prop-fc-n">${fmtNum(g.tris)}</span>
-          <button type="button" class="prop-fc-btn" data-fc="pick" title="Pick these faces in Edit mesh (Polygons)" aria-label="Pick these faces"${g.tris ? '' : ' disabled'}><i data-lucide="mouse-pointer-2"></i></button>
-          ${g.mi === 0 ? '<span class="prop-fc-gap"></span>' : '<button type="button" class="prop-fc-btn" data-fc="remove" title="Give these faces back to the main material (one undo step)" aria-label="Remove this face colour"><i data-lucide="x"></i></button>'}
-        </div>`;
-      };
-      faceColHtml = `<div class="prop-facecols" data-part-id="${p.partId}"><div class="prop-fc-head"><span>Face colours</span><span class="prop-fc-count">${fg.length}</span></div>${fg.map(row).join('')}</div>`;
+    if (fg && fg.some(g => g.mat)) {
+      materialHtml = `<div class="prop-mat-strip">${fg.filter(g => g.mat).map(g => _matChip(g.mat, _countPartsUsingMaterial(g.mat), false, { partId: p.partId, mi: g.mi, tris: g.tris })).join('')}</div>`;
+      matNote = fg.length + ' colours';
+    } else if (mat && !p.isPrimitive && !p.isSpline) {
+      materialHtml = `<div class="prop-mat-strip">${_matChip(mat, _countPartsUsingMaterial(mat), true)}</div>`;
     }
     const tags = [];
     {
@@ -20288,14 +20280,19 @@ function refreshPropertiesPanel() {
                `<span class="prop-name">${ids.length} parts selected</span>`;
     // Detect shared material across the selection — show its name; otherwise
     // mark as mixed so the user knows the editor would only target one.
+    // (a part of several colours brings every colour it wears, not only its main one)
+    const _matsOfPart = (p) => {
+      const g = (p && p.mesh && !p.isPrimitive && !p.isSpline) ? _faceGroupsOf(p) : null;
+      return g ? g.map(x => x.mat).filter(Boolean) : [_matOfPart(p)];
+    };
     const matSet = new Set();
     let sharedMatRef = null;
     for (const id of ids) {
-      const m = _matOfPart(getPart(id));
-      if (!m) { matSet.clear(); break; }
-      matSet.add(m);
+      const ms = _matsOfPart(getPart(id));
+      if (!ms.length || ms.some(m => !m)) { matSet.clear(); break; }
+      for (const m of ms) matSet.add(m);
       if (matSet.size > 1) break;
-      sharedMatRef = m;
+      sharedMatRef = ms[0];
     }
     if (matSet.size === 1 && sharedMatRef) {
       materialHtml = `<div class="prop-mat-strip">${_matChip(sharedMatRef, _countPartsUsingMaterial(sharedMatRef), true)}</div>`;
@@ -20305,9 +20302,10 @@ function refreshPropertiesPanel() {
       // without first narrowing the selection.
       const matCounts = new Map(); // mat -> count in selection
       for (const id of ids) {
-        const m = _matOfPart(getPart(id));
-        if (!m) continue;
-        matCounts.set(m, (matCounts.get(m) || 0) + 1);
+        for (const m of new Set(_matsOfPart(getPart(id)))) {
+          if (!m) continue;
+          matCounts.set(m, (matCounts.get(m) || 0) + 1);
+        }
       }
       const matEntries = [...matCounts.entries()];
       const makeRow = ([m, n]) => _matChip(m, n);
@@ -20439,7 +20437,6 @@ function refreshPropertiesPanel() {
     </div>
     <div class="prop-tags">${tagsHtml}</div>
     ${_splOn ? '' : `<div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>`}
-    ${_splOn ? '' : faceColHtml}
     <div class="prop-shade cmd-num is-off" id="prop-shade"></div>`;
   // A line: the Shape (rectangle, circle, polygon) and Spline cards, C4D style
   if (_splOn) {
@@ -20538,28 +20535,12 @@ function refreshPropertiesPanel() {
     for (const ev of ['pointerdown', 'mousedown', 'dblclick']) btn.addEventListener(ev, (e) => e.stopPropagation());
     btn.addEventListener('click', (e) => {
       e.stopPropagation(); e.preventDefault();
+      const fcMi = chip && chip.dataset.fcMi != null ? parseInt(chip.dataset.fcMi, 10) : -1;
+      if (fcMi > 0) { _faceGroupSet(parseInt(chip.dataset.partId, 10), fcMi, null); return; }
       const mat = matOfChip();
       if (mat) _removeMaterialFromSelection(mat);
     });
   });
-  // the face colours of one part (see faceColHtml)
-  {
-    const fc = el.querySelector('.prop-facecols');
-    if (fc) {
-      const pid = parseInt(fc.dataset.partId, 10);
-      fc.addEventListener('click', (e) => {
-        const b = e.target.closest && e.target.closest('button[data-fc]'); if (!b) return;
-        const mi = parseInt(b.closest('.prop-fc-row').dataset.fcMi, 10);
-        if (b.dataset.fc === 'pick') { const n = _faceGroupPick(pid, mi); if (!n) toast('Pick faces', 'Could not pick them: is Edit mesh available for this part?', 'info', 2600); }
-        else if (b.dataset.fc === 'remove') _faceGroupSet(pid, mi, null);
-      });
-      fc.addEventListener('change', (e) => {
-        const inp = e.target; if (!inp || inp.dataset.fc !== 'colour') return;
-        const mi = parseInt(inp.closest('.prop-fc-row').dataset.fcMi, 10);
-        _faceGroupSet(pid, mi, getOrCreateMaterial(new THREE.Color(inp.value)), mi === 0 ? 'Recolour part' : 'Recolour faces');
-      });
-    }
-  }
   el.querySelectorAll('.prop-mat-multi-row[data-action="edit-material"]').forEach(row => {
     const matOf = () => { const u = row.dataset.matUuid; return u && typeof _collectLiveMaterials === 'function' ? (_collectLiveMaterials().find(i => i.mat?.uuid === u) || {}).mat : null; };
     row.addEventListener('click', (e) => { if (!_typingIn(e)) _openMatFromProps(matOf()); });
@@ -44308,7 +44289,8 @@ document.addEventListener('contextmenu', function _matContextMenu(e) {
   }
   if (!m) return;
   e.preventDefault();
-  if (!_matPanelSelected.has(m)) {
+  // a card of the Properties strip is that one material, whatever else is picked in the dock
+  if (!_matPanelSelected.has(m) || (chip && _matPanelSelected.size > 1)) {
     _matPanelSelected.clear(); _matPanelSelected.add(m);
     try { _refreshPanelSelection(); _renderMatInspector(); } catch (_) {}
   }
@@ -44334,6 +44316,15 @@ document.addEventListener('contextmenu', function _matContextMenu(e) {
     if (dock && !dock.classList.contains('show')) document.getElementById('tg-materials')?.click();
     try { _populateMaterialsList(); _renderMatInspector(); } catch (_) {}
   };
+  // A card that is one colour of one part (a material on a selection of its faces) leads with what acts on those faces.
+  const fcPid = chip && chip.dataset.partId ? parseInt(chip.dataset.partId, 10) : null;
+  const fcMi = chip && chip.dataset.fcMi != null ? parseInt(chip.dataset.fcMi, 10) : null;
+  const faceItems = (fcPid != null && fcMi != null) ? [
+    { icon: 'mouse-pointer-2', label: fcMi === 0 ? 'Pick the faces in the main colour' : 'Pick these faces', fn: () => { if (!_faceGroupPick(fcPid, fcMi)) toast('Pick faces', 'Could not pick them: is Edit mesh available for this part?', 'info', 2600); } },
+    { icon: 'palette', label: fcMi === 0 ? 'Recolour the main colour…' : 'Recolour these faces…', fn: () => _recolourFaceGroup(fcPid, fcMi, hex) },
+    ...(fcMi > 0 ? [{ icon: 'undo-2', label: 'Give these faces back to the main colour', fn: () => _faceGroupSet(fcPid, fcMi, null) }] : []),
+    '---',
+  ] : [];
   const items = many ? [
     { icon: 'combine', label: `Merge ${n} materials into one`, fn: press('#mat-act-merge') },
     '---',
@@ -44345,6 +44336,7 @@ document.addEventListener('contextmenu', function _matContextMenu(e) {
     '---',
     { icon: 'trash-2', label: `Delete ${n} materials`, danger: true, fn: press('#mat-act-delete') },
   ] : [
+    ...faceItems,
     ...(chip ? [{ icon: 'panel-bottom-open', label: 'Show in the Materials panel', fn: showInDock }, '---'] : []),
     { icon: 'sliders-horizontal', label: 'Edit…', fn: press('#mat-inspector [data-mi="edit"]') },
     { icon: 'copy', label: 'Duplicate', fn: press('#mat-act-duplicate') },
@@ -63592,6 +63584,20 @@ function _faceGroupPick(partId, mi) {
   return _Elements.api.pickTriangles(partId, tris);
 }
 window.__moAgent = Object.assign(window.__moAgent || {}, { colourFaces: _colourFaces, faceGroupSet: _faceGroupSet, faceGroupsOf: (id) => { const g = _faceGroupsOf(getPart(id)); return g ? g.map(x => ({ mi: x.mi, colour: x.mat && x.mat.color ? '#' + x.mat.color.getHexString() : null, name: x.mat ? x.mat.name : '', tris: x.tris })) : null; }, faceGroupPick: _faceGroupPick, facePicks: _facePicks });
+// Recolour one face colour of a part from the system colour wheel (the card's right-click menu): one undo step when it is chosen.
+function _recolourFaceGroup(partId, mi, hex) {
+  const inp = document.createElement('input');
+  inp.type = 'color'; inp.value = hex || '#cccccc';
+  inp.style.cssText = 'position:fixed;left:-100px;top:-100px;width:1px;height:1px;opacity:0';
+  document.body.appendChild(inp);
+  const done = () => { try { inp.remove(); } catch (_) {} };
+  inp.addEventListener('change', () => {
+    _faceGroupSet(partId, mi, getOrCreateMaterial(new THREE.Color(inp.value)), mi === 0 ? 'Recolour part' : 'Recolour faces');
+    done();
+  }, { once: true });
+  inp.addEventListener('blur', () => setTimeout(done, 0), { once: true });
+  try { inp.showPicker ? inp.showPicker() : inp.click(); } catch (_) { inp.click(); }
+}
 // ▲ Colours on faces
 
 // ── Icon lines on whole device pixels ───────────────────────────────────────────────────────────────────────────────
