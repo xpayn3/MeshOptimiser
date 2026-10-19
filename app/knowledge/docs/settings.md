@@ -20,7 +20,7 @@ How the app starts and behaves.
 - **Undo history**: How many steps `Ctrl + Z` can go back: **Short** (50), **Normal** (200) or **Long** (500). A longer history uses more memory. See [Undo and redo](meshoptimiser://docs/undo-redo).
 - **Delete groups when they become empty**: Remove a group automatically when an action empties it. Off by default.
 - **Keep a recovery copy**: While a scene has changes that are not saved, a copy of it is kept inside this browser every minute, every 2 minutes (the default) or every 5 minutes, and only when something changed. If the app crashes, it offers the scene back. **Off** stops it. See [Get your scene back after a crash](meshoptimiser://docs/crash-recovery).
-- **New scenes: Unit and Up axis**: What a scene you start from now on shows sizes in (mm, cm, m, in, ft, or none), and which way is up (Z-up for CAD, Y-up for Maya, glTF and Unity). It applies to every new tab and every reload. The scene you have open keeps its own; change that one under **Scene**.
+- **New scenes: Unit and Up axis**: What a scene you start from now on shows sizes in (mm, cm, m, in, ft, or none), and which way is up (Z-up for CAD, Y-up for glTF and Unity). It applies to every new tab and every reload. The scene you have open keeps its own; change that one under **Scene**.
 
 ## Search
 

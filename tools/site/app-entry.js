@@ -710,7 +710,7 @@ window.labApps = [
       ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
       ['Stacked copies', 1, [], ['stacked-copies']],
     ],
-    stats: [['Version', '0.35.0'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
+    stats: [['Version', '0.35.1'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',
       '400 identical bolts, 80 duplicate brackets, half a million broken triangles. MeshOptimiser keeps each repeat once, rebuilds the bad geometry and drops what you can’t see.',
@@ -1011,7 +1011,19 @@ window.labApps = [
     changelog: {
       link: 'https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md',
       versions: [
-        { version: '0.35.0', name: 'Vipava', fixes: 214, date: '19 Oct 2026 · 09:34', latest: true,
+        { version: '0.35.1', fixes: 226, date: '19 Oct 2026 · 16:00', latest: true,
+          summary: 'Big STEP files are meshed on all cores, the command cards line up, and drags stay smooth on a big model. 226 fixes in all.',
+          items: [
+            ['New', 'Big STEP files are meshed on all cores. A 357 MB engine opens in 81 seconds instead of 103, and a 45 MB gearbox meshes in under five.'],
+            ['New', 'A tool’s card shows the Wireframe on the part in work only, so each step of a slider is easy to see.'],
+            ['New', 'The command cards are calmer: small switches, evenly spaced rows, no picture on top, and Smart optimise and Reduce triangles float over the view like the rest.'],
+            ['New', 'A brighter default light, a plain-text list of recent tools, and lighter greys in every panel.'],
+            ['Fix', 'The page no longer rewrites itself several times a second while you wait, and slider scrubs, sidebar resizes, drags and Alt-orbiting stay smooth on a big model.'],
+            ['Fix', 'In Edit mesh the lines and dots drew in the wrong order, and dots showed through other parts. The floor grid no longer breaks up when zoomed far out.'],
+            ['Fix', 'A part could stop drawing a few seconds after a tool. The recovery copy of a big scene no longer holds the page for a moment.'],
+            ['Fix', 'Turning off Materials in the STEP import settings now does what it says.'],
+          ] },
+        { version: '0.35.0', name: 'Vipava', fixes: 214, date: '19 Oct 2026 · 09:34',
           summary: 'One part can wear several colours. STEP files open with clean, even strips on fillets, and Photo mode draws the model for pictures. 214 fixes, from textures and UVs to models from Blender.',
           items: [
             ['New', 'Several colours on one part. Pick polygons in Edit mesh and press Colour, or drop a material on them. The part stays one closed part, each colour is a card in its material strip, and files from other programs come in the same way and go out in every format.'],

@@ -1,6 +1,6 @@
 # The axis of a part: Axis Center
 
-Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale, as in Cinema 4D.
+Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale.
 
 Every part has an axis: the origin and the X, Y and Z the gizmo shows in **Local** axes. These commands move or turn the axis, and the shape stays exactly where it is (the points are carried the opposite way). Each is one undo step that puts back exactly what was there.
 

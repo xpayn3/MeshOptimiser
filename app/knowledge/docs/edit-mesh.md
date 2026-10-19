@@ -2,7 +2,7 @@
 
 Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.
 
-Until now a click in the 3D view picked a whole part. Edit mesh lets you into the part. You pick its points, its edges or its polygons, and you can move them, take them out, join them or close a hole. If you have used Cinema 4D, it works the same way.
+Until now a click in the 3D view picked a whole part. Edit mesh lets you into the part. You pick its points, its edges or its polygons, and you can move them, take them out, join them or close a hole.
 
 A mesh is made of three kinds of piece. A **point** is a corner (the glossary calls it a vertex). An **edge** is the line between two points. A **polygon** is a flat face. Two triangles that together make a four-sided shape count as one polygon, as a cell of a grid or a strip of a tube wall does. A triangle with no such partner is a polygon of its own. See [Words you will meet](meshoptimiser://docs/glossary).
 

@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.0." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.1." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.0." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.1." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -54,9 +54,27 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.35.1">
+          <div class="log-head">
+            <strong>v0.35.1</strong><em>Latest</em><span>19 Oct 2026</span><span>226 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>Big STEP files are meshed on all cores, the command cards line up, and drags stay smooth on a big model. 226 fixes in all.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>Big STEP files are meshed on all cores. A 357 MB engine opens in 81 seconds instead of 103, and a 45 MB gearbox meshes in under five.</span></li>
+              <li><b class="is-new">New</b><span>A tool’s card shows the Wireframe on the part in work only, so each step of a slider is easy to see.</span></li>
+              <li><b class="is-new">New</b><span>The command cards are calmer: small switches, evenly spaced rows, no picture on top, and Smart optimise and Reduce triangles float over the view like the rest.</span></li>
+              <li><b class="is-new">New</b><span>A brighter default light, a plain-text list of recent tools, and lighter greys in every panel.</span></li>
+              <li><b class="is-fix">Fix</b><span>The page no longer rewrites itself several times a second while you wait, and slider scrubs, sidebar resizes, drags and Alt-orbiting stay smooth on a big model.</span></li>
+              <li><b class="is-fix">Fix</b><span>In Edit mesh the lines and dots drew in the wrong order, and dots showed through other parts. The floor grid no longer breaks up when zoomed far out.</span></li>
+              <li><b class="is-fix">Fix</b><span>A part could stop drawing a few seconds after a tool. The recovery copy of a big scene no longer holds the page for a moment.</span></li>
+              <li><b class="is-fix">Fix</b><span>Turning off Materials in the STEP import settings now does what it says.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.35.0">
           <div class="log-head">
-            <strong>v0.35.0<b class="rel-code">Vipava</b></strong><em>Latest</em><span>19 Oct 2026</span><span>214 fixes</span>
+            <strong>v0.35.0<b class="rel-code">Vipava</b></strong><span>19 Oct 2026</span><span>214 fixes</span>
           </div>
           <div class="log-body">
             <p>One part can wear several colours. STEP files open with clean, even strips on fillets, and Photo mode draws the model for pictures. 214 fixes, from textures and UVs to models from Blender.</p>
@@ -779,7 +797,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.35.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.35.1</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

@@ -89,11 +89,11 @@ The browser needs a fresh permission before the app may read that file. Open it 
 
 ## The exported model is the wrong size or lies on its side
 
-Export again with a different **Unit scale** or the other **Up axis**. A model that came from Cinema 4D or a glTF already stands Y up, so choose **Keep as in the scene** for it. See [Export](meshoptimiser://docs/export).
+Export again with a different **Unit scale** or the other **Up axis**. A model that came from a glTF already stands Y up, so choose **Keep as in the scene** for it. See [Export](meshoptimiser://docs/export).
 
-## Cinema 4D or Maya cannot open an FBX I exported long ago
+## Another program cannot open an FBX I exported long ago
 
-FBX files written by versions before 0.14.0 are refused by the FBX software in Cinema 4D and Maya. Export the file again with this version, or open it in Blender and save it again.
+FBX files written by versions before 0.14.0 are refused by the FBX software in other programs. Export the file again with this version, or open it in Blender and save it again.
 
 ## An export fails on a very large model
 

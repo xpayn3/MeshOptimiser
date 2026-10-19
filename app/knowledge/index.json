@@ -149,7 +149,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
-  "chars": 11901
+  "chars": 11895
  },
  {
   "slug": "read-the-numbers",
@@ -348,16 +348,16 @@
   "title": "Several colours on one part",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Give some faces of a part a colour of their own, as Cinema 4D does with a material on a polygon selection. The part stays one part, and the colours go with it into every file.",
-  "chars": 3201
+  "summary": "Give some faces of a part a colour of their own,. The part stays one part, and the colours go with it into every file.",
+  "chars": 3043
  },
  {
   "slug": "axis-center",
   "title": "The axis of a part: Axis Center",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale, as in Cinema 4D.",
-  "chars": 1797
+  "summary": "Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale.",
+  "chars": 1780
  },
  {
   "slug": "move-rotate-scale",
@@ -437,7 +437,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.",
-  "chars": 9200
+  "chars": 9149
  },
  {
   "slug": "align-to-floor",
@@ -525,15 +525,15 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "Write the model to GLB, glTF, FBX, USDZ, OBJ, STL, PLY or a parts list, name the file, and set the scale, up axis and origin the next program needs.",
-  "chars": 9009
+  "chars": 8945
  },
  {
   "slug": "choose-format",
   "title": "Which format should I choose",
   "group": "save",
   "groupTitle": "Save and export",
-  "summary": "A short guide by purpose: the web, Cinema 4D, Blender, game engines, AR on an iPhone, 3D printing, or a parts list.",
-  "chars": 2392
+  "summary": "A short guide by purpose: the web, Blender, game engines, AR on an iPhone, 3D printing, or a parts list.",
+  "chars": 2311
  },
  {
   "slug": "convert-step-to-glb",
@@ -597,7 +597,7 @@
   "group": "help",
   "groupTitle": "Help",
   "summary": "Fixes for the usual problems: Python not found, a blocked launcher on macOS, missing modules, a blank view and slow conversions.",
-  "chars": 6575
+  "chars": 6556
  },
  {
   "slug": "faq",

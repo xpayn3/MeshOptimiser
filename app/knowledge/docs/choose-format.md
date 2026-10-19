@@ -1,12 +1,11 @@
 # Which format should I choose
 
-A short guide by purpose: the web, Cinema 4D, Blender, game engines, AR on an iPhone, 3D printing, or a parts list.
+A short guide by purpose: the web, Blender, game engines, AR on an iPhone, 3D printing, or a parts list.
 
 If you are not sure, export GLB. It is one file, it is compact, and it keeps the parts tree, the materials and the colours. The app’s own format sheet calls it the best all-round choice.
 
 - **A web page or a web viewer**: GLB. Switch on **Draco compression** only if the viewer you use can read it.
-- **Cinema 4D**: GLB. The app recommends it for Cinema 4D 2026.
-- **Blender, Maya, 3ds Max, Houdini**: FBX. These are the programs the app lists for it.
+- **Blender, 3ds Max, Houdini**: FBX. These are the programs the app lists for it.
 - **Unreal**: FBX. The app lists Unreal under FBX.
 - **Unity**: The app does not name Unity for any format. FBX is the usual choice for game engines.
 - **AR on an iPhone or iPad**: USDZ, the format of Apple Quick Look.

@@ -25,9 +25,9 @@ The choices you make for scale, axis, origin and the parts switches are kept for
 
 ## The formats
 
-- **GLB**: Modern binary glTF, in one file. The app calls it best for the web and Cinema 4D.
+- **GLB**: Modern binary glTF, in one file. The app calls it best for the web.
 - **glTF**: The same as GLB, written as text (JSON glTF 2.0).
-- **FBX**: Binary FBX 7.4. The app lists Blender, Maya, 3ds Max, Houdini and Unreal.
+- **FBX**: Binary FBX 7.4. The app lists Blender, 3ds Max, Houdini and Unreal.
 - **USDZ**: For Apple Quick Look and Reality Composer.
 - **OBJ**: Wavefront OBJ. Universal, geometry only. The colours go in a `.mtl` file beside it.
 - **STL**: Binary STL. The standard for 3D printing.
@@ -55,9 +55,9 @@ These four are under **Advanced**.
 
 - **Unit scale**: Multiplies every size in the file. **1.0 (no change)** keeps the model as it is. CAD models are usually in millimetres. If the next program works in metres, choose **× 0.001 (mm → m)**. The list also has cm to m, m to mm, m to cm, inches to mm, mm to inches, and **Custom…**.
 - **Custom scale**: The multiplier, when **Unit scale** is on **Custom…**.
-- **Up axis**: **Keep as in the scene** writes the model the way it stands. **Turn Z-up into Y-up** turns the model so Y is up, which is what glTF, OBJ and Maya expect. A model that already stands Y up, such as one that came from Cinema 4D or from a glTF, must be kept as it is. Turning it lays it on its side.
+- **Up axis**: **Keep as in the scene** writes the model the way it stands. **Turn Z-up into Y-up** turns the model so Y is up, which is what glTF and OBJ expect. A model that already stands Y up, such as one that came from a glTF, must be kept as it is. Turning it lays it on its side.
 - **Origin**: **Keep model origin** leaves the model where it is. **Recentre to bbox centre** puts the middle of the model at 0,0,0. **Centre XY, drop to floor (Z=0)** centres it and stands it on the floor.
-- **Pivot points**: **At the centre of each part** (the default) writes every part around its own centre, with its position on the object, so that in Cinema 4D, Blender and Maya the axis of each part is at the part. A part from a STEP file has its origin at 0,0,0 with its shape out where it sits in the model, so without this every axis would be at 0,0,0. **As in the scene** keeps what the part has. It is shown for GLB, glTF, FBX and USDZ. An FBX object also carries the rotation and the scale of its part.
+- **Pivot points**: **At the centre of each part** (the default) writes every part around its own centre, with its position on the object, so that in Blender the axis of each part is at the part. A part from a STEP file has its origin at 0,0,0 with its shape out where it sits in the model, so without this every axis would be at 0,0,0. **As in the scene** keeps what the part has. It is shown for GLB, glTF, FBX and USDZ. An FBX object also carries the rotation and the scale of its part.
 
 The up axis and the scale you set in **Settings**, **Scene** only change how the scene is shown on screen. They do not go into the file. The two choices in this window decide what the file says.
 
