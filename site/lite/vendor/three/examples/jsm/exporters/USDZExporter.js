@@ -43,6 +43,7 @@ class USDZExporter {
 
 		const files = {};
 		const modelFileName = 'model.usda';
+		_xformNames.clear();      // MeshOptimiser patch: the names given out in this file (see buildXform)
 
 		// model file should be first in USDZ archive so we init it here
 		files[ modelFileName ] = null;
@@ -59,26 +60,25 @@ class USDZExporter {
 			if ( object.isMesh ) {
 
 				const geometry = object.geometry;
-				const material = object.material;
+				// MeshOptimiser patch: a mesh of several materials (geometry groups) is one Mesh with a GeomSubset a material, each bound to it
+				const list = Array.isArray( object.material ) && geometry.groups.length > 1 ? object.material : null;
+				const material = list ? list[ 0 ] : ( Array.isArray( object.material ) ? object.material[ 0 ] : object.material );
 
-				if ( material.isMeshStandardMaterial ) {
+				if ( material && material.isMeshStandardMaterial && ( ! list || list.every( ( m ) => m && m.isMeshStandardMaterial ) ) ) {
 
 					const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usda';
 
 					if ( ! ( geometryFileName in files ) ) {
 
-						const meshObject = buildMeshObject( geometry );
+						const meshObject = buildMeshObject( geometry, _meshName( object ), list ? _subsets( geometry ) : null );      // MeshOptimiser patch: named after the first object drawn with it
 						files[ geometryFileName ] = buildUSDFileAsString( meshObject );
+						_meshNames.set( geometry.id, _meshName( object ) );
 
 					}
 
-					if ( ! ( material.uuid in materials ) ) {
+					for ( const m of ( list || [ material ] ) ) if ( ! ( m.uuid in materials ) ) materials[ m.uuid ] = m;
 
-						materials[ material.uuid ] = material;
-
-					}
-
-					output += buildXform( object, geometry, material );
+					output += buildXform( object, geometry, material, list );
 
 				} else {
 
@@ -261,9 +261,40 @@ function buildUSDFileAsString( dataToInsert ) {
 
 // Xform
 
-function buildXform( object, geometry, material ) {
+// MeshOptimiser patch: each object's prim is named after the object (a USD identifier: letters, digits and _, not starting with a digit),
+// so a program that opens the file (Blender, Reality Composer) shows the part's own name, not Object_123. Unique within the file.
+const _xformNames = new Set();
+function _xformName( object ) {
 
-	const name = 'Object_' + object.id;
+	let base = String( object.name || '' ).replace( /[^A-Za-z0-9_]/g, '_' ).replace( /^(?=[0-9])/, '_' ) || 'Object_' + object.id;
+	let name = base, k = 1;
+	while ( _xformNames.has( name ) ) name = base + '_' + ( k ++ );
+	_xformNames.add( name );
+	return name;
+
+}
+
+// MeshOptimiser patch: the faces of each material of a mesh of several (from its groups): [{ mi, faces: [...] }]
+const _meshNames = new Map();
+
+function _subsets( geometry ) {
+
+	const by = new Map();
+	for ( const g of geometry.groups ) {
+
+		let f = by.get( g.materialIndex );
+		if ( ! f ) by.set( g.materialIndex, f = [] );
+		for ( let t = Math.floor( g.start / 3 ), e = Math.floor( ( g.start + g.count ) / 3 ); t < e; t ++ ) f.push( t );
+
+	}
+
+	return [ ...by.entries() ].sort( ( a, b ) => a[ 0 ] - b[ 0 ] ).map( ( [ mi, faces ] ) => ( { mi, faces } ) );
+
+}
+
+function buildXform( object, geometry, material, list = null ) {
+
+	const name = _xformName( object );
 	const transform = buildMatrix( object.matrixWorld );
 
 	if ( object.matrixWorld.determinant() < 0 ) {
@@ -281,8 +312,24 @@ function buildXform( object, geometry, material ) {
 	uniform token[] xformOpOrder = ["xformOp:transform"]
 
 	rel material:binding = </Materials/Material_${ material.id }>
+${ list ? _subsetBindings( geometry, list ) : '' }}
+
+`;
+
 }
 
+function _subsetBindings( geometry, list ) {
+
+	const mesh = _meshNames.get( geometry.id ) || 'Geometry';
+	const rows = _subsets( geometry ).map( ( s ) => `		over "mat_${ s.mi }"
+		{
+			rel material:binding = </Materials/Material_${ ( list[ s.mi ] || list[ 0 ] ).id }>
+		}
+` ).join( '' );
+	return `
+	over "${ mesh }"
+	{
+${ rows }	}
 `;
 
 }
@@ -303,9 +350,9 @@ function buildMatrixRow( array, offset ) {
 
 // Mesh
 
-function buildMeshObject( geometry ) {
+function buildMeshObject( geometry, name, subsets = null ) {
 
-	const mesh = buildMesh( geometry );
+	const mesh = buildMesh( geometry, name, subsets );
 	return `
 def "Geometry"
 {
@@ -315,9 +362,17 @@ ${mesh}
 
 }
 
-function buildMesh( geometry ) {
+// MeshOptimiser patch: a program that folds an Xform into its one mesh (Blender) names the object after the mesh prim, so the prim
+// takes the name of the first object drawn with the geometry instead of Geometry for all. (The scope above it keeps the name
+// Geometry: the references point at </Geometry>.)
+function _meshName( object ) {
 
-	const name = 'Geometry';
+	return String( object.name || '' ).replace( /[^A-Za-z0-9_]/g, '_' ).replace( /^(?=[0-9])/, '_' ) || 'Geometry';
+
+}
+
+function buildMesh( geometry, name = 'Geometry', subsets = null ) {
+
 	const attributes = geometry.attributes;
 	const count = attributes.position.count;
 
@@ -332,7 +387,16 @@ function buildMesh( geometry ) {
 		point3f[] points = [${ buildVector3Array( attributes.position, count )}]
 ${ buildPrimvars( attributes ) }
 		uniform token subdivisionScheme = "none"
-	}
+${ subsets ? '		uniform token subsetFamily:materialBind:familyType = "partition"\n' + subsets.map( ( s ) => `
+		def GeomSubset "mat_${ s.mi }" (
+			prepend apiSchemas = ["MaterialBindingAPI"]
+		)
+		{
+			uniform token elementType = "face"
+			uniform token familyName = "materialBind"
+			int[] indices = [${ s.faces.join( ', ' ) }]
+		}
+` ).join( '' ) : '' }	}
 `;
 
 }

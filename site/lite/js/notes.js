@@ -133,18 +133,43 @@
     return p;
   }
   // the pin's place in the scene now (the part may have moved, been exploded, ...)
-  function worldOf(n, out) {
-    const p = partOf(n);
-    if (p && p.mesh && n.local) {
-      p.mesh.updateWorldMatrix(true, false);
-      return out.fromArray(n.local).applyMatrix4(p.mesh.matrixWorld);
+  // a part's own frame in the scene: its mesh's, or for a copy drawn by an instanced mesh, that mesh's times its own slot
+  // (so a pin on such a copy follows it under Explode and the gizmo; it used to keep only the point where it was put)
+  let _im = null;
+  function frameOf(p) {
+    if (!p) return null;
+    if (p.mesh) { p.mesh.updateWorldMatrix(true, false); return p.mesh.matrixWorld; }
+    if (p.instancedMesh && p.instanceIndex >= 0) {
+      _im = _im || new (V().Matrix4)();
+      p.instancedMesh.updateWorldMatrix(true, false);
+      p.instancedMesh.getMatrixAt(p.instanceIndex, _im);
+      return _im.premultiply(p.instancedMesh.matrixWorld);
     }
+    return null;
+  }
+  function worldOf(n, out) {
+    const p = partOf(n), F = n.local ? frameOf(p) : null;
+    if (F && Math.abs(F.determinant()) > 1e-30) return out.fromArray(n.local).applyMatrix4(F);      // (a hidden copy is squashed to nothing: the saved point then)
     if (n.world) return out.fromArray(n.world);
     return null;
   }
   const hidden = (n) => { const p = partOf(n); return !!(p && !p.visible); };
 
   // ── the pins ──────────────────────────────────────────────────────────────────────────────────────────────────
+  // The canvas and viewport boxes, measured once and again only when either changes size or the window does: measured in every
+  // frame the pins were drawn, they made the browser lay the page out twice a frame.
+  let _rects = null, _rectsFor = null;
+  function rectsOf(cv, vp) {
+    if (_rects && _rectsFor === cv) return _rects;
+    if (_rectsFor !== cv) {
+      _rectsFor = cv;
+      const drop = () => { _rects = null; };
+      try { const ro = new ResizeObserver(drop); ro.observe(cv); ro.observe(vp); } catch (_) {}
+      try { window.addEventListener('resize', drop); window.addEventListener('scroll', drop, true); } catch (_) {}
+    }
+    _rects = { r: cv.getBoundingClientRect(), vr: vp.getBoundingClientRect() };
+    return _rects;
+  }
   const pinEls = new Map(), pinAt = new Map();
   const _v = { w: null, n: null };
   function layout() {
@@ -154,7 +179,7 @@
     S.layer.style.display = show ? '' : 'none';
     if (!show) return;
     const cam = h.cam(), cv = h.canvas(), vp = h.viewport(); if (!cam || !cv || !vp) return;
-    const r = cv.getBoundingClientRect(), vr = vp.getBoundingClientRect(); if (!r.width) return;
+    const { r, vr } = rectsOf(cv, vp); if (!r.width) return;
     _v.w = _v.w || new (V().Vector3)(); _v.n = _v.n || new (V().Vector3)(); _v.p = _v.p || new (V().Vector3)(); _v.d = _v.d || new (V().Vector3)();
     const camPos = cam.position;
     for (const n of S.items) {
@@ -171,7 +196,8 @@
       const tf = 'calc(' + px + 'px - 50%) calc(' + py + 'px - 50%)'; if (pin._tf !== tf) { pin._tf = tf; pin.style.translate = tf; }
       let away = false;
       const part = partOf(n);
-      if (n.normal && part && part.mesh) { _v.n.fromArray(n.normal).transformDirection(part.mesh.matrixWorld); away = _v.n.dot(_v.d.copy(camPos).sub(w)) < 0; }
+      const pf = n.normal && part ? frameOf(part) : null;
+      if (pf) { _v.n.fromArray(n.normal).transformDirection(pf); away = _v.n.dot(_v.d.copy(camPos).sub(w)) < 0; }
       pin.classList.toggle('back', away);
       pin.classList.toggle('hid', !!(part && !part.visible));
       pin.classList.toggle('gone', !!n.part && !part);
@@ -825,7 +851,8 @@
     const list = visibleList();
     { const vis = S.openId && !list.some(x => x.id === S.openId) ? visibleList(S.openId) : list, at = vis.findIndex(x => x.id === S.openId); card.navLabel.textContent = vis.length ? (at >= 0 ? (at + 1) + ' of ' + vis.length : vis.length + (vis.length === 1 ? ' note' : ' notes')) : 'No notes'; card.navPrev.disabled = card.navNext.disabled = vis.length < 1; }
     card.mine.textContent = ''; if (me) card.mine.append(avatar(me)); else card.mine.append(avatarSlot());
-    card.pins.innerHTML = svg(S.pins ? 'eye' : 'eyeoff'); card.pins.title = S.pins ? 'Hide the pins' : 'Show the pins'; card.pins.setAttribute('aria-label', card.pins.title); card.addPin.classList.toggle('on', !!S.placing);
+    card.pins.innerHTML = svg(S.pins ? 'eye' : 'eyeoff'); card.pins.title = S.pins ? 'Hide the pins' : 'Show the pins'; card.pins.setAttribute('aria-label', card.pins.title);
+    if (card.eyeBtn) { card.eyeBtn.innerHTML = svg(S.pins ? 'eye' : 'eyeoff'); card.eyeBtn.title = card.pins.title; card.eyeBtn.setAttribute('aria-label', card.pins.title); card.eyeBtn.classList.toggle('on', !S.pins); } card.addPin.classList.toggle('on', !!S.placing);
     card.list.textContent = '';
     const unread = S.items.filter(n => C.unread(n, me, S.since)).length;
     card.markRead.hidden = !unread; card.markRead.textContent = 'Mark ' + unread + ' read';
@@ -846,8 +873,7 @@
     const chk = el('button', 'nt-chk' + (done ? ' on' : '')); chk.type = 'button'; chk.title = done ? 'Done: open it again' : 'Mark as done'; chk.setAttribute('aria-label', chk.title); chk.innerHTML = svg('check');
     chk.addEventListener('click', (e) => { e.stopPropagation(); needName(() => change(done ? 'Reopen note' : 'Resolve note', () => C.setStatus(n, author(), done ? 'open' : 'resolved')), 'Before you change a note, it needs to know who you are.'); });
     const mid = el('div', 'nt-mid'); const line = el('div', 'nt-rtitle');
-    const badge = numBadge(n.tag, String(n.n), done); badge.classList.add('mini'); if (C.unread(n, me, S.since)) badge.classList.add('new'); line.append(badge);
-    if (n.priority && n.priority !== 'normal') { const p = el('i', 'nt-pri ' + n.priority); p.title = n.priority[0].toUpperCase() + n.priority.slice(1) + ' priority'; line.append(p); }
+    // (no number badge, priority mark or unread dot in front of the title: the title stands alone)
     line.append(el('span', 'nt-rt', C.noteTitle(n))); mid.append(line);
     const live = n.messages.filter(m => !m.deleted && !m.desc);
     const meta = el('div', 'nt-meta'); const bits = [C.where(n)];
@@ -856,7 +882,6 @@
     if (n.due) { const d = el('span', 'nt-chip' + (C.dueState(n) === 'overdue' ? ' late' : C.dueState(n) === 'today' ? ' soon' : '')); d.textContent = C.dueLabel(n).replace(/^Due /, ''); meta.append(d); }
     mid.append(meta);
     row.append(chk, mid);
-    if (n.assignee) { const a = avatar(n.assignee); a.classList.add('nt-ra'); a.title = 'For ' + n.assignee; row.append(a); }
     row.addEventListener('click', () => openNote(n.id, { expand: true })); row.addEventListener('keydown', (e) => { if (e.key === 'Enter') openNote(n.id, { expand: true }); });
     return row;
   }
@@ -888,7 +913,7 @@
     acts.append(addPin); body.append(acts);
     // which notes
     const seg = el('div', 'cmd-seg'); seg.setAttribute('role', 'tablist');
-    for (const [v, l] of [['open', 'Open'], ['all', 'All'], ['resolved', 'Done']]) { const b = el('button', null, l); b.type = 'button'; b.dataset.v = v; b.title = ({ open: 'Open notes', all: 'All notes', resolved: 'Done' })[v]; b.addEventListener('click', () => { S.filter = v; S.rowLimit = 150; render(); }); seg.append(b); }
+    for (const [v, l] of [['all', 'All'], ['open', 'Open'], ['resolved', 'Done']]) { const b = el('button', null, l); b.type = 'button'; b.dataset.v = v; b.title = ({ open: 'Open notes', all: 'All notes', resolved: 'Done' })[v]; b.addEventListener('click', () => { S.filter = v; S.rowLimit = 150; render(); }); seg.append(b); }
     body.append(seg);
     const sbar = el('div', 'nt-sbar'); const box = el('label', 'nt-searchbox'); box.innerHTML = svg('search');
     const q = el('input', 'nt-search'); q.type = 'search'; q.placeholder = 'Search'; q.addEventListener('input', () => { S.search = q.value.trim(); S.rowLimit = 150; render(); }); q.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { q.value = ''; S.search = ''; render(); } });
@@ -918,31 +943,45 @@
     const searchRow = el('div', 'nt-searchrow'); searchRow.append(box);
     const showSearch = (on) => { S.searchOpen = on; searchRow.hidden = !(on || S.search); searchBtn.classList.toggle('on', !!(on || S.search)); if (on) setTimeout(() => q.focus(), 30); };
     searchBtn.addEventListener('click', () => showSearch(searchRow.hidden));
-    q.addEventListener('blur', () => { if (!q.value.trim()) showSearch(false); });
+    // pressing the button while its menu is open closes it: the press itself closes the menu, so the click that follows must not open it again
+    let moreWasOpen = false;
+    moreBtn.addEventListener('pointerdown', () => { const m = document.getElementById('ctx-menu'); moreWasOpen = !!(m && m.style.display === 'block'); }, true);
     moreBtn.addEventListener('click', (e) => {
+      if (moreWasOpen) { moreWasOpen = false; e.stopPropagation(); try { S.host.ctxClose && S.host.ctxClose(); } catch (_) {} return; }
       e.stopPropagation(); const b = moreBtn.getBoundingClientRect(), tick = (c) => (c ? '  ✓' : '');
       const sm = C.reviewSummary(S.reviews), me2 = author(), mine2 = me2 && S.reviews[me2] ? S.reviews[me2].state : '';
       const asReviewer = (state, label, icon) => ({ icon, label: label + tick(mine2 === state), fn: () => needName(() => { C.setReview(S.reviews, author(), state); render(); }, 'Before you sign off, notes need to know who you are.') });
       S.host.ctxMenu([
         { icon: 'box', label: 'A note on the selected part', fn: addForSelection },
         { icon: 'focus', label: 'Show only the parts with notes' + tick(S.isoNoted && S.host.isolated()), fn: isolateNoted },
+        // (the list follows the selection while this is on: the button that turned it on went with the old rows of the card in v0.34.0)
+        { icon: 'box', label: 'Only the notes on the selected part' + tick(S.onlySel), fn: () => { S.onlySel = !S.onlySel; S.selKey = S.onlySel ? [...S.host.state.selected].join(',') : ''; render(); } },
         '---',
-        ...[['number', 'Pins: the number'], ['text', 'Pins: the title'], ['icon', 'Pins: the kind'], ['color', 'Pins: only the colour'], ['name', 'Pins: the writer']].map(([v, l]) => ({ icon: 'circle', label: l + tick(S.badge === v), fn: () => { S.badge = v; try { S.host.prefs.set('noteBadge', v); } catch (_) {} render(); } })),
-        { icon: S.pins ? 'eye-off' : 'eye', label: S.pins ? 'Hide the pins' : 'Show the pins', fn: () => { S.pins = !S.pins; render(); } },
-        '---',
-        ...[['number', 'Sort by number'], ['newest', 'Sort by newest'], ['priority', 'Sort by priority'], ['due', 'Sort by due date'], ['part', 'Sort by part']].map(([v, l]) => ({ icon: 'circle', label: l + tick(S.sort === v), fn: () => { S.sort = v; ssel.value = v; S.rowLimit = 150; render(); } })),
+        { icon: 'map-pin', label: 'Pins', sub: [
+          ...[['number', 'The number'], ['text', 'The title'], ['icon', 'The kind'], ['color', 'Only the colour'], ['name', 'The writer']].map(([v, l]) => ({ icon: 'circle', label: l + tick(S.badge === v), fn: () => { S.badge = v; try { S.host.prefs.set('noteBadge', v); } catch (_) {} render(); } })),
+          '---',
+          { icon: S.pins ? 'eye-off' : 'eye', label: S.pins ? 'Hide the pins' : 'Show the pins', fn: () => { S.pins = !S.pins; render(); } },
+        ] },
+        { icon: 'arrow-up-down', label: 'Sort by', sub: [['number', 'Number'], ['newest', 'Newest'], ['priority', 'Priority'], ['due', 'Due date'], ['part', 'Part']].map(([v, l]) => ({ icon: 'circle', label: l + tick(S.sort === v), fn: () => { S.sort = v; ssel.value = v; S.rowLimit = 150; render(); } })) },
         { icon: 'trash-2', label: 'Show deleted notes' + tick(S.filter === 'deleted'), fn: () => { S.filter = S.filter === 'deleted' ? 'open' : 'deleted'; render(); } },
         '---',
-        asReviewer('approved', 'Approve this scene', 'check'),
-        asReviewer('changes', 'Ask for changes', 'undo-2'),
-        { icon: 'user', label: 'Your name: ' + (me2 || 'not set') + '…', fn: () => askName('Change the name shown next to what you write.').then(n => { if (n) setAuthor(n); }) },
-        '---',
-        { icon: 'download', label: 'Bring in notes…', fn: importFromFile },
-        { icon: 'upload', label: 'Take the notes out…', fn: () => exportMenu(moreBtn) },
-        { icon: 'copy', label: 'Copy as text', fn: () => copy(C.toMarkdown(S.items, { title: title(), at: new Date().toISOString(), reviews: S.reviews })) },
+        { icon: 'check-check', label: 'Review', sub: [
+          asReviewer('approved', 'Approve this scene', 'check'),
+          asReviewer('changes', 'Ask for changes', 'undo-2'),
+          '---',
+          { icon: 'user', label: 'Your name: ' + (me2 || 'not set') + '…', fn: () => askName('Change the name shown next to what you write.').then(n => { if (n) setAuthor(n); }) },
+        ] },
+        { icon: 'share-2', label: 'Share', sub: [
+          { icon: 'download', label: 'Bring in notes…', fn: importFromFile },
+          { icon: 'upload', label: 'Take the notes out…', fn: () => exportMenu(moreBtn) },
+          { icon: 'copy', label: 'Copy as text', fn: () => copy(C.toMarkdown(S.items, { title: title(), at: new Date().toISOString(), reviews: S.reviews })) },
+        ] },
       ], Math.max(8, Math.round(b.right - 230)), Math.round(b.bottom + 4));
     });
-    acts.classList.add('nt-bar'); acts.append(searchBtn, moreBtn);
+    // a round eye beside the search: the pins on the model shown or hidden (the same switch as the one in the menu; render keeps its icon in step)
+    const eyeBtn = iconBtn(S.pins ? 'eye' : 'eyeoff', S.pins ? 'Hide the pins' : 'Show the pins');
+    eyeBtn.addEventListener('click', () => { S.pins = !S.pins; render(); });
+    acts.classList.add('nt-bar'); acts.append(searchBtn, eyeBtn, moreBtn);
     const hid = el('div', 'nt-hidden'); hid.hidden = true; hid.append(top, rev, foot, sbar, isoBtn);
     searchRow.hidden = true;
     body.append(acts, seg, searchRow, nav, list, markRead, revSum, hid);
@@ -954,7 +993,7 @@
       revSum.textContent = sm.state === 'none' ? '' : [sm.approved.length ? 'Approved by ' + sm.approved.join(', ') : '', sm.changes.length ? 'Changes asked by ' + sm.changes.join(', ') : ''].filter(Boolean).join(' · ');
     };
     ref.parentNode.insertBefore(grp, ref); ref.parentNode.insertBefore(sec, ref);
-    S.card = { section: sec, body, list, pins, addPin, markRead, foot, mine, setSeg, setPins: () => {}, setReview, isoBtn, navLabel, navPrev, navNext };
+    S.card = { section: sec, body, list, pins, eyeBtn, addPin, markRead, foot, mine, setSeg, setPins: () => {}, setReview, isoBtn, navLabel, navPrev, navNext };
     const hd = sec.querySelector('.section-h'); hd.addEventListener('click', (e) => { e.stopImmediatePropagation(); hd.classList.toggle('collapsed'); }, true);      // (the app also wires every section header once; this one answers alone, so the two never toggle it twice)
   }
   function avatarSlot() { const s = el('span', 'nt-ic'); s.innerHTML = svg('user'); return s; }
@@ -1135,7 +1174,7 @@
 .nt-descblock{padding:var(--space-xs) var(--space-2xl) 0}.nt-desc{display:flex;flex-direction:column;gap:var(--space-sm)}.nt-desctop{display:flex;align-items:center;gap:var(--space-md);min-height:22px}.nt-desclabel{color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase}.nt-desctop .nt-ib{width:22px;height:22px;opacity:0;transition:opacity var(--dur-fast)}.nt-desc:hover .nt-desctop .nt-ib,.nt-desctop .nt-ib:focus-visible{opacity:1}.nt-descby{color:var(--tx3);font-size:var(--fs-11)}.nt-adddesc{background:none;border:0;padding:0;color:var(--tx3);font:inherit;font-size:var(--fs-11);cursor:pointer}.nt-adddesc:hover{color:var(--ac-text)}.nt-nodesc{color:var(--tx3);font-size:var(--fs-11)}
 .nt-seclabel{padding:var(--space-2xl) var(--space-2xl) var(--space-md);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;}#notes-body .nt-seclabel{padding:0}
 .nt-msgs .nt-empty{padding:var(--space-md) 0}
-.nt-new{flex:2;height:var(--btn-h-md);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-sm);border:0;border-radius:var(--r-md);background:var(--ac-tint-18);color:var(--ac-text);font:inherit;font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg),transform var(--dur-fast) var(--ease-ios)}.nt-new svg{width:var(--icon-xs);height:var(--icon-xs)}.nt-new:hover{filter:brightness(1.15)}.nt-new:active{transform:scale(.97)}
+.nt-new{flex:2;height:var(--btn-h-md);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-sm);border:0;border-radius:var(--r-md);background:var(--wn-tint-15);color:var(--wn);font:inherit;font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg),transform var(--dur-fast) var(--ease-ios)}.nt-new svg{width:var(--icon-xs);height:var(--icon-xs)}.nt-new:hover{filter:brightness(1.15)}.nt-new:active{transform:scale(.97)}
 .nt-chk{flex:none;width:18px;height:18px;margin-top:1px;border-radius:50%;border:1.5px solid var(--s7);background:transparent;color:transparent;display:grid;place-items:center;padding:0;cursor:pointer;transition:var(--tr-bg-fg),border-color var(--dur-fast)}.nt-chk svg{width:var(--icon-xs);height:var(--icon-xs);stroke-width:3}.nt-chk:hover{border-color:var(--ok);color:var(--ok)}.nt-chk.on{background:var(--ok);border-color:var(--ok);color:var(--white)}
 .nt-rtitle{display:flex;align-items:center;gap:var(--space-sm);min-width:0}.nt-rt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm);font-weight:var(--fw-medium);color:var(--tx)}.nt-row.done .nt-rt{text-decoration:line-through;color:var(--tx3);font-weight:inherit}
 .nt-num.mini{width:18px;height:18px;font-size:9px}.nt-pri{flex:none;width:6px;height:6px;border-radius:50%}.nt-pri.high{background:var(--pin)}.nt-pri.urgent{background:var(--er)}

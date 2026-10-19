@@ -710,7 +710,7 @@ window.labApps = [
       ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
       ['Stacked copies', 1, [], ['stacked-copies']],
     ],
-    stats: [['Version', '0.34.0'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
+    stats: [['Version', '0.35.0'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',
       '400 identical bolts, 80 duplicate brackets, half a million broken triangles. MeshOptimiser keeps each repeat once, rebuilds the bad geometry and drops what you can’t see.',
@@ -800,7 +800,7 @@ window.labApps = [
         ['Box and Brush pick parts', 'Draw a box or paint with a brush over whole parts. Shift adds, Alt turns the camera.'],
       ], more: [
         ['Flatten, dissolve, ungroup', 'Collapse chains of single groups, dissolve a group, or ungroup a branch.'],
-        ['A group shows its parts dimly', 'Click a group and its parts are marked softly. Ctrl+click or Shift+click lights up the ones you pick, and the group stays selected.', 'new'],
+        ['A group shows its parts dimly', 'Click a group and its parts are marked softly. Ctrl+click or Shift+click lights up the ones you pick, and the group stays selected.'],
         ['Collapse the way you want', 'The whole tree, the selection, or from the selection down.'],
         ['Organise from the right-click menu', 'Dissolve, flatten, sort, move or delete groups from one menu.'],
         ['Groups and parts together', 'Ctrl toggles a row, Shift picks a range. Groups and parts alike.'],
@@ -818,8 +818,8 @@ window.labApps = [
       { title: 'Build', items: [
         ['A library of 112 parts', 'Bolts, nuts, pipe fittings, bearings, brackets, gears, a servo. Set the size, drag it in.'],
         ['Exploded view', 'One slider pulls it apart, along the axes you choose.'],
-        ['Animate (alpha)', 'Make parts spin, swing, shake, travel along a path or oscillate like a piston, on a video-editor timeline along the bottom. Take it out as a video, or inside a GLB as keyframes.', 'new'],
-        ['Axis Center', 'Put the axis in the middle of a part and reset its rotation, move the axis or the object to the origin, the selection or the view, align it, reset the scale. One undo each.', 'new'],
+        ['Animate (alpha)', 'Make parts spin, swing, shake, travel along a path or oscillate like a piston, on a video-editor timeline along the bottom. Take it out as a video, or inside a GLB as keyframes.'],
+        ['Axis Center', 'Put the axis in the middle of a part and reset its rotation, move the axis or the object to the origin, the selection or the view, align it, reset the scale. One undo each.'],
         ['Lock a part or a group', 'Lock one part or a whole group from Properties or the right-click menu. It shows a red lock, and delete skips it.'],
         ['Dynamic place (D)', 'Drag a part over a surface: it rests on it and turns to face it.'],
         ['Align parts', 'Align or spread parts and whole groups along X, Y and Z, with a gap if you want one. One undo.'],
@@ -850,7 +850,7 @@ window.labApps = [
         ['A whole folder', 'Every model in a folder: opened, optimised, exported, closed. Stop it any time.'],
         ['Pictures for a client', 'Clean renders up to 8192 px, several angles, a plain or transparent background, plus a turntable film.'],
         ['It knows the app', 'Six playbooks, about fifty help articles and six ready-made jobs.'],
-        ['Notes and more tools', 'Claude reads and answers the notes on the model, leaves its own, and can lock parts, make copies unique and remove loose bits. It never signs a scene off.', 'new'],
+        ['Notes and more tools', 'Claude reads and answers the notes on the model, leaves its own, and can lock parts, make copies unique and remove loose bits. It never signs a scene off.'],
       ] },
       { title: 'Notes', note: 'Review', items: [
         ['A note is a task', 'A title, a description, the kind, who it is for, a priority and a due date. A form makes it; comments go under it.'],
@@ -1011,7 +1011,17 @@ window.labApps = [
     changelog: {
       link: 'https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md',
       versions: [
-        { version: '0.34.0', name: 'Bled', fixes: 8, date: '16 Oct 2026 · 17:52', latest: true,
+        { version: '0.35.0', name: 'Vipava', fixes: 214, date: '19 Oct 2026 · 09:34', latest: true,
+          summary: 'One part can wear several colours, as in Cinema 4D. STEP files open the way Cinema 4D shows them, with clean even strips on fillets, and Photo mode draws the model for pictures. 214 fixes.',
+          items: [
+            ['New', 'Several colours on one part. Pick polygons in Edit mesh and press Colour, or drop a material on them. The part stays one closed part, each colour is a card in its material strip, and files from other programs come in the same way and go out in every format.'],
+            ['New', 'STEP like Cinema 4D. Clean, even strips on fillets, a Clean quality, and CAD edit to pick whole CAD faces, take them out and remesh.'],
+            ['New', 'Tools that read the CAD faces of a STEP: Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos.'],
+            ['New', 'Photo mode, five photographed environments as picture cards, and a shorter Scene card.'],
+            ['New', 'Close open edges, Untriangulate into quads, and a Decimate that keeps the shape closer.'],
+            ['Fix', 'Models from Blender open upright at their real size, textures and UVs survive the mesh tools and the exports, and undo and redo are sound after Claude’s steps.'],
+          ] },
+        { version: '0.34.0', name: 'Bled', fixes: 8, date: '16 Oct 2026 · 17:52',
           summary: 'Animate gets a timeline along the bottom and a motion for pistons. Claude can read and write notes. The axis tools of Cinema 4D arrive, a selected group shows its parts softly, and the Windows download can carry Python inside.',
           items: [
             ['New', 'A timeline along the bottom. Animate is a drawer set out like a video editor: a ruler, a row for every animated object and a bar for every motion. Drag the ruler or the playhead to scrub; drag the end of a bar to change its repeats and the bar to change its delay.'],

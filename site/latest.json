@@ -1,22 +1,22 @@
 {
  "schema": 1,
  "stable": {
-  "version": "0.34.0",
-  "date": "2026-10-16",
-  "headline": "Animate gets a timeline and a motion for pistons, Claude works with notes, and the axis tools of Cinema 4D arrive.",
+  "version": "0.35.0",
+  "date": "2026-10-19",
+  "headline": "One part can wear several colours, STEP files open the way Cinema 4D shows them, and Photo mode draws the model for pictures.",
   "notes": [
-   "Animate has a timeline along the bottom, with a new Oscillate motion for pistons and pumps.",
-   "Axis Center and the Axis card: centre the axis, reset its rotation, align it, one undo each.",
-   "Claude can read, answer and leave notes (78 tools in all).",
-   "A selected group shows its parts dimly; Ctrl+click or Shift+click lights up the ones you pick.",
-   "Animation can leave the app as a GLB, glTF or video.",
-   "Python can come inside the Windows download, so a first start has nothing to install."
+   "One part can wear several colours: pick polygons in Edit mesh and press Colour; files from other programs come in the same way.",
+   "STEP files open like Cinema 4D: even strips on fillets, a Clean quality, and CAD edit to pick whole CAD faces.",
+   "Remove holes, Untriangulate, Simplify round faces, Remove fillets and Remove lettering read the CAD faces of a STEP.",
+   "Photo mode, five photographed environments and a shorter Scene card.",
+   "Close open edges, Untriangulate into quads, and a Decimate that keeps the shape closer.",
+   "214 fixes: models from Blender open upright at real size, textures and UVs survive the tools, undo is sounder."
   ],
   "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
   "archive": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.34.0/meshoptimiser-app-0.34.0.zip",
-   "sha256": "e0989e35eb71ad15105d430905a5be69cfb36e5fb747d1899fa40291a9813c4e",
-   "size": 5987047
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.0/meshoptimiser-app-0.35.0.zip",
+   "sha256": "a4e9ec4f3f8d21f1c76075fc851bc7ef15dc4a7ea53066fe8ee512b201f5050e",
+   "size": 11932831
   },
   "requirements_sha256": "f1a93ffe65235c3537c454bcad32277ba82c666c35ece65e2fe598556d0f2f7d",
   "requirements_changed": false,

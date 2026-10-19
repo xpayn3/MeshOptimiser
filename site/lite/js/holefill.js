@@ -6,7 +6,8 @@
 //
 //   1. Weld vertices by position (CAD tessellation gives every face its own
 //      vertices) and build triangle adjacency.
-//   2. Grow planar regions: connected triangles that share one plane.
+//   2. Grow planar regions: connected triangles that share one plane. (From a STEP opened with its CAD faces, opts.cadPoly names the
+//      plane face of every triangle, and such a face is one region exactly, whatever its triangles' normals say; the rest grows as usual.)
 //   3. Each region's boundary splits into loops. The loop that runs
 //      counter-clockwise around the face normal is its outline; clockwise
 //      loops are openings in the face — candidates.
@@ -49,6 +50,9 @@
 // LOW feature qualifies (opts.raisedMax, its height above the face), standing
 // on a single face: that is what tells embossed type from a boss, a pin or a
 // rib, which are part of what the part is and stay.
+// Whatever other geometry was hidden inside the detail's volume (the inner skin
+// of a stamped collar, a floor it was pressed from) goes with it: left there, it
+// would stand out of the flattened face.
 //
 // Pure function, no dependencies: the app calls it per part, the tests call
 // it from Node.
@@ -71,6 +75,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const maxFaceRatio = opts.maxFaceRatio || 0.4;       // opening / outline of its face …
   const maxPartRatio = opts.maxPartRatio || 0.08;      // … and opening / size of the whole part
   const minSize = +opts.minSize > 0 ? +opts.minSize : 0;   // a feature narrower than this is left alone
+  const maxDepth = +opts.maxDepth > 0 ? +opts.maxDepth : 0; // a blind feature reaching deeper than this below its face is left alone (0: no limit)
   // which kinds to fill (all three unless switched off)
   const want = { through: opts.through !== false, blind: opts.blind !== false, open: opts.open !== false };
   // raised details: off unless asked for, and then only up to this height above their face
@@ -210,6 +215,18 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const order = new Int32Array(T);                      // triangles grouped by region
   const rStart = [], rEnd = [], rSeed = [];
   let filled = 0;
+  // The CAD plane faces first (opts.cadPoly: the face number per triangle, -1 where there is none): each is a region as it is. The
+  // tessellation of a plane can carry normals a hair apart and vertices a hair off the plane; the face says it is flat, so it is.
+  const cadPoly = opts.cadPoly && opts.cadPoly.length === T ? opts.cadPoly : null;
+  if (cadPoly) {
+    const byFace = new Map();
+    for (let t = 0; t < T; t++) { const f = cadPoly[t]; if (f < 0 || !ok[t]) continue; let l = byFace.get(f); if (!l) byFace.set(f, l = []); l.push(t); }
+    for (const list of byFace.values()) {
+      const r = rStart.length, from = filled;
+      for (const t of list) { region[t] = r; order[filled++] = t; }
+      rStart.push(from); rEnd.push(filled); rSeed.push(list[0]);
+    }
+  }
   for (let s = 0; s < T; s++) {
     if (!ok[s] || region[s] >= 0) continue;
     const r = rStart.length;
@@ -338,7 +355,8 @@ export function fillFlatHoles(positions, index, opts = {}) {
     for (const f of found) {
       if (!(f.area2 < 0)) continue;                     // clockwise loops are the openings
       const wide = f.size > outline * maxFaceRatio && f.size > diag * maxPartRatio;
-      if (f.size > maxSize) {
+      // (a hair of tolerance: a Ø10 hole measures 10.000000000000002 from its single-precision corners, and "holes up to 10" means it)
+      if (f.size > maxSize * (1 + 1e-6)) {
         result.skipped.tooLarge++;
         if (opts.floating === true) bigLoops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz] });
         // The far end of a countersink or a flared hole is wider than the limit, though the hole is not: such an opening is kept as a
@@ -433,7 +451,8 @@ export function fillFlatHoles(positions, index, opts = {}) {
     if (opts.cleanup === true && opts.rimVertices === true) {
       try { removeRimVertices(); } catch (_) { /* nothing is changed */ }
       if (opts.floating === true) { try { removeFloatingTubes(); } catch (_) { /* nothing is changed */ } }
-      if (result.rimVertices || result.floating) { result.removed = removed; result.caps = Uint32Array.from(caps); result.capOwner = Uint32Array.from(capOwner); }
+      if (opts.enclosed === true) { try { removeEnclosedPieces(); } catch (_) { /* nothing is changed */ } }
+      if (result.rimVertices || result.floating || result.enclosed) { result.removed = removed; result.caps = Uint32Array.from(caps); result.capOwner = Uint32Array.from(capOwner); }
     }
     return result;
   }
@@ -632,6 +651,16 @@ export function fillFlatHoles(positions, index, opts = {}) {
       const kind = !S.length ? 'open' : capLoops.length >= 2 ? 'through' : 'blind';
       if (loops[L].size < minSize) reason = 'tooSmall';
       else if (!isRaised && !want[kind]) reason = 'kind';
+      // a depth limit in the mesh's own units (opts.maxDepth): engraved lettering is a shallow pocket, a bore is not
+      else if (!isRaised && kind === 'blind' && maxDepth > 0) {
+        const lp = loops[capLoops[0]], s = rSeed[lp.r], v0 = I[lp.hes[0]];
+        let deep = 0;
+        for (const t of S) for (let c = 0; c < 3; c++) {
+          const v = I[t * 3 + c], d = nx[s] * (P[v * 3] - P[v0 * 3]) + ny[s] * (P[v * 3 + 1] - P[v0 * 3 + 1]) + nz[s] * (P[v * 3 + 2] - P[v0 * 3 + 2]);
+          if (-d > deep) deep = -d;
+        }
+        if (deep > maxDepth) reason = 'tooDeep';
+      }
     }
     const all = [...bounding, ...absorbed];
     if (reason) {
@@ -667,6 +696,58 @@ export function fillFlatHoles(positions, index, opts = {}) {
     result.loops += nCaps;
     result.removedTris += S.length;
     if (isRaised) result.flattened++; else if (!S.length) result.open++; else if (nCaps >= 2) result.through++; else result.blind++;
+    // A raised detail can have other geometry inside its volume: a stamped collar has an inner skin and the floor it was pressed
+    // from under its dome, a hollow boss has its inside. Once the detail is flattened, that geometry is no longer hidden: it stands
+    // out of the new face, as a dark dimple or a disc hanging in the air. It goes with the detail: every triangle that lies inside the
+    // closed surface made of S and its cap is taken out too.
+    if (isRaised && S.length) result.removedTris += removeInsideRaised(S, capLoops[0], [bx0, by0, bz0, bx1, by1, bz1]);
+  }
+
+  // The triangles that stand inside a flattened raised detail: above its face, within its box, and inside S by the parity of a ray
+  // along the face normal (S with its cap is a closed surface, so a point is inside it when a ray out of it leaves S an odd number
+  // of times). Loops on the triangles taken out are settled, so nothing starts from them later. Returns how many were taken out.
+  function removeInsideRaised(S, capId, box) {
+    const lp = loops[capId], s0 = rSeed[lp.r];
+    const fx = nx[s0], fy = ny[s0], fz = nz[s0];
+    const v0 = I[lp.hes[0]], d0 = fx * P[v0 * 3] + fy * P[v0 * 3 + 1] + fz * P[v0 * 3 + 2];
+    let hi = 0;
+    for (const t of S) for (let c = 0; c < 3; c++) { const v = I[t * 3 + c]; const d = fx * P[v * 3] + fy * P[v * 3 + 1] + fz * P[v * 3 + 2] - d0; if (d > hi) hi = d; }
+    if (!(hi > distTol * 8)) return 0;
+    const [x0, y0, z0, x1, y1, z1] = box, eps = distTol * 4;
+    const inS = new Uint8Array(T); for (const t of S) inS[t] = 1;
+    const hits = (ox, oy, oz) => {               // triangles of S a ray from (o) along the face normal passes through (Moeller-Trumbore)
+      let n = 0;
+      for (const t of S) {
+        const a = I[t * 3], b = I[t * 3 + 1], c = I[t * 3 + 2];
+        const ax = P[a * 3], ay = P[a * 3 + 1], az = P[a * 3 + 2];
+        const e1x = P[b * 3] - ax, e1y = P[b * 3 + 1] - ay, e1z = P[b * 3 + 2] - az;
+        const e2x = P[c * 3] - ax, e2y = P[c * 3 + 1] - ay, e2z = P[c * 3 + 2] - az;
+        const px = fy * e2z - fz * e2y, py = fz * e2x - fx * e2z, pz = fx * e2y - fy * e2x;
+        const det = e1x * px + e1y * py + e1z * pz;
+        if (Math.abs(det) < 1e-12) continue;
+        const inv = 1 / det, tx = ox - ax, ty = oy - ay, tz = oz - az;
+        const u = (tx * px + ty * py + tz * pz) * inv;
+        if (u < 0 || u > 1) continue;
+        const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+        const w = (fx * qx + fy * qy + fz * qz) * inv;
+        if (w < 0 || u + w > 1) continue;
+        if ((e2x * qx + e2y * qy + e2z * qz) * inv > 1e-9) n++;
+      }
+      return n;
+    };
+    let gone = 0;
+    for (let t = 0; t < T; t++) {
+      if (removed[t] || inS[t] || !ok[t]) continue;
+      const a = I[t * 3], b = I[t * 3 + 1], c = I[t * 3 + 2];
+      const cx = (P[a * 3] + P[b * 3] + P[c * 3]) / 3, cy = (P[a * 3 + 1] + P[b * 3 + 1] + P[c * 3 + 1]) / 3, cz = (P[a * 3 + 2] + P[b * 3 + 2] + P[c * 3 + 2]) / 3;
+      if (cx < x0 || cx > x1 || cy < y0 || cy > y1 || cz < z0 || cz > z1) continue;
+      const d = fx * cx + fy * cy + fz * cz - d0;
+      if (d <= eps || d > hi) continue;
+      if ((hits(cx, cy, cz) & 1) === 0) continue;
+      removed[t] = 1; gone++;
+      for (let e = 0; e < 3; e++) { const id = loopOfHe[t * 3 + e]; if (id >= 0) loops[id].state = 1; }
+    }
+    return gone;
   }
 
   // An opening into a hollow space (or into anything the hole's wall runs on into) cannot be taken out whole: what lies behind it is
@@ -786,6 +867,92 @@ export function fillFlatHoles(positions, index, opts = {}) {
   }
   if ((result.holes && caps.length || opts.cleanup === true) && opts.rimVertices === true) {
     try { removeRimVertices(); } catch (_) { /* the fill itself stands */ }
+  }
+  if (opts.enclosed === true && (result.holes || opts.cleanup === true)) {
+    try { removeEnclosedPieces(); } catch (_) { /* the fill itself stands */ }
+  }
+  // ── 10. pieces sealed inside ─────────────────────────────────────────────
+  // A part's mesh can hold separate closed pieces inside its body: the balls of a check valve in a pump, a pin in a bore, the wall
+  // of a cavity. They were seen through the holes; with the holes closed they are sealed inside and never visible again, but still
+  // drawn, and in the viewport's edge overlay they show through as stray lines and points. With opts.enclosed every piece that lies
+  // entirely inside the closed shell goes. The shell is the largest piece (by triangles) of what remains, caps included, and it must
+  // be closed (no edge with a single triangle), or nothing is judged. A piece is inside when rays from the middles of three of its
+  // triangles each cross the shell an odd number of times.
+  function removeEnclosedPieces() {
+    const nCaps = caps.length / 3, total = T + nCaps;
+    const cornerV = (ref, k) => ref < T ? I[ref * 3 + k] : caps[(ref - T) * 3 + k];         // vertex number
+    const cornerW = (ref, k) => ref < T ? tw[ref * 3 + k] : wid[caps[(ref - T) * 3 + k]];  // welded id
+    const live = (ref) => ref < T ? !removed[ref] : true;
+    const uf = new Int32Array(W); for (let i = 0; i < W; i++) uf[i] = i;
+    const find = (a) => { while (uf[a] !== a) { uf[a] = uf[uf[a]]; a = uf[a]; } return a; };
+    const unite = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) uf[rb] = ra; };
+    for (let ref = 0; ref < total; ref++) { if (!live(ref)) continue; unite(cornerW(ref, 0), cornerW(ref, 1)); unite(cornerW(ref, 0), cornerW(ref, 2)); }
+    const count = new Map(); let shellRoot = -1, shellN = 0;
+    for (let ref = 0; ref < total; ref++) { if (!live(ref)) continue; const r = find(cornerW(ref, 0)); const n = (count.get(r) || 0) + 1; count.set(r, n); if (n > shellN) { shellN = n; shellRoot = r; } }
+    if (count.size < 2) return;
+    // the shell must be closed
+    const ekey = (a, b) => a < b ? a * W + b : b * W + a;
+    const ec = new Map(), shellRefs = [];
+    for (let ref = 0; ref < total; ref++) {
+      if (!live(ref) || find(cornerW(ref, 0)) !== shellRoot) continue;
+      shellRefs.push(ref);
+      const a = cornerW(ref, 0), b = cornerW(ref, 1), c = cornerW(ref, 2);
+      if (a === b || b === c || a === c) continue;
+      for (const k of [ekey(a, b), ekey(b, c), ekey(c, a)]) ec.set(k, (ec.get(k) || 0) + 1);
+    }
+    for (const n of ec.values()) if (n === 1) return;           // open somewhere: inside and outside cannot be told apart
+    // rays along +x against the shell: its triangles filed by the cells of a y-z grid
+    let ly = Infinity, lz = Infinity, hy = -Infinity, hz = -Infinity;
+    for (const ref of shellRefs) for (let k = 0; k < 3; k++) { const v = cornerV(ref, k) * 3, y = P[v + 1], z = P[v + 2]; if (y < ly) ly = y; if (y > hy) hy = y; if (z < lz) lz = z; if (z > hz) hz = z; }
+    const G = 64, cy = (hy - ly) / G || 1, cz = (hz - lz) / G || 1;
+    const cellOf = (y, z) => Math.max(0, Math.min(G, Math.floor((y - ly) / cy))) * (G + 1) + Math.max(0, Math.min(G, Math.floor((z - lz) / cz)));
+    const cells = new Map();
+    for (const ref of shellRefs) {
+      let y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (let k = 0; k < 3; k++) { const v = cornerV(ref, k) * 3, y = P[v + 1], z = P[v + 2]; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+      const ja = Math.floor((y0 - ly) / cy), jb = Math.floor((y1 - ly) / cy), ka = Math.floor((z0 - lz) / cz), kb = Math.floor((z1 - lz) / cz);
+      for (let jj = ja; jj <= jb; jj++) for (let kk = ka; kk <= kb; kk++) { const key = jj * (G + 1) + kk; const l = cells.get(key); if (l) l.push(ref); else cells.set(key, [ref]); }
+    }
+    const crossings = (x, y, z) => {
+      const l = cells.get(cellOf(y, z)); if (!l) return 0;
+      let hits = 0;
+      for (const ref of l) {
+        const a = cornerV(ref, 0) * 3, b = cornerV(ref, 1) * 3, c = cornerV(ref, 2) * 3;
+        const ay = P[a + 1] - y, by = P[b + 1] - y, cyy = P[c + 1] - y, az = P[a + 2] - z, bz = P[b + 2] - z, czz = P[c + 2] - z;
+        const d1 = ay * bz - az * by, d2 = by * czz - bz * cyy, d3 = cyy * az - czz * ay;
+        if ((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)) continue;       // the ray misses this triangle's y-z shadow
+        const e1x = P[b] - P[a], e1y = P[b + 1] - P[a + 1], e1z = P[b + 2] - P[a + 2], e2x = P[c] - P[a], e2y = P[c + 1] - P[a + 1], e2z = P[c + 2] - P[a + 2];
+        const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+        if (Math.abs(nx) < 1e-20) continue;                                                // (a triangle seen edge-on along x)
+        if (P[a] - (ny * (y - P[a + 1]) + nz * (z - P[a + 2])) / nx > x) hits++;
+      }
+      return hits;
+    };
+    // every other piece: the middles of three of its triangles, all inside, and the piece goes
+    const byRoot = new Map();
+    for (let ref = 0; ref < total; ref++) { if (!live(ref)) continue; const r = find(cornerW(ref, 0)); if (r === shellRoot) continue; let l = byRoot.get(r); if (!l) byRoot.set(r, l = []); l.push(ref); }
+    let gone = 0, goneTris = 0; const dropCaps = new Set();
+    for (const refs of byRoot.values()) {
+      let inside = 0;
+      for (const q of [0, Math.floor(refs.length / 2), refs.length - 1]) {
+        const ref = refs[q], a = cornerV(ref, 0) * 3, b = cornerV(ref, 1) * 3, c = cornerV(ref, 2) * 3;
+        if (crossings((P[a] + P[b] + P[c]) / 3, (P[a + 1] + P[b + 1] + P[c + 1]) / 3, (P[a + 2] + P[b + 2] + P[c + 2]) / 3) % 2 === 1) inside++;
+      }
+      if (inside !== 3) continue;
+      for (const ref of refs) { if (ref < T) { removed[ref] = 1; goneTris++; } else dropCaps.add(ref - T); }
+      gone++;
+    }
+    if (!gone) return;
+    if (dropCaps.size) {
+      const nc = [], no = [];
+      for (let k = 0; k < nCaps; k++) if (!dropCaps.has(k)) { nc.push(caps[k * 3], caps[k * 3 + 1], caps[k * 3 + 2]); no.push(capOwner[k]); }
+      caps.length = 0; capOwner.length = 0;
+      for (const v of nc) caps.push(v);
+      for (const v of no) capOwner.push(v);
+      result.addedTris -= dropCaps.size;
+    }
+    result.removedTris += goneTris;
+    result.enclosed = (result.enclosed || 0) + gone;
   }
   // ── 9. walls left floating ───────────────────────────────────────────────
   // A hole in a broken mesh can come with its wall cut loose: a thin open tube (a ring of facets, no ends) that touches nothing, sitting
@@ -1116,9 +1283,15 @@ function earClip(xs, ys) {
   const corners = ring.slice();
 
   // 2. ear clipping on the corners
+  // Only a corner that turns the wrong way (reflex, or straight) can lie inside an ear of a simple outline, so the test for a blocked
+  // ear looks at those alone. They are few on a round hole or a slot: the test used to run over every point of the ring, which made the
+  // whole thing cubic (a 3000-point outline took minutes; it takes well under a second now).
   const tris = [];
+  const reflex = new Set();
+  const turnOf = (i) => { const m = ring.length; return cross(ring[(i + m - 1) % m], ring[i], ring[(i + 1) % m]); };
+  for (let i = 0; i < ring.length; i++) if (!(turnOf(i) > eps)) reflex.add(ring[i]);
   const blocked = (a, bb, c) => {
-    for (const p of ring) {
+    for (const p of reflex) {
       if (p === a || p === bb || p === c || same(p, a) || same(p, bb) || same(p, c)) continue;
       if (cross(a, bb, p) >= -eps && cross(bb, c, p) >= -eps && cross(c, a, p) >= -eps) return true;   // in or on the triangle
     }
@@ -1141,6 +1314,11 @@ function earClip(xs, ys) {
     const m = ring.length;
     tris.push([ring[(best + m - 1) % m], ring[best], ring[(best + 1) % m]]);
     ring.splice(best, 1);
+    // the two corners beside the clipped one may have straightened out (a corner never turns the other way by losing a neighbour)
+    if (ring.length > 2) {
+      const m2 = ring.length;
+      for (const j of [(best + m2 - 1) % m2, best % m2]) { if (turnOf(j) > eps) reflex.delete(ring[j]); else reflex.add(ring[j]); }
+    }
   }
   if (ring.length === 3) tris.push([ring[0], ring[1], ring[2]]);
   else if (ring.length > 3) {

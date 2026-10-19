@@ -90,7 +90,9 @@
     for (let i = 0; i < 4000; i++) {
       await sleep(450);
       let s = null;
-      try { s = await api('/api/update/status'); lost = 0; } catch (_) { if (++lost >= 2) { ui.phase = 'restarting'; emit(); return restarting(); } continue; }
+      // (the server going quiet means a restart only once the files are being swapped: during a long download two missed answers
+      // are a busy machine, and taking them for a restart failed the card after 120 s while the install went on)
+      try { s = await api('/api/update/status'); lost = 0; } catch (_) { const swapping = ui.progress && (ui.progress.phase === 'installing' || ui.progress.phase === 'restarting'); if (++lost >= (swapping ? 2 : 40)) { ui.phase = 'restarting'; emit(); return restarting(); } continue; }
       ui.server = s;
       ui.progress = { phase: s.phase, done: s.done || 0, total: s.total || 0, message: s.message || '' };
       if (s.phase === 'error') { fail(s.error || 'The update failed. Nothing was changed.'); return; }
@@ -122,6 +124,8 @@
     let r; try { r = await api('/api/update/rollback', {}); } catch (e) { r = { ok: false, error: e.message }; }
     if (!r || r.ok === false) { fail(r && r.error || 'Could not go back.'); return; }
     S.last = null; save();
+    // (with no way to restart itself the server says "done": the old files are in place and the app wants a manual start, not a wait)
+    if (r.phase === 'done') { ui.phase = 'idle'; ui.progress = null; emit(); showCard('manual'); return; }
     ui.phase = 'restarting'; emit(); restarting();
   }
 
@@ -303,8 +307,11 @@
 
   // ── start-up ──────────────────────────────────────────────────────────────
   async function start() {
-    for (let i = 0; i < 100 && !document.body.classList.contains('app-ready'); i++) await sleep(300);   // (the app is up: say so to the server)
-    try { await api('/api/update/confirm', {}); } catch (_) {}
+    // The app is up: say so to the server. Only when it really came up: a page that never reaches app-ready (the new version's
+    // app.js throws at load) used to confirm after the 30 s wait ran out, which made the broken version permanent.
+    let ready = false;
+    for (let i = 0; i < 100; i++) { if (document.body.classList.contains('app-ready')) { ready = true; break; } await sleep(300); }
+    if (ready) { try { await api('/api/update/confirm', {}); } catch (_) {} }
     await refreshServer(); paint();
     if (ui.supported === false) return;
     const n = ui.server && ui.server.notice;

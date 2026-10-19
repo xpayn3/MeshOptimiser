@@ -12,7 +12,8 @@ export const MAX_POLY_TRIS = 4e6;     // past this the analysis is not attempted
 // positions  Float32Array, xyz per vertex
 // index      triangle index array, or null (vertices 3t, 3t+1, 3t+2)
 // angleDeg   how far a triangle may turn away from the polygon's first triangle and still belong to it
-// poly       optional: a polygon number for every triangle that is already known (skips the search)
+// poly       optional: a polygon number for every triangle that is already known (skips the search). -1 for a triangle that is
+//            not known: those grow by angle as usual, and never into a known polygon (the CAD plane faces of a STEP, say)
 //
 // Vertices are joined by position first (a CAD mesh is often split along every face, so one corner has one
 // vertex per face). A polygon grows from its first triangle and every member is compared with that one, never
@@ -76,12 +77,18 @@ export function analysePolygons(positions, index, angleDeg = 1, polyIn = null) {
 
   // 3. polygons
   let poly, polys = 0;
-  if (polyIn && polyIn.length === T) {
+  let partial = false;
+  if (polyIn && polyIn.length === T) { for (let t = 0; t < T; t++) if (polyIn[t] < 0) { partial = true; break; } }
+  if (polyIn && polyIn.length === T && !partial) {
     poly = polyIn;
     for (let t = 0; t < T; t++) if (poly[t] >= polys) polys = poly[t] + 1;
   } else {
     const cosT = Math.cos(Math.max(0, angleDeg) * Math.PI / 180);
     poly = new Int32Array(T).fill(-1);
+    if (partial) {                               // the known ones first, renumbered from 0 so no polygon number is empty
+      const ids = new Map();
+      for (let t = 0; t < T; t++) { const k = polyIn[t]; if (k < 0) continue; let id = ids.get(k); if (id === undefined) { id = polys++; ids.set(k, id); } poly[t] = id; }
+    }
     const stack = new Int32Array(T);
     for (let s = 0; s < T; s++) {
       if (poly[s] >= 0) continue;

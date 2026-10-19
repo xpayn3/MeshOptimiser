@@ -1502,6 +1502,9 @@ class FBXTreeParser {
 
 			}
 
+			// MeshOptimiser patch: the file's up axis (0 X, 1 Y, 2 Z), so the app can stand a Y-up file upright and leave a Z-up one
+			if ( 'UpAxis' in fbxTree.GlobalSettings ) sceneGraph.userData.upAxis = fbxTree.GlobalSettings.UpAxis.value;
+
 		}
 
 	}

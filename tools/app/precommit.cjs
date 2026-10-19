@@ -34,7 +34,7 @@ const count = (s, re) => (s.match(re) || []).length;
 
 let checked = 0;
 for (const f of staged) {
-  if (!/\.(m?js|cjs|html|css|py|md|json|txt)$/i.test(f) || /^app\/vendor\//.test(f)) continue;
+  if (!/\.(m?js|cjs|html|css|py|md|json|txt)$/i.test(f) || /^(app|site\/lite)\/vendor\//.test(f)) continue;
   let text; try { text = stagedText(f); } catch (_) { continue; }
   checked++;
   const n = count(text, /\u0000/g), b = count(text, new RegExp(String.fromCharCode(0xfffd), 'g'));

@@ -7,8 +7,13 @@
 
 // How much each attribute counts against position when two vertices are
 // merged. Positions are measured against the size of the mesh, normals are
-// unit vectors, so these are small numbers.
-export const ATTR_WEIGHT = { normal: 0.5, uv: 0.2, color: 0.2 };
+// unit vectors, so these are small numbers. Halved from 0.5 / 0.2 / 0.2 after
+// measuring against Blender's Decimate (tests/blender/compare-tools.mjs and the
+// variants beside it): on three NIST CAD parts the surface moved 2 to 9 % less
+// and the shading normals turned less as well; on an organic mesh the surface
+// moved 16 % less and the UVs 19 % less, for 0.3 degrees more on the normals.
+// Lower still (a fifth, or none) the normals of smooth parts turned 2 to 3 times as far.
+export const ATTR_WEIGHT = { normal: 0.25, uv: 0.1, color: 0.1 };
 
 // Normals, the first UV set and vertex colours of `geom`, side by side in one
 // Float32Array (what simplifyWithAttributes wants). null when the mesh has
@@ -20,7 +25,17 @@ export function packAttributes(geom) {
   const cols = [];
   for (const [name, size, w] of [['normal', 3, ATTR_WEIGHT.normal], ['uv', 2, ATTR_WEIGHT.uv], ['color', 3, ATTR_WEIGHT.color]]) {
     const a = geom.attributes[name];
-    if (a && a.count === n && a.itemSize >= size) cols.push({ a, size, w });
+    if (!(a && a.count === n && a.itemSize >= size)) continue;
+    // UVs count by how far they span: the weight is for a texture laid once over the 0..1 square, so UVs that tile it ten times
+    // (or are in millimetres) count ten times less per unit, and UVs that do not change at all (all zero) do not count
+    if (name === 'uv') {
+      let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+      for (let v = 0; v < n; v++) { const x = a.getComponent ? a.getComponent(v, 0) : a.array[v * a.itemSize], y = a.getComponent ? a.getComponent(v, 1) : a.array[v * a.itemSize + 1]; if (x < u0) u0 = x; if (x > u1) u1 = x; if (y < v0) v0 = y; if (y > v1) v1 = y; }
+      const span = Math.max(u1 - u0, v1 - v0);
+      if (span > 1e-9) cols.push({ a, size, w: w / span });
+      continue;
+    }
+    cols.push({ a, size, w });
   }
   if (!cols.length) return null;
   const stride = cols.reduce((s, c) => s + c.size, 0);
@@ -103,6 +118,9 @@ export function lockSharp(an, deg) {
 // `attrs` is what packAttributes returned, or null.
 //
 // Tried in order, the first that gets within 25% of the target wins:
+//   0. sharp edges locked (opts.sharp), when that still reaches the target: kept only when its own error estimate is not clearly
+//      worse than the plain run's (measured on a real part: the locked vertices can make the rest of the surface drift five times
+//      further, 25 mm against 4.5 mm at 10 %), so the plain rungs below are always run as well and the two are compared;
 //   1. attribute-aware, borders locked   (keeps creases, UV seams and colours)
 //   2. positions only, borders locked    (outlines don't creep)
 //   3. positions only, borders free      (a mesh that is mostly border)
@@ -115,8 +133,10 @@ export function lockSharp(an, deg) {
 export function reduceIndex(S, sub, positions, target, attrs, opts) {
   const scale = S.getScale(positions, 3) || 1;
   const near = (r) => r.idx.length <= target * 1.25;
-  let best = null;
+  let best = null, sharpR = null;
   const keep = (idx, rel) => { const r = { idx, err: rel * scale }; if (!best || r.idx.length < best.idx.length) best = r; return r; };
+  // the sharp-edge result against a plain one that also reached the target: the lock wins unless it costs clearly more elsewhere
+  const pick = (r) => (sharpR && sharpR.err <= r.err * 1.5) ? sharpR : r;
 
   // 0. sharp edges first, when asked for (opts.sharp is an angle in degrees): the vertices on them are locked. It only counts if
   //    the target is still reached with them locked, so a part made of nothing but hard edges falls through to the paths below
@@ -133,23 +153,26 @@ export function reduceIndex(S, sub, positions, target, attrs, opts) {
         if (lock.count > (opts.maxShare > 0 ? opts.maxShare : 0.08) * (positions.length / 3)) continue;
         const [idx, rel] = S.simplifyWithAttributes(sub, positions, 3, a.data, a.stride, a.weights, lock.flags, target, 1.0, ['LockBorder']);
         const r = keep(idx, rel);
-        if (near(r)) { r.sharpKept = lock.count; return r; }
+        if (near(r)) { r.sharpKept = lock.count; sharpR = r; break; }
       }
     } catch (_) { /* fall through to the usual paths */ }
   }
   if (attrs && S.simplifyWithAttributes && S.useExperimentalFeatures) {
     try {
       const [idx, rel] = S.simplifyWithAttributes(sub, positions, 3, attrs.data, attrs.stride, attrs.weights, null, target, 1.0, ['LockBorder']);
-      if (near(keep(idx, rel))) return best;
+      const r = keep(idx, rel);
+      if (near(r)) return pick(r);
     } catch (_) { /* an older build, or the data did not fit: fall through to the plain path */ }
   }
   {
     const [idx, rel] = S.simplify(sub, positions, 3, target, 1.0, ['LockBorder']);
-    if (near(keep(idx, rel))) return best;
+    const r = keep(idx, rel);
+    if (near(r)) return pick(r);
   }
   {
     const [idx, rel] = S.simplify(sub, positions, 3, target, 1.0);
-    keep(idx, rel);
+    const r = keep(idx, rel);
+    if (near(r)) return pick(r);
   }
-  return best;
+  return sharpR || best;
 }

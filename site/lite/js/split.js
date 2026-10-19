@@ -8,7 +8,12 @@
 // a second or two, and a scene of thousands of parts is thousands of small calls.
 //
 // Methods (opts.method):
-//   vertex   triangles that share a corner are one piece (corners are welded within opts.epsAbs first). The default.
+//   bodies   a body is a closed surface: triangles that share a whole edge belong together, and where more than two triangles
+//            meet at an edge (two solids touching along a face or an edge, welded together by the exporter) they are paired into
+//            wedges of material, so each solid keeps its own. Solids that touch at a point, an edge or a face come apart. A
+//            T-junction (one face finer than its neighbour along their common edge) does not cut a solid. The default.
+//   vertex   triangles that share a corner are one piece (corners are welded within opts.epsAbs first). Anything that touches
+//            stays together.
 //   edge     triangles are one piece only if they share a whole edge: solids that meet at a point or a knife edge stay apart.
 //   spatial  triangles whose boxes share a cell of a 3D grid (opts.cellSize) are one piece. Does not read the index at all.
 //   hybrid   vertex first; when one piece holds over half the triangles, that piece is cut up by proximity.
@@ -21,32 +26,65 @@
 
 // ── welding ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 // Each vertex gets the number of the place it is at. With an index and no tolerance the index is the truth (every vertex is its
-// own place); otherwise vertices at the same place, within epsAbs, share a number.
+// own place); without an index and no tolerance, vertices with the same bits share a place; with a tolerance, every two vertices
+// within epsAbs of each other share a place (and so do the ones they chain to), wherever they fall on the grid underneath.
 export function weld(positions, vCount, epsAbs, indexed) {
   const canon = new Int32Array(vCount);
   if (indexed && !(epsAbs > 0)) { for (let i = 0; i < vCount; i++) canon[i] = i; return { canon, N: vCount }; }
-  const eps = epsAbs > 0 ? epsAbs : 0;
-  const bits = new Int32Array(positions.buffer, positions.byteOffset, positions.length);       // exact: the float's own bits
-  const inv = eps > 0 ? 1 / eps : 0;
+  if (!(epsAbs > 0)) return weldExact(positions, vCount, canon);
+  // A grid of cells 2·eps wide. Every vertex looks into the 8 cells nearest to it (its own and the ones on the side it leans to),
+  // which hold every vertex within eps of it, and joins those: a pair that straddles a cell border is never missed, which the old
+  // rounding to a grid did (about 2 % of the duplicates that are one float step apart, each one a loose face).
+  const eps = epsAbs, inv = 0.5 / eps, eps2 = eps * eps;
+  let cap = 1; while (cap < vCount * 2) cap <<= 1;
+  const head = new Int32Array(cap).fill(-1), next = new Int32Array(vCount);                       // vertices in a hash slot, as a chain
+  const cx = new Float64Array(vCount), cy = new Float64Array(vCount), cz = new Float64Array(vCount);   // the cell of each vertex
+  const parent = new Int32Array(vCount);
+  for (let i = 0; i < vCount; i++) parent[i] = i;
+  const find = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  const hash = (x, y, z) => (Math.imul(x | 0, 73856093) ^ Math.imul(y | 0, 19349663) ^ Math.imul(z | 0, 83492791) ^ Math.imul((x / 4294967296) | 0, 2654435761)) & (cap - 1);
+  for (let v = 0; v < vCount; v++) {
+    const px = positions[v * 3], py = positions[v * 3 + 1], pz = positions[v * 3 + 2];
+    const fx = px * inv, fy = py * inv, fz = pz * inv;
+    const ix = Math.floor(fx), iy = Math.floor(fy), iz = Math.floor(fz);
+    const sx = fx - ix < 0.5 ? -1 : 1, sy = fy - iy < 0.5 ? -1 : 1, sz = fz - iz < 0.5 ? -1 : 1;
+    let rv = -1;
+    for (let dx = 0; dx < 2; dx++) for (let dy = 0; dy < 2; dy++) for (let dz = 0; dz < 2; dz++) {
+      const jx = ix + dx * sx, jy = iy + dy * sy, jz = iz + dz * sz;
+      let n = 0;
+      for (let u = head[hash(jx, jy, jz)]; u >= 0 && n < 512; u = next[u], n++) {
+        if (cx[u] !== jx || cy[u] !== jy || cz[u] !== jz) continue;
+        const ex = positions[u * 3] - px, ey = positions[u * 3 + 1] - py, ez = positions[u * 3 + 2] - pz;
+        if (ex * ex + ey * ey + ez * ez > eps2) continue;
+        const ru = find(u);
+        if (rv < 0) rv = find(v);
+        if (ru !== rv) { parent[ru] = rv; }
+      }
+    }
+    cx[v] = ix; cy[v] = iy; cz[v] = iz;
+    const h = hash(ix, iy, iz); next[v] = head[h]; head[h] = v;
+  }
+  // places numbered in the order of their first vertex
+  const number = new Int32Array(vCount).fill(-1);
+  let N = 0;
+  for (let v = 0; v < vCount; v++) { const r = find(v); if (number[r] < 0) number[r] = N++; canon[v] = number[r]; }
+  return { canon, N };
+}
+
+// vertices with exactly the same bits share a place (a mesh without an index, no tolerance)
+function weldExact(positions, vCount, canon) {
+  const bits = new Int32Array(positions.buffer, positions.byteOffset, positions.length);
   let cap = 1; while (cap < vCount * 2) cap <<= 1;
   const table = new Int32Array(cap).fill(-1);
   const first = new Int32Array(vCount);                                                          // place → a vertex there
-  const qx = eps > 0 ? new Float64Array(vCount) : null, qy = eps > 0 ? new Float64Array(vCount) : null, qz = eps > 0 ? new Float64Array(vCount) : null;
   let N = 0;
   for (let v = 0; v < vCount; v++) {
-    let h, ax = 0, ay = 0, az = 0;
-    if (eps > 0) {
-      ax = Math.round(positions[v * 3] * inv); ay = Math.round(positions[v * 3 + 1] * inv); az = Math.round(positions[v * 3 + 2] * inv);
-      h = (Math.imul(ax | 0, 73856093) ^ Math.imul(ay | 0, 19349663) ^ Math.imul(az | 0, 83492791) ^ Math.imul((ax / 4294967296) | 0, 2654435761)) & (cap - 1);
-    } else {
-      h = (Math.imul(bits[v * 3], 73856093) ^ Math.imul(bits[v * 3 + 1], 19349663) ^ Math.imul(bits[v * 3 + 2], 83492791)) & (cap - 1);
-    }
+    let h = (Math.imul(bits[v * 3], 73856093) ^ Math.imul(bits[v * 3 + 1], 19349663) ^ Math.imul(bits[v * 3 + 2], 83492791)) & (cap - 1);
     for (;;) {
       const c = table[h];
-      if (c < 0) { table[h] = N; first[N] = v; if (eps > 0) { qx[N] = ax; qy[N] = ay; qz[N] = az; } canon[v] = N++; break; }
-      const same = eps > 0 ? (qx[c] === ax && qy[c] === ay && qz[c] === az)
-        : (bits[first[c] * 3] === bits[v * 3] && bits[first[c] * 3 + 1] === bits[v * 3 + 1] && bits[first[c] * 3 + 2] === bits[v * 3 + 2]);
-      if (same) { canon[v] = c; break; }
+      if (c < 0) { table[h] = N; first[N] = v; canon[v] = N++; break; }
+      const f = first[c] * 3;
+      if (bits[f] === bits[v * 3] && bits[f + 1] === bits[v * 3 + 1] && bits[f + 2] === bits[v * 3 + 2]) { canon[v] = c; break; }
       h = (h + 1) & (cap - 1);
     }
   }
@@ -83,6 +121,134 @@ function byEdges(T, tv, canon, N, join) {
       if (o === undefined) seen.set(key, t);
       else if (join(t, o)) uf.uni(o, t);
     }
+  }
+  return uf.find;
+}
+
+// Bodies. Every edge (by place numbers) lists the triangles at it. Two triangles at an edge are one body. More than two is a
+// seam where solids were welded together: the triangles are sorted by their angle round the edge and paired into wedges of
+// material, a triangle that runs the edge b→a with the next one in the turning direction that runs it a→b (for a surface wound
+// outward, the inside of the solid lies on that side), so each solid keeps its own two and the seam does not join them. A
+// zero-area triangle (two corners at one place, or the third corner on the edge) is pinned to a neighbour and takes no part in
+// the pairing. An open edge (one triangle) joins nothing, except across a T-junction: two open edges that leave one place in the
+// same direction lie on one line, so their triangles are one body.
+function byBodies(positions, T, tv, canon, N) {
+  const uf = unionFind(T);
+  const big = N > 9e7;
+  const ids = new Map();
+  const edgeOf = new Int32Array(T * 3);
+  const degenerate = new Uint8Array(T);
+  let E = 0;
+  for (let t = 0; t < T; t++) {
+    const a = canon[tv(t, 0)], b = canon[tv(t, 1)], c = canon[tv(t, 2)];
+    if (a === b || b === c || a === c) degenerate[t] = 1;
+    for (let k = 0; k < 3; k++) {
+      const p = k === 0 ? a : k === 1 ? b : c, q = k === 0 ? b : k === 1 ? c : a;
+      if (p === q) { edgeOf[t * 3 + k] = -1; continue; }
+      const lo = p < q ? p : q, hi = p < q ? q : p;
+      const key = big ? lo + ',' + hi : lo * N + hi;
+      let id = ids.get(key);
+      if (id === undefined) { id = E++; ids.set(key, id); }
+      edgeOf[t * 3 + k] = id;
+    }
+  }
+  // the corners (triangle * 3 + k) at each edge, a counting sort
+  const start = new Int32Array(E + 1);
+  for (let i = 0; i < T * 3; i++) if (edgeOf[i] >= 0) start[edgeOf[i] + 1]++;
+  for (let e = 0; e < E; e++) start[e + 1] += start[e];
+  const fill = start.slice(0, E), slot = new Int32Array(start[E]);
+  for (let i = 0; i < T * 3; i++) if (edgeOf[i] >= 0) slot[fill[edgeOf[i]]++] = i;
+  const open = [];                                                 // corners whose edge has one real triangle
+  const items = [];                                                // the real triangles at a seam: { t, ang, fwd }
+  for (let e = 0; e < E; e++) {
+    const s0 = start[e], s1 = start[e + 1];
+    // real triangles first; the zero-area ones are pinned to the first real one (or to each other)
+    let firstReal = -1, n = 0;
+    for (let s = s0; s < s1; s++) { const t = slot[s] / 3 | 0; if (!degenerate[t]) { n++; if (firstReal < 0) firstReal = slot[s]; } }
+    for (let s = s0; s < s1; s++) { const t = slot[s] / 3 | 0; if (degenerate[t]) uf.uni(firstReal >= 0 ? firstReal / 3 | 0 : slot[s0] / 3 | 0, t); }
+    if (n === 0) continue;
+    if (n === 1) { open.push(firstReal); continue; }
+    if (n === 2) { let p = -1; for (let s = s0; s < s1; s++) { const t = slot[s] / 3 | 0; if (degenerate[t]) continue; if (p < 0) p = t; else uf.uni(p, t); } continue; }
+    // a seam: angles round the edge, in the frame of the first real triangle
+    const t0 = firstReal / 3 | 0, k0 = firstReal % 3;
+    const A = tv(t0, k0), B = tv(t0, (k0 + 1) % 3);
+    const ax = positions[A * 3], ay = positions[A * 3 + 1], az = positions[A * 3 + 2];
+    let ex = positions[B * 3] - ax, ey = positions[B * 3 + 1] - ay, ez = positions[B * 3 + 2] - az;
+    const el = Math.hypot(ex, ey, ez);
+    if (!(el > 0)) continue;
+    ex /= el; ey /= el; ez /= el;
+    const ca = canon[A];
+    items.length = 0;
+    let ux = 0, uy = 0, uz = 0, vx = 0, vy = 0, vz = 0, flat = -1;
+    for (let s = s0; s < s1; s++) {
+      const i = slot[s], t = i / 3 | 0, k = i % 3;
+      if (degenerate[t]) continue;
+      const C = tv(t, (k + 2) % 3);
+      let dx = positions[C * 3] - ax, dy = positions[C * 3 + 1] - ay, dz = positions[C * 3 + 2] - az;
+      const d = dx * ex + dy * ey + dz * ez;
+      dx -= d * ex; dy -= d * ey; dz -= d * ez;
+      const dl = Math.hypot(dx, dy, dz);
+      if (!(dl > el * 1e-7)) { if (flat < 0) flat = t; else uf.uni(flat, t); continue; }   // (third corner on the edge: zero area)
+      dx /= dl; dy /= dl; dz /= dl;
+      if (items.length === 0) { ux = dx; uy = dy; uz = dz; vx = ey * uz - ez * uy; vy = ez * ux - ex * uz; vz = ex * uy - ey * ux; }
+      let ang = Math.atan2(dx * vx + dy * vy + dz * vz, dx * ux + dy * uy + dz * uz);
+      if (ang < 0) ang += Math.PI * 2;
+      items.push({ t, ang, fwd: canon[tv(t, k)] === ca });
+    }
+    if (flat >= 0 && items.length) uf.uni(items[0].t, flat);
+    if (items.length === 2) { uf.uni(items[0].t, items[1].t); continue; }
+    if (items.length < 2) continue;
+    // each b→a triangle takes the a→b triangle that comes next in the turning direction (never one at its own angle: a doubled
+    // face is a wedge of nothing); what is left over joins nothing here
+    const m = items.length, used = new Uint8Array(m);
+    for (let i = 0; i < m; i++) {
+      if (used[i] || items[i].fwd) continue;
+      let best = -1, bestD = Infinity;
+      for (let q = 0; q < m; q++) {
+        if (used[q] || !items[q].fwd) continue;
+        let d = items[q].ang - items[i].ang; if (d <= 1e-9) d += Math.PI * 2;
+        if (d < bestD && d < Math.PI * 2 - 1e-9) { bestD = d; best = q; }
+      }
+      if (best < 0) continue;
+      used[i] = used[best] = 1;
+      uf.uni(items[i].t, items[best].t);
+    }
+  }
+  // T-junctions: open edges that leave one place in the same direction
+  if (open.length > 1) {
+    const at = new Map();                                            // place → corners of open edges starting there (either end)
+    const add = (p, i) => { const l = at.get(p); if (l) { if (l.length < 16) l.push(i); } else at.set(p, [i]); };
+    for (const i of open) { const t = i / 3 | 0, k = i % 3; add(canon[tv(t, k)], i); add(canon[tv(t, (k + 1) % 3)], ~i); }
+    const dir = (i, out) => {
+      const from = i >= 0 ? i : ~i, t = from / 3 | 0, k = from % 3;
+      const P = i >= 0 ? tv(t, k) : tv(t, (k + 1) % 3), Q = i >= 0 ? tv(t, (k + 1) % 3) : tv(t, k);
+      let x = positions[Q * 3] - positions[P * 3], y = positions[Q * 3 + 1] - positions[P * 3 + 1], z = positions[Q * 3 + 2] - positions[P * 3 + 2];
+      const l = Math.hypot(x, y, z); if (l > 0) { x /= l; y /= l; z /= l; }
+      out[0] = x; out[1] = y; out[2] = z; return t;
+    };
+    const da = [0, 0, 0], db = [0, 0, 0];
+    for (const l of at.values()) {
+      if (l.length < 2) continue;
+      for (let i = 0; i < l.length; i++) {
+        const ta = dir(l[i], da);
+        for (let j = i + 1; j < l.length; j++) {
+          const tb = dir(l[j], db);
+          if (ta === tb) continue;
+          if (da[0] * db[0] + da[1] * db[1] + da[2] * db[2] > 0.99999) uf.uni(ta, tb);
+        }
+      }
+    }
+  }
+  // crumbs: a piece of one or two triangles left at a seam goes with a neighbour it shares an edge with
+  const size = new Map();
+  for (let t = 0; t < T; t++) { const r = uf.find(t); size.set(r, (size.get(r) || 0) + 1); }
+  for (let e = 0; e < E; e++) {
+    const s0 = start[e], s1 = start[e + 1];
+    if (s1 - s0 < 2) continue;
+    let keep = -1;
+    for (let s = s0; s < s1; s++) { const t = slot[s] / 3 | 0; if (size.get(uf.find(t)) > 2) { keep = t; break; } }
+    if (keep < 0) continue;
+    for (let s = s0; s < s1; s++) { const t = slot[s] / 3 | 0; if (size.get(uf.find(t)) <= 2) uf.uni(keep, t); }
   }
   return uf.find;
 }
@@ -139,14 +305,15 @@ export function partition(positions, index, opts = {}) {
   const result = { labels: new Int32Array(T), count: T ? 1 : 0, sizes: [T] };
   if (T < 2) return result;
   const tv = index ? (t, k) => index[t * 3 + k] : (t, k) => t * 3 + k;
-  const method = opts.method || 'vertex';
+  const method = opts.method || 'bodies';
   const epsAbs = +opts.epsAbs > 0 ? +opts.epsAbs : 0;
   let root;                                                   // triangle → a number that is the same for triangles of one piece
   if (method === 'spatial') {
     root = bySpace(positions, T, tv, +opts.cellSize, null);
   } else {
     const { canon, N } = weld(positions, vCount, epsAbs, !!index);
-    if (method === 'edge') root = byEdges(T, tv, canon, N, () => true);
+    if (method === 'bodies') root = byBodies(positions, T, tv, canon, N);
+    else if (method === 'edge') root = byEdges(T, tv, canon, N, () => true);
     else if (method === 'faces') {
       const nrm = triNormals(positions, T, tv);
       const cos = Math.cos(Math.max(0, +opts.faceAngle >= 0 ? +opts.faceAngle : 20) * Math.PI / 180);
