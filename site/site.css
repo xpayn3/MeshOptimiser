@@ -1551,6 +1551,7 @@ main { overflow-x: clip; }
 .pb.is-last s { background: var(--accent); }
 .pb em { font-style: normal; color: var(--tx-2); font-variant-numeric: tabular-nums; text-align: right; }
 .pop-note { margin: 0; max-width: 30ch; color: var(--tx-3); font-size: 9.5px; line-height: 1.5; }
+.pop-info-top .pop-note + .pop-note { margin-top: -8px; }   /* the credit line follows the result line with no gap: one small print */
 @media (max-width: 860px) {
   .pop.is-axle { height: 212vh; }
   .pop.is-axle .pop-pin { position: sticky; top: var(--bar-h); height: max(calc(100svh - var(--bar-h)), 520px); display: block; }
@@ -1561,6 +1562,7 @@ main { overflow-x: clip; }
   .pop-info { display: contents; }
   .pop-info-top { position: absolute; z-index: 1; top: 14px; right: var(--gutter); width: min(210px, 56%); gap: 10px; pointer-events: none; }
   .pop-info-top .pop-note { max-width: none; margin-top: -4px; text-align: right; }
+  .pop-info-top .pop-note + .pop-note { margin-top: -10px; }
 
   .pop.is-axle .pop-copy { bottom: 20px; }
   .pb { grid-template-columns: 50px minmax(0, 1fr) 44px; font-size: 10px; }
