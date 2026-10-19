@@ -11,6 +11,9 @@ Last release in the changelog: **v0.35.0**.
 
 ## New
 
+![new][new] **The default light is brighter.** The studio reflections on the plain backgrounds are nearly twice as strong (0.5 to 0.9) and the exposure starts at 1.15, so shaded sides and dark parts read more clearly. Not yet checked against saved scenes, which keep the exposure they were saved with.
+Where: `_STUDIO_REFL` and `applyConfig` in `app/js/app.js`, `state.exposure`, the hidden `#light-exposure` in `app/index.html`.
+
 ## Fixed
 
 ## Found, not fixed yet

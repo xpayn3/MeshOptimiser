@@ -86,7 +86,7 @@ const state = {
   cameraClipMode: 'auto',
   showFps: false, showStats: false,
   shadowsEnabled: false,
-  exposure: 1.0,
+  exposure: 1.15,
   ambientIntensity: 0.55, sunIntensity: 1.2,
   sunAzimuth: 45, sunElevation: 45,
   gridCellMode: 'auto',
@@ -6793,7 +6793,7 @@ const _RendererOwner = (() => {
     if (r.outputColorSpace !== undefined) r.outputColorSpace = THREE.SRGBColorSpace;
     if (r.toneMapping !== undefined) {
       r.toneMapping = THREE.NeutralToneMapping ?? THREE.ACESFilmicToneMapping;
-      r.toneMappingExposure = 1.0;
+      r.toneMappingExposure = 1.15;
     }
     // (No dithering: the WebGPU renderer of this three.js version has none. The `dithering = true` that stood here was skipped by
     // its own `'dithering' in r` test and did nothing, on both backends.)
@@ -8630,7 +8630,7 @@ function _envFollowUp() {
 // for it (_hemiTarget in initRenderer), so colours stay what they were while
 // dark parts get an edge, a sheen and a visible top and side.
 // HDRI mode replaces it with the chosen environment and puts it back on exit.
-const _STUDIO_REFL = 0.5;
+const _STUDIO_REFL = 0.9;
 let _studioRefl = null;            // { renderer, tex }: built once per renderer
 let _studioReflTries = 0;
 let _studioReflTimer = 0;
