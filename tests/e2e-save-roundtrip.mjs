@@ -15,6 +15,8 @@ if (!process.env.PHASE) {
   let pass = 0, fail = 0; const check = (n, ok, x) => { if (ok) { pass++; console.log('PASS', n); } else { fail++; console.log('FAIL', n, x === undefined ? '' : JSON.stringify(x)); } };
   const near = (u, v) => Math.abs(u - v) < 1e-3;
   for (const id of ['display-units', 'grid-cell', 'light-exposure', 'light-sun', 'light-ambient', 'light-azi', 'light-ele', 'toggle-shadows', 'scene-scale', 'scene-up-axis', 'bg-mode']) check('the setting ' + id + ' comes back', a.ctl[id] === b.ctl[id], [a.ctl[id], b.ctl[id]]);
+  check('the selection comes back (two parts)', a.sel.length === 2 && JSON.stringify(a.sel) === JSON.stringify(b.sel), [a.sel, b.sel]);
+  check('and so does the isolation', a.isolated === true && b.isolated === true, [a.isolated, b.isolated]);
   check('the explode amount comes back', a.explode === b.explode, [a.explode, b.explode]);
   check('and the parts are where they were (written together, then moved apart again)', JSON.stringify(a.centers) === JSON.stringify(b.centers), [a.centers, b.centers]);
   check('the scale and the turn of the scene come back', JSON.stringify(a.root) === JSON.stringify(b.root), [a.root, b.root]);
@@ -92,6 +94,7 @@ const snapshot = () => evalJS(`(() => {
   { const b = st.partsRoot && new (window.THREE_BOX || Object)(); }
   out.root = st.partsRoot ? { scale: st.partsRoot.scale.toArray().map(x => +x.toFixed(4)), rot: [st.partsRoot.rotation.x, st.partsRoot.rotation.y, st.partsRoot.rotation.z].map(x => +x.toFixed(4)), pos: st.partsRoot.position.toArray().map(x => +x.toFixed(3)) } : null;
   out.centers = st.parts.filter(p => !p.deleted && p.bbox).slice(0, 4).map(p => p.bbox.getCenter(new (p.bbox.min.constructor)()).toArray().map(x => +x.toFixed(2)));
+  out.sel = st.parts.filter(p => !p.deleted && st.selected.has(p.partId)).map(p => p.name).sort(); out.isolated = !!st._isolated;
   out.explode = st.explode ? JSON.stringify(st.explode) : null;
   out.size = (() => { const p = st.parts.find(p => !p.deleted && p.bbox); return p ? p.bbox.getSize(new (p.bbox.min.constructor)()).toArray().map(x => +x.toFixed(2)) : null; })();
   out.units = document.getElementById('display-units') && document.getElementById('display-units').value;
@@ -105,7 +108,7 @@ const edit = async () => {
   await evalJS(`(() => { const st = window.state; const ps = st.parts.filter(p => !p.deleted && p.mesh);
     ps[0].name = 'RENAMED_PART'; ps[1].locked = true; ps[2].flagged = true; ps[3].visible = false; if (ps[3].mesh) ps[3].mesh.visible = false; ps[4].shadeAngle = 12;
     const m = ps[5].mesh.material; m.opacity = 0.5; m.transparent = true; m.emissive.setHex(0x112233); m.emissiveIntensity = 2; m.name = 'My glass'; m.metalness = 0.9; m.roughness = 0.1; m.color.setHex(0x228833); ps[5].originalColor.setHex(0x228833);
-    ps[6].userExtras = { custom: 'hello' }; ps[7].note = 'a note on this part'; return true; })()`);
+    ps[9].name = 'SEL_A'; ps[10].name = 'SEL_B'; st.selected = new Set([ps[9].partId, ps[10].partId]); st._isolated = true; ps[6].userExtras = { custom: 'hello' }; ps[7].note = 'a note on this part'; return true; })()`);
   await sleep(500);
 };
 try {

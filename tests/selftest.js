@@ -479,7 +479,7 @@
     T.act('selClear'); await T.sleep(200);
     const w0 = T.world();
     const h0 = state.history.length;
-    document.getElementById('btn-bake-transforms').click(); await T.sleep(700);
+    T.act('bakeTransforms'); await T.sleep(700);
     T.eq(T.world(), w0, 'Bake transforms moved geometry on screen');
     T.assert(state.history.length > h0, 'Bake transforms pushed no undo entry');
     await T.undo(); T.eq(T.world(), w0, 'undo of Bake transforms');
@@ -491,7 +491,7 @@
     await T.pick(['Torus']);
     const w1 = T.world();
     const h1 = state.history.length;
-    document.getElementById('btn-center-pivot').click(); await T.sleep(700);
+    T.act('centerPivot'); await T.sleep(700);
     T.eq(T.world(), w1, 'Center pivot moved geometry on screen (shared geometry?)');
     T.assert(state.history.length > h1, 'Center pivot pushed no undo entry');
     await T.undo(); T.eq(T.world(), w1, 'undo of Center pivot');

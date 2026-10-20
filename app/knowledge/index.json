@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 10234
+  "chars": 10364
  },
  {
   "slug": "move-the-view",
@@ -101,7 +101,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Search, rename, group and reorder the parts of a model, rename many at once, and flatten a hierarchy that is deeper than you need.",
-  "chars": 8409
+  "chars": 8438
  },
  {
   "slug": "organise-the-tree",
@@ -124,7 +124,7 @@
   "title": "Quick wand",
   "group": "around",
   "groupTitle": "Find your way around",
-  "summary": "Hold W and a ring of commands opens under the pointer. Flick toward one and let go.",
+  "summary": "Hold Q and a ring of commands opens under the pointer. Flick toward one and let go.",
   "chars": 3733
  },
  {
@@ -149,7 +149,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
-  "chars": 13976
+  "chars": 14153
  },
  {
   "slug": "read-the-numbers",
@@ -173,7 +173,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "One card, one button: every clean-up the app has, run one after another on the whole scene. Choose how far to go, read the plan, press Optimise.",
-  "chars": 5803
+  "chars": 6527
  },
  {
   "slug": "delete-small-parts",
@@ -341,7 +341,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Open the materials dock to see every material in the scene, recolour all the parts that share one, assign a material with a button or by dragging it onto a part, and let the dock float as a window.",
-  "chars": 5993
+  "chars": 6173
  },
  {
   "slug": "face-colours",
@@ -357,7 +357,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale.",
-  "chars": 1780
+  "chars": 1782
  },
  {
   "slug": "move-rotate-scale",
@@ -445,7 +445,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Stand a model upright on the grid, centred over the origin, when it arrived on its side or far away from the centre of the scene. A small drawing shows the result first.",
-  "chars": 3818
+  "chars": 3814
  },
  {
   "slug": "align-parts",
@@ -581,7 +581,7 @@
   "group": "reference",
   "groupTitle": "Reference",
   "summary": "Every keyboard shortcut and mouse action in MeshOptimiser, grouped by what it does.",
-  "chars": 8256
+  "chars": 8378
  },
  {
   "slug": "file-formats",

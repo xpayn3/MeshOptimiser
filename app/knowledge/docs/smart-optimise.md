@@ -19,6 +19,10 @@ It is lossy: it removes parts and triangles. The whole run is one undo step, so 
 
 In the card, `Enter` runs it, like **Optimise**, and `Esc` puts the card away.
 
+## Scan first
+
+Press **Scan** to look through the model before anything is changed. The list under it says what each look found: empty parts, exact copies, hidden parts, fasteners (with their share of the triangles), small parts (for the percentage in the card) and holes. A line with nothing to do says none. **Highlight** (the crosshair) selects the parts of a finding so they are outlined in the view; **Isolate** shows only them, and pressing it again shows everything. The scan changes nothing and leaves your selection as it was. When the number of triangles or parts changes afterwards the list dims and **Rescan** comes back. A big model takes a little while: the hidden-parts look draws the scene from many sides.
+
 ## The levels
 
 A level is a starting point. It sets the switches under **Steps** and the triangle target.

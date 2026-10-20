@@ -17,7 +17,7 @@ When the app starts, a short splash screen shows the version and what the app is
 
 ## Left sidebar
 
-It shows the parts tree: every part of the model, arranged in groups, with a search field and a row of seven icon buttons above it (**Collapse**, **Rename**, **Flatten**, **Transform**, **Recentre**, **Centre pivot** and **Bake transforms**; the names show when the pointer rests on a button). **Transform** shows a card with position, rotation and size at the foot of the sidebar. It works on several selected parts at once (see [Move, rotate, scale](meshoptimiser://docs/move-rotate-scale)) and takes its own room under the tree. The library of parts you can add is not in this sidebar any more. It is a drawer under the viewport (see below).
+It shows the parts tree: every part of the model, arranged in groups, with a search field and a row of seven icon buttons above it (**Collapse**, **Rename**, **Flatten**, **Transform**, **Recentre**, **Show in list** and **Scroll to top**; the names show when the pointer rests on a button). **Show in list** scrolls the tree to the selected part and opens the groups it is in; **Scroll to top** goes back to the first row. **Transform** shows a card with position, rotation and size at the foot of the sidebar. It works on several selected parts at once (see [Move, rotate, scale](meshoptimiser://docs/move-rotate-scale)) and takes its own room under the tree. The library of parts you can add is not in this sidebar any more. It is a drawer under the viewport (see below).
 
 ## Viewport
 

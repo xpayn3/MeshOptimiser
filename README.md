@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.35.3** — Smart optimise scans the model first, the colour picker has a right-click menu, a material of the Properties card is picked with a click, and the colours and buttons of the app are cleaned up.
+
+- ![new][new] **Smart optimise scans first:** a list of what it found (empty parts, exact copies, hidden parts, fasteners, small parts, holes) with Highlight and Isolate for each, before anything is changed.
+- ![new][new] **A right-click menu in the colour picker:** copy, paste, and the colour spaces (HEX, RGB, HSV, HSL) moved into it.
+- ![new][new] **Materials:** a click on a material of the Properties card picks it, a double-click opens it, Delete takes it off the selected parts; a saved scene reopens with the same parts selected.
+- ![polish][polish] **One look:** a new black (#141414), flat main buttons, one check box, rows and spacing on whole pixels, and a Claude pill in the status bar.
+- ![new][new] **On the website, the menu bar goes away on the way down and comes back on the way up.**
+
 **v0.35.2** — parts can be copied between scenes and between windows, the app opens in a window of its own, and the Animate timeline edits several clips at once.
 
 - ![new][new] **Copy and paste between scene tabs and windows,** with colours, materials and pictures; a pill says what came across. *New window* is in the Menu.
@@ -318,11 +326,6 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 - ![fix][fix] **Glass no longer hides what is behind it,** the gizmo handles grab from nearer, and a new animation waits for Play.
 
 **v0.35.1** — big STEP files mesh on all cores, the command cards line up, and drags stay smooth on big models.
-
-- ![perf][perf] **Big STEP files are meshed on all cores:** the V8 import went from 103 s to 81 s.
-- ![new][new] **The command cards are calmer:** small switches, even rows, no picture on top, and the Wireframe only on the part in work.
-- ![new][new] **A brighter default light** and a plain-text recent-tools list.
-- ![fix][fix] **No more stalls** while idle, scrubbing, resizing or dragging on a big model, and fixes for Edit mesh dots, the far floor grid and a part that stopped drawing.
 
 **v0.35.0** — one part can wear several colours, STEP files open with cleaner meshes, and Photo mode draws the model for pictures.
 

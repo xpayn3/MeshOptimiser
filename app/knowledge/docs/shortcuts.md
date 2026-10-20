@@ -113,7 +113,8 @@ These work in the piece modes of [Edit mesh](meshoptimiser://docs/edit-mesh). `1
 - `Ctrl + K`: Search commands, parts, the library and settings
 - `Shift + C`: The same search
 - `Shift + Enter`: In the search, on a switch: go to the switch instead of turning it
-- `W`: Quick wand: hold it over the viewport, flick toward a command, let go. A quick tap leaves the ring open.
+- `Q`: Quick wand: hold it over the viewport, flick toward a command, let go. A quick tap leaves the ring open.
+- `W`: Switches the gizmo’s axes between World and Local (also in Edit mesh). A message says which.
 - `Shift + L`: Library drawer
 - `Shift + M`: Materials drawer
 - `Shift + A`: Animate: switch it on or off
@@ -159,7 +160,7 @@ These work in the piece modes of [Edit mesh](meshoptimiser://docs/edit-mesh). `1
 - `Alt`: While dragging a number: ten times finer
 - `Click`: On a number: type a value
 - `Right-click`: On a number field: Cut, Copy, Paste, Select all, Reset and quick edits of the number
-- `Double-click`: On the material card in Properties: rename the material
+- `Double-click`: On the material card in Properties: open the material; on its name, rename it
 - `Drag`: A material from the Materials dock into the view: assign it
 - `Shift + Drag`: A material onto another material: merge the two
 
@@ -170,7 +171,7 @@ These work in the piece modes of [Edit mesh](meshoptimiser://docs/edit-mesh). `1
 
 ## Change a key
 
-Every key can be changed except `Esc`, the Quick wand’s `W` and the mouse gestures. Open the list with `?`.
+Every key can be changed except `Esc`, the Quick wand’s `Q` and the mouse gestures. Open the list with `?`.
 
 1. Click the shortcut you want to change, and press the new keys.
 2. If another command already has that combination, the app says which one and offers **Replace**. A few combinations are kept by the browser for itself (such as `Ctrl + W` and `F5`) and are refused.

@@ -44,7 +44,7 @@ The material editor is a small window of its own. It stays where you put it, als
 
 ## Rename a material
 
-Select a part that uses the material and double-click anywhere on the material card in **Properties**. The name turns into a field you can type in. An open material editor takes the new name at once.
+Select a part that uses the material and double-click the name on the material card in **Properties**. The name turns into a field you can type in. An open material editor takes the new name at once. A single click on the card only picks the material (it is lit), a double-click anywhere else on it opens the editor, and `Delete` takes the picked material off the selected parts.
 
 ## Give parts a different material
 

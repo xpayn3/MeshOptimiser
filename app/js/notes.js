@@ -236,12 +236,12 @@
     const need = 'Before you change a note, it needs to know who you are.'; const me = author(); const done = n.status === 'resolved';
     const last = [...n.messages].reverse().find(m => !m.deleted);
     S.host.ctxMenu([
-      { icon: 'message-square', label: 'Open', fn: () => openNote(id, { fly: false }) },
-      { icon: 'message-square', label: 'Open the conversation', fn: () => openNote(id, { fly: false, expand: true }) },
-      { icon: 'message-square', label: 'Comment…', fn: () => { openNote(id, { fly: false, expand: true }); setTimeout(() => { const ta = $('textarea', S.pop); if (ta) ta.focus(); }, 60); } },
+      { icon: 'sticky-note', label: 'Open', fn: () => openNote(id, { fly: false }) },
+      { icon: 'sticky-note', label: 'Open the conversation', fn: () => openNote(id, { fly: false, expand: true }) },
+      { icon: 'sticky-note-plus', label: 'Comment…', fn: () => { openNote(id, { fly: false, expand: true }); setTimeout(() => { const ta = $('textarea', S.pop); if (ta) ta.focus(); }, 60); } },
       { icon: 'pencil', label: 'Edit…', fn: () => { openNote(id, { fly: false, expand: true }); S.editProps = true; buildPop(); setTimeout(() => { const i = S.pop && S.pop.querySelector('.nt-descin'); if (i) { i.focus(); } }, 40); } },
       '---',
-      { icon: 'check', label: done ? 'Open it again' : 'Mark as resolved', fn: () => needName(() => change(done ? 'Reopen note' : 'Resolve note', () => C.setStatus(n, author(), done ? 'open' : 'resolved')), need) },
+      { icon: done ? 'sticky-note-x' : 'sticky-note-check', label: done ? 'Open it again' : 'Mark as resolved', fn: () => needName(() => change(done ? 'Reopen note' : 'Resolve note', () => C.setStatus(n, author(), done ? 'open' : 'resolved')), need) },
       { icon: 'palette', label: 'Tag', sub: C.TAGS.map(t => ({ icon: 'circle', label: t.label + (t.id === n.tag ? '  ✓' : ''), fn: () => needName(() => change('Tag note', () => C.setTag(n, author(), t.id)), need) })) },
       { icon: 'calendar', label: 'Due date', sub: [['Today', C.todayStr(0)], ['Tomorrow', C.todayStr(1)], ['In a week', C.todayStr(7)], ['Take it off', '']].map(([l, d]) => ({ icon: 'calendar', label: l + (d && n.due === d ? '  ✓' : ''), fn: () => needName(() => change('Due date', () => C.setDue(n, author(), d)), need) })) },
       { icon: 'flag', label: 'Priority', sub: C.PRIORITIES.map(p => ({ icon: 'circle', label: p[0].toUpperCase() + p.slice(1) + ((n.priority || 'normal') === p ? '  ✓' : ''), fn: () => needName(() => change('Priority', () => C.setPriority(n, author(), p)), need) })) },
@@ -254,7 +254,7 @@
       { icon: 'copy', label: 'Copy as text', fn: () => copy(C.toText([n], { title: 'Note ' + n.n })) },
       { icon: 'eye-off', label: 'Hide all pins', fn: () => { S.pins = false; render(); } },
       '---',
-      { icon: 'trash-2', label: 'Delete the note', danger: true, fn: () => needName(() => { change('Delete note', () => C.removeNote(n, author())); if (S.openId === id) closePop(); }, need) },
+      { icon: 'sticky-note-minus', label: 'Delete the note', danger: true, fn: () => needName(() => { change('Delete note', () => C.removeNote(n, author())); if (S.openId === id) closePop(); }, need) },
     ], x, y);
   }
   function decoratePin(n, b) {
@@ -583,7 +583,7 @@
     else if (dm) { const blk = el('div', 'nt-descblock'); blk.append(descEl(n, dm)); const g1 = gallery(false); if (g1) blk.append(g1); pop.append(blk); }
     else if (!n.deleted) { const w = el('div', 'nt-descblock'); w.append(el('div', 'nt-nodesc', 'Empty note')); const g2 = gallery(false); if (g2) w.append(g2); pop.append(w); }
         pop.append(...partsSection(n, sub.meta));
-    pop.append(toolBar({ left: [prev, next], right: [done, more] }));
+    { const tb = toolBar({ left: [prev, next], right: [done, more] }); tb.classList.add('nt-bar-pop'); pop.append(tb); }      // (inset like the part card and the section labels)
     if (S.editProps) pop.append(propsBlock(n, (k, v) => needName(() => {
       if (k === 'tag') change('Tag note', () => C.setTag(n, author(), v)); else if (k === 'assignee') change('Assign note', () => C.assign(n, author(), v));
       else if (k === 'priority') change('Priority', () => C.setPriority(n, author(), v)); else if (k === 'due') change('Due date', () => C.setDue(n, author(), v));
@@ -844,7 +844,7 @@
   function render() {
     const card = S.card; if (!card) return; S._pmap = null;
     try { syncPill(); } catch (_) {}      // (the top pill, like Animate's: the notes are on)
-    { const tb = document.getElementById('notes-tool'); if (tb) { const on = notesOn(); tb.classList.toggle('active', on); tb.setAttribute('aria-pressed', String(on)); tb.title = on ? 'Notes mode is on. Click to leave it' : 'Enter notes mode'; } }      // (the toolbar button glows while notes mode is on)
+    { const tb = document.getElementById('notes-tool'); if (tb) { const on = notesOn(); tb.classList.toggle('active', on); tb.setAttribute('aria-pressed', String(on)); const nu = S.items.filter(x => !x.deleted && C.unread(x, author(), S.since)).length; tb.classList.toggle('has-unread', nu > 0); tb.title = (on ? 'Notes mode is on. Click to leave it' : 'Enter notes mode') + (nu ? ' (' + nu + ' unread)' : ''); } }      // (the toolbar button glows while notes mode is on)
     const st = C.stats(S.items), me = author();
     const badge = $('#notes-count', card.section); if (badge) { badge.hidden = st.total === 0; badge.textContent = String(st.open); badge.classList.toggle('is-zero', st.open === 0); badge.title = st.open + ' open of ' + st.total; }
     $('.nt-me', card.body).textContent = me ? me : 'Set your name'; card.setSeg(); card.setPins(); card.setReview(); card.isoBtn.classList.toggle('on', !!S.isoNoted && !!S.host.isolated());
@@ -892,6 +892,8 @@
     const grp = el('div', 'side-group', 'Review');
     const sec = el('div', 'section'); sec.id = 'notes-section';
     sec.innerHTML = '<div class="section-h"><i class="sec-ico">' + svg('note') + '</i><span>Notes</span><span class="sec-count" id="notes-count" hidden></span><span class="chev">▾</span></div><div class="section-b" id="notes-body"></div>';
+    // the header's icon is the one of the Notes button in the view's left toolbar (sticky-notes), drawn by Lucide as the others are
+    try { const L = window.lucide, ic = L && L.icons && (L.icons.StickyNotes || L.icons['sticky-notes']); if (ic && L.createElement) { const slot = sec.querySelector('.sec-ico'), g = L.createElement(ic); g.setAttribute('class', 'lucide lucide-sticky-notes sec-ico'); slot.replaceWith(g); } } catch (_) {}
     const body = $('#notes-body', sec);
     // who is writing, and what the pins show
     const top = el('div', 'nt-top-row'); const me = el('button', 'nt-me', ''); me.type = 'button'; me.title = 'The name shown next to what you write';
@@ -928,7 +930,7 @@
     navPrev.addEventListener('click', () => step(-1)); navNext.addEventListener('click', () => step(1));
     const isoBtn = iconBtn('focus', 'Show only the parts that have notes'); isoBtn.addEventListener('click', isolateNoted); nav.append(navLabel, isoBtn, navPrev, navNext); body.append(nav);
     const list = el('div', 'nt-list'); body.append(list);
-    const markRead = el('button', 'nt-markread', ''); markRead.type = 'button'; markRead.hidden = true; markRead.addEventListener('click', markAllRead); body.append(markRead);
+    const markRead = el('button', 'nt-markread btn-sm', ''); markRead.type = 'button'; markRead.hidden = true; markRead.addEventListener('click', markAllRead); body.append(markRead);
     // sign-off on the scene
     const rev = el('div', 'nt-review'); const revSum = el('div', 'nt-sub nt-revsum');
     const rbtn2 = (state, icon, label, tip) => { const b = el('button', 'nt-rv'); b.type = 'button'; b.dataset.state = state; b.title = tip; b.innerHTML = svg(icon) + '<span>' + label + '</span>'; b.addEventListener('click', () => needName(() => { C.setReview(S.reviews, author(), state); render(); }, 'Before you sign off, notes need to know who you are.')); return b; };
@@ -995,7 +997,8 @@
     };
     ref.parentNode.insertBefore(grp, ref); ref.parentNode.insertBefore(sec, ref);
     S.card = { section: sec, body, list, pins, eyeBtn, addPin, markRead, foot, mine, setSeg, setPins: () => {}, setReview, isoBtn, navLabel, navPrev, navNext };
-    const hd = sec.querySelector('.section-h'); hd.addEventListener('click', (e) => { e.stopImmediatePropagation(); hd.classList.toggle('collapsed'); }, true);      // (the app also wires every section header once; this one answers alone, so the two never toggle it twice)
+    const hd = sec.querySelector('.section-h'); try { window.__moSection?.apply(hd, true); } catch (_) {}      // (folded, or as the person left it: remembered like every card)
+    hd.addEventListener('click', (e) => { e.stopImmediatePropagation(); hd.classList.toggle('collapsed'); try { window.__moSection?.save(hd); } catch (_) {} }, true);      // (the app also wires every section header once; this one answers alone, so the two never toggle it twice)
   }
   function avatarSlot() { const s = el('span', 'nt-ic'); s.innerHTML = svg('user'); return s; }
   const title = () => 'Notes' + (S.host.state._loadedFilename ? ' · ' + S.host.state._loadedFilename : '');
@@ -1027,7 +1030,6 @@
       { const rv = C.reviewSummary(S.reviews); if (rv.approved.length) bits.push('approved by ' + rv.approved.join(', ')); if (rv.changes.length) bits.push('changes asked by ' + rv.changes.join(', ')); }
       if (last) bits.push('latest from ' + last.by + ', ' + C.ago(last.at));
       S.host.toast(st.total + (st.total === 1 ? ' note' : ' notes') + ' in this scene' + (news.length ? ' · ' + news.length + ' new' : ''), bits.join(' · '), news.length ? 'success' : 'info', news.length ? 7000 : 5200);
-      const sec = S.card && S.card.section; if (sec) sec.querySelector('.section-h').classList.remove('collapsed');
     }
   }
   function reset() { S.items = []; S.seen = {}; S.reviews = {}; S.thumbs = {}; S.parts.clear(); S.filter = 'open'; S.search = ''; for (const [id, b] of pinEls) { b.remove(); pinEls.delete(id); } closePop(); stopPlace(); updateSince(); S.on = false; S.pins = false; S.off = false; render(); }
@@ -1146,7 +1148,7 @@
 .nt-msg.flash{animation:nt-flash 1.1s var(--ease-out)}@keyframes nt-flash{from{background:var(--ac-tint-18)}}
 .nt-hist{list-style:none;margin:0 var(--space-2xl) var(--space-lg);padding:0;max-height:96px;overflow:auto;color:var(--tx3);font-size:var(--fs-11)}
 .nt-brief{display:flex;gap:var(--space-lg);padding:var(--space-md) var(--space-2xl) var(--space-lg);}.nt-text.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.nt-moreinfo{display:block;width:calc(100% - 28px);margin:var(--space-lg) var(--space-2xl) var(--space-2xl);padding:var(--space-sm) var(--space-lg);border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx3);font:inherit;font-size:var(--fs-11);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:var(--tr-bg-fg)}.nt-moreinfo{box-sizing:border-box;width:calc(100% - var(--space-2xl) * 2);margin-bottom:var(--space-sm)}.nt-bar.nt-bar-end{padding:0 var(--space-lg) var(--space-lg)}.nt-moreinfo:hover{background:var(--s4);color:var(--tx)}
+.nt-moreinfo{display:block;width:calc(100% - 28px);margin:var(--space-lg) var(--space-2xl) var(--space-2xl);padding:var(--space-sm) var(--space-lg);border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx3);font:inherit;font-size:var(--fs-11);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:var(--tr-bg-fg)}.nt-moreinfo{box-sizing:border-box;width:calc(100% - var(--space-2xl) * 2);margin-bottom:var(--space-sm)}.nt-bar.nt-bar-end{padding:0 var(--space-2xl) var(--space-lg)}.nt-bar-pop{padding:var(--space-sm) var(--space-2xl) 0}.nt-moreinfo:hover{background:var(--s4);color:var(--tx)}
 .nt-comp{margin:0 var(--space-2xl) var(--space-2xl);padding:var(--space-md) var(--space-sm) var(--space-sm) var(--space-lg);border-radius:var(--r-lg);background:var(--ctl-bg);border:1px solid var(--ctl-bd);display:flex;flex-direction:column;gap:var(--space-xs);transition:border-color var(--dur-base) var(--ease-out)}.nt-comp:hover{border-color:var(--ctl-bd-hover)}.nt-comp:focus-within{border-color:var(--s7)}
 .nt-comp textarea{display:block;width:100%;box-sizing:border-box;resize:none;border:0;outline:0;background:transparent;color:var(--tx);font:inherit;min-height:20px;max-height:140px;padding:var(--space-2xs) 0;overflow-y:auto}
 .nt-comp-row{display:flex;align-items:center;gap:var(--space-xs)}.nt-as{color:var(--tx3);font-size:var(--fs-11);cursor:pointer;margin-left:var(--space-xs)}.nt-as:hover{color:var(--tx);text-decoration:underline}
@@ -1169,14 +1171,14 @@
 .nt-ttl{height:var(--btn-h-md);padding:0 var(--ctl-px);font-size:var(--fs-md);font-weight:var(--fw-semibold)}.nt-descin{resize:none;padding:var(--space-md) var(--ctl-px);min-height:44px;overflow-y:auto}
 .nt-ttl:hover,.nt-descin:hover{border-color:var(--ctl-bd-hover)}.nt-ttl:focus,.nt-descin:focus{border-color:var(--s7)}
 .nt-formfoot{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-md) var(--space-2xl) var(--space-2xl)}
-.nt-btn.primary{background:var(--ac);color:var(--tx-on-accent,var(--white))}.nt-btn.primary:hover:not(:disabled){background:var(--ac);filter:brightness(1.1)}.nt-btn:disabled{opacity:var(--op-4);cursor:default}
+.nt-btn.primary{background:var(--btn-primary-bg);color:var(--btn-primary-fg)}.nt-btn.primary:hover:not(:disabled){background:var(--btn-primary-bg-hover)}.nt-btn:disabled{opacity:var(--op-4);cursor:default}
 .nt-rename{width:100%;max-width:100%;height:var(--btn-h-md);box-sizing:border-box;padding:0 var(--space-md);border:1px solid var(--s7);border-radius:var(--r-sm);background:var(--ctl-bg);color:var(--tx);font:inherit;font-size:var(--fs-3xl);font-weight:var(--fw-semibold);outline:none}
 .nt-htitle{max-width:100%}.nt-hl{flex:1}.nt-sub{max-width:230px}
 .nt-descblock{padding:var(--space-xs) var(--space-2xl) 0}.nt-desc{display:flex;flex-direction:column;gap:var(--space-sm)}.nt-desctop{display:flex;align-items:center;gap:var(--space-md);min-height:22px}.nt-desclabel{color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase}.nt-desctop .nt-ib{width:22px;height:22px;opacity:0;transition:opacity var(--dur-fast)}.nt-desc:hover .nt-desctop .nt-ib,.nt-desctop .nt-ib:focus-visible{opacity:1}.nt-descby{color:var(--tx3);font-size:var(--fs-11)}.nt-adddesc{background:none;border:0;padding:0;color:var(--tx3);font:inherit;font-size:var(--fs-11);cursor:pointer}.nt-adddesc:hover{color:var(--ac-text)}.nt-nodesc{color:var(--tx3);font-size:var(--fs-11)}
 .nt-seclabel{padding:var(--space-2xl) var(--space-2xl) var(--space-md);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;}#notes-body .nt-seclabel{padding:0}
 .nt-msgs .nt-empty{padding:var(--space-md) 0}
 .nt-new{flex:2;height:var(--btn-h-md);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-sm);border:0;border-radius:var(--r-md);background:var(--wn-tint-15);color:var(--wn);font:inherit;font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg),transform var(--dur-fast) var(--ease-ios)}.nt-new svg{width:var(--icon-xs);height:var(--icon-xs)}.nt-new:hover{filter:brightness(1.15)}.nt-new:active{transform:scale(.97)}
-.nt-chk{flex:none;width:18px;height:18px;margin-top:1px;border-radius:50%;border:1.5px solid var(--s7);background:transparent;color:transparent;display:grid;place-items:center;padding:0;cursor:pointer;transition:var(--tr-bg-fg),border-color var(--dur-fast)}.nt-chk svg{width:var(--icon-xs);height:var(--icon-xs);stroke-width:3}.nt-chk:hover{border-color:var(--ok);color:var(--ok)}.nt-chk.on{background:var(--ok);border-color:var(--ok);color:var(--white)}
+.nt-chk{flex:none;width:18px;height:18px;margin-top:0;border-radius:50%;border:1.5px solid var(--s7);background:transparent;color:transparent;display:grid;place-items:center;padding:0;cursor:pointer;transition:var(--tr-bg-fg),border-color var(--dur-fast)}.nt-chk svg{width:var(--icon-xs);height:var(--icon-xs);stroke-width:3}.nt-chk:hover{border-color:var(--ok);color:var(--ok)}.nt-chk.on{background:var(--ok);border-color:var(--ok);color:var(--white)}
 .nt-rtitle{display:flex;align-items:center;gap:var(--space-sm);min-width:0}.nt-rt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm);font-weight:var(--fw-medium);color:var(--tx)}.nt-row.done .nt-rt{text-decoration:line-through;color:var(--tx3);font-weight:inherit}
 .nt-num.mini{width:18px;height:18px;font-size:9px}.nt-pri{flex:none;width:6px;height:6px;border-radius:50%}.nt-pri.high{background:var(--pin)}.nt-pri.urgent{background:var(--er)}
 .nt-meta{display:flex;align-items:center;gap:var(--space-sm);overflow:hidden}.nt-mt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nt-chip{flex:none;padding:0 var(--space-sm);border-radius:var(--r-pill);background:var(--s3);color:var(--tx2);font-size:var(--fs-10);line-height:15px}.nt-chip.late{background:color-mix(in srgb,var(--er) 16%,transparent);color:var(--er)}.nt-chip.soon{background:color-mix(in srgb,var(--pin) 16%,transparent);color:var(--pin)}
@@ -1212,7 +1214,7 @@
 .nt-bar{display:flex;align-items:center;gap:var(--space-md)}.nt-bar .nt-new{flex:1;min-width:0}.nt-bar .nt-ib{flex:none;width:34px;height:34px;border-radius:50%;background:var(--s3);color:var(--tx-control)}.nt-bar .nt-ib:hover{background:var(--s4)}.nt-bar .nt-ib.on{background:var(--ac-tint-18);color:var(--ac-text)}.nt-bar .nt-ib svg{width:16px;height:16px}
 .nt-searchrow .nt-searchbox{display:block}.nt-hidden,#notes-section .nt-seclabel{display:none!important}.nt-revsum{padding:0 var(--space-2xs)}
 .nt-tools{display:flex;gap:var(--space-sm)}.nt-tool{flex:1;height:var(--btn-h-md);display:inline-grid;place-items:center;border:0;border-radius:var(--r-md);background:var(--s3);color:var(--tx-control);cursor:pointer;padding:0;transition:var(--tr-bg-fg),transform var(--dur-fast) var(--ease-ios)}.nt-tool svg{width:var(--icon-sm);height:var(--icon-sm)}.nt-tool:hover{background:var(--s4);color:var(--tx)}.nt-tool:active{transform:scale(.96)}.nt-tool.on{background:var(--ac-tint-18);color:var(--ac-text)}
-.nt-markread{display:block;width:100%;height:var(--btn-h-sm);padding:0 var(--space-md);border:0;border-radius:var(--r-md);background:var(--s3);color:var(--tx2);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg)}.nt-markread:hover{background:var(--s4);color:var(--tx)}.nt-markread:active{transform:scale(.98)}.nt-markread[hidden]{display:none}.nt-seg{display:flex;gap:var(--space-2xs);padding:2px;border-radius:var(--r-md);background:var(--s3)}.nt-seg button{flex:1;min-width:0;height:var(--btn-h-sm);border:0;border-radius:calc(var(--r-md) - 2px);background:transparent;color:var(--tx3);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg)}.nt-seg button:hover{color:var(--tx)}.nt-seg button.on{background:var(--s6);color:var(--tx);box-shadow:0 1px 2px var(--blk-30)}
+.nt-markread{display:block;width:100%}      /* (looks like the Save photo button of Photo mode: the .btn-sm of the stylesheet) */.nt-markread[hidden]{display:none}.nt-seg{display:flex;gap:var(--space-2xs);padding:2px;border-radius:var(--r-md);background:var(--s3)}.nt-seg button{flex:1;min-width:0;height:var(--btn-h-sm);border:0;border-radius:calc(var(--r-md) - 2px);background:transparent;color:var(--tx3);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg)}.nt-seg button:hover{color:var(--tx)}.nt-seg button.on{background:var(--s6);color:var(--tx);box-shadow:0 1px 2px var(--blk-30)}
 .nt-sbar{display:flex;gap:var(--space-sm);align-items:center}.nt-searchbox{position:relative;flex:1;min-width:0;display:block}.nt-searchbox svg{position:absolute;left:var(--space-lg);top:50%;width:var(--icon-xs);height:var(--icon-xs);margin-top:-6.5px;color:var(--tx3);pointer-events:none}
 .nt-search{width:100%;box-sizing:border-box;height:var(--ctl-h);padding:0 var(--ctl-px) 0 30px;border:1px solid var(--ctl-bd);border-radius:var(--ctl-r);background:var(--ctl-bg);color:var(--tx);font:inherit;font-size:var(--ctl-fs);outline:none;transition:border-color var(--dur-base) var(--ease-out)}.nt-search:hover{border-color:var(--ctl-bd-hover)}.nt-search:focus{border-color:var(--ctl-bd-focus)}
 .nt-sbar .nt-sel{width:72px;height:var(--ctl-h)}.nt-sbar .nt-ib.on{background:var(--ac-tint-18);color:var(--ac-text)}
@@ -1345,7 +1347,7 @@
   window.MONotesUI = {
     init, layout, load, reset, serialize, count, undoOp, agent, stats: () => C.stats(S.items), open: (id) => openNote(id),
     togglePlace: () => newNote(), addForSelection, addForScene, addAt, addToPartAt, isolateNoted, importFromFile, saveReport,
-    toggleMode: () => (notesOn() ? exitNotes() : enterNotes()), togglePins: () => { S.pins = !S.pins; if (S.pins) S.off = false; render(); }, openList: () => { const s = S.card && S.card.section; if (s) { s.querySelector('.section-h').classList.remove('collapsed'); s.scrollIntoView({ block: 'nearest' }); } }, next: () => step(1), prev: () => step(-1),
+    toggleMode: () => (notesOn() ? exitNotes() : enterNotes()), exitMode: () => { if (notesOn() || S.pins) exitNotes(); }, togglePins: () => { S.pins = !S.pins; if (S.pins) S.off = false; render(); }, openList: () => { const s = S.card && S.card.section; if (s) { s.querySelector('.section-h').classList.remove('collapsed'); s.scrollIntoView({ block: 'nearest' }); } }, next: () => step(1), prev: () => step(-1),
     markAllRead, review: (state) => needName(() => { C.setReview(S.reviews, author(), state); render(); }, 'Before you sign off, notes need to know who you are.'), reviews: () => S.reviews, items: () => S.items, author, isPlacing: () => !!S.placing, setAuthor,
     _state: S,
   };

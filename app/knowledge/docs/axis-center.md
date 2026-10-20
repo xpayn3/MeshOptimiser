@@ -6,7 +6,7 @@ Every part has an axis: the origin and the X, Y and Z the gizmo shows in **Local
 
 ## Axis Center
 
-Put the axis in the middle of the part and reset its rotation to 0, 0, 0. It is in the search as **Axis Center** and is the **Centre pivot** button of the parts tree toolbar. A part whose axis is already there is left alone: no change and no undo step.
+Put the axis in the middle of the part and reset its rotation to 0, 0, 0. It is in the search as **Axis Center** and as **Centre pivot** in the right-click menu of a selection. A part whose axis is already there is left alone: no change and no undo step.
 
 ## The Axis card
 

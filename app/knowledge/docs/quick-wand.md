@@ -1,8 +1,8 @@
 # Quick wand
 
-Hold W and a ring of commands opens under the pointer. Flick toward one and let go.
+Hold Q and a ring of commands opens under the pointer. Flick toward one and let go.
 
-The Quick wand puts the commands you use most under your hand, so you do not have to go to a button. Hold `W` with the pointer over the viewport and a ring opens around the pointer. Move toward a slice and let go of `W`. That runs it.
+The Quick wand puts the commands you use most under your hand, so you do not have to go to a button. Hold `Q` with the pointer over the viewport and a ring opens around the pointer. Move toward a slice and let go of `Q`. That runs it.
 
 Only the direction counts, not the distance, so a short flick is enough. The slices are always in the same places, so after a while your hand knows where Hide is without looking.
 
