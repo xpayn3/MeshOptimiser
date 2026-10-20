@@ -731,7 +731,7 @@ window.labApps = [
       ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
       ['Stacked copies', 1, [], ['stacked-copies']],
     ],
-    stats: [['Version', '0.35.1'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
+    stats: [['Version', '0.35.2'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',
       '400 identical bolts, 80 duplicate brackets, half a million broken triangles. MeshOptimiser keeps each repeat once, rebuilds the bad geometry and drops what you can’t see.',
@@ -778,7 +778,7 @@ window.labApps = [
         ['Decimate within a distance', 'Reduce until no point moves more than the millimetres you set. Measured, not assumed.'],
         ['Remove holes', 'Bolt holes, slots and pockets closed, with no ring of points left behind.'],
         ['Remove floating pieces', 'Plugs, shavings and stray dots, gone.'],
-        ['Split', 'One fused lump, back to the solids it was.'],
+        ['Split', 'One fused lump, back to the solids it was, or a mesh with several materials, one part for each.', 'new'],
         ['Smart fit', 'Swaps a part for a box, a cylinder or blocks that keep the outline.'],
         ['Quick remesh (B)', 'Slide down a column of levels and watch the part change.'],
         ['Fit to budget', 'Name a triangle count. The heaviest meshes go first.'],
@@ -890,7 +890,7 @@ window.labApps = [
       ] },
       { title: 'The app', items: [
         ['Keyboard remapper', 'The shortcuts window is a keyboard: lit keys carry their command, and holding Ctrl, Shift or Alt shows what those do. Click a shortcut, press new keys, and a key that is taken warns you first. Keep your set in a profile, one per person.'],
-        ['Scene tabs', 'Each tab is its own scene. Opening a file never replaces your work.'],
+        ['Scene tabs', 'Each tab is its own scene. Opening a file never replaces your work. Copy parts from one tab, or one window, into another.', 'new'],
         ['Cards over the model', 'Tools open as cards you can move. Enter runs, Esc closes.'],
         ['A look of your own', 'Accent colour, tones, font, text size, corners and density.'],
         ['Numbers you drag', 'Drag any number sideways to change it, or click to type. Right-click to reset, step, double or halve it.'],
@@ -1032,7 +1032,19 @@ window.labApps = [
     changelog: {
       link: 'https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md',
       versions: [
-        { version: '0.35.1', fixes: 226, date: '19 Oct 2026 · 16:00', latest: true,
+        { version: '0.35.2', fixes: 233, date: '20 Oct 2026 · 03:33', latest: true,
+          summary: 'Parts can be copied from one scene tab or one window into another, the app opens in a window of its own, and Animate edits several clips at once. 233 fixes in all.',
+          items: [
+            ['New', 'Copy parts from one scene into another, in a tab or in another window, with their colours, materials and pictures. A pill on top of the view says what came across.'],
+            ['New', 'Menu › New window opens the app again in a window of its own, and the app menu has a Website link.'],
+            ['New', 'Split meshes by material: a mesh that came in with several materials comes apart into one part for each.'],
+            ['New', 'Animate: drag rows of the timeline into order, edit several clips at once, add an animation with the plus on the object’s card, and nothing plays until you press Play.'],
+            ['New', 'A Tools card with Merge, Decimate, Recentre, Align and Remove hidden faces beside the clean-ups, and Delete small parts as a floating card.'],
+            ['New', 'Claude can take its pictures in Photo mode, and asks you first.'],
+            ['Fix', 'Glass and other see-through materials no longer hide what is behind them, and a scene saved with Photo mode on opens with its own background.'],
+            ['Fix', 'The move, rotate and scale handles grabbed the mouse from too far away, and a command card that grew past the top edge could not be reached.'],
+          ] },
+        { version: '0.35.1', fixes: 226, date: '19 Oct 2026 · 16:00',
           summary: 'Big STEP files are meshed on all cores, the command cards line up, and drags stay smooth on a big model. 226 fixes in all.',
           items: [
             ['New', 'Big STEP files are meshed on all cores. A 357 MB engine opens in 81 seconds instead of 103, and a 45 MB gearbox meshes in under five.'],

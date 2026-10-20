@@ -308,7 +308,10 @@ export function partition(positions, index, opts = {}) {
   const method = opts.method || 'bodies';
   const epsAbs = +opts.epsAbs > 0 ? +opts.epsAbs : 0;
   let root;                                                   // triangle → a number that is the same for triangles of one piece
-  if (method === 'spatial') {
+  if (method === 'material') {
+    const tm = opts.triMat;                                   // the material of each triangle (facemat.js): one piece for each
+    root = (t) => (tm ? tm[t] : 0);
+  } else if (method === 'spatial') {
     root = bySpace(positions, T, tv, +opts.cellSize, null);
   } else {
     const { canon, N } = weld(positions, vCount, epsAbs, !!index);
@@ -347,9 +350,10 @@ export function partition(positions, index, opts = {}) {
     labels[t] = id; sizes[id]++;
   }
   let count = sizes.length;
+  if (method === 'material') result.matOf = [...number.keys()];        // (the material each piece wears, in the order of the pieces)
   // pieces under minTriangles together make one more part (the largest piece is never one of them)
   const minT = Math.floor(+opts.minTriangles) || 0;
-  if (minT > 1 && count > 1) {
+  if (minT > 1 && count > 1 && method !== 'material') {
     let largest = 0;
     for (let i = 1; i < count; i++) if (sizes[i] > sizes[largest]) largest = i;
     const small = sizes.map((n, i) => i !== largest && n < minT);

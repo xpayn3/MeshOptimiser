@@ -42,6 +42,19 @@ A menu opens with the things you can do with tabs:
 
 Close all and Close others ask just once for all the scenes that have unsaved changes. Duplicate scene, Close all and Close others are in the search (`Ctrl + K`) too.
 
+## Copy parts into another scene
+
+Select parts, press `Ctrl + C`, switch to another tab and press `Ctrl + V`. The parts stand where they stood, with their colours, materials and pictures, and they are selected afterwards. A small pill on top of the view says what was pasted and from which scene. It is one undo step.
+
+- The parts arrive as loose parts. The folders they were in, shared copies and the settings of shapes stay behind. Parts that shared one mesh in the first scene still share it in the new one.
+- If a group is selected in the scene you paste into, the parts go into it.
+- A part copied from an exploded view lands where it rests, not where it was pulled to.
+- The scene you copied from has to still be open.
+
+## A second window
+
+**New window** in the menu opens the app again in a window of its own, the size of the one you are in. Copy and paste work between the two windows in the same way, as long as both are open on the same address. If the browser blocks the new window, allow pop-ups for the app’s address and try again.
+
 ## Put tabs in order
 
 1. Press a tab and pull it sideways.

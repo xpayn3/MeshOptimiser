@@ -1,7 +1,7 @@
 // ========== MESHOPTIMISER DOCS ==========
 // The beginner knowledge base for MeshOptimiser: every article of the Docs
 // section, as plain data. tools/build-app-site.js renders it into the pages
-// under apps/meshoptimiser/. It describes the released version, v0.35.1.
+// under apps/meshoptimiser/. It describes the released version, v0.35.2.
 // Text only: `code`, [[Key]], {{Label in the app}} and [link](#article-slug)
 // are the whole of the inline markup. Re-run the builder after editing.
 module.exports = {
@@ -1461,6 +1461,16 @@ module.exports = {
           ['Open recent', 'A list of the files you opened lately.'],
         ]],
         ['p', 'Close all and Close others ask just once for all the scenes that have unsaved changes. Duplicate scene, Close all and Close others are in the search ([[Ctrl + K]]) too.'],
+        ['h', 'Copy parts into another scene'],
+        ['p', 'Select parts, press [[Ctrl + C]], switch to another tab and press [[Ctrl + V]]. The parts stand where they stood, with their colours, materials and pictures, and they are selected afterwards. A small pill on top of the view says what was pasted and from which scene. It is one undo step.'],
+        ['list', [
+          'The parts arrive as loose parts. The folders they were in, shared copies and the settings of shapes stay behind. Parts that shared one mesh in the first scene still share it in the new one.',
+          'If a group is selected in the scene you paste into, the parts go into it.',
+          'A part copied from an exploded view lands where it rests, not where it was pulled to.',
+          'The scene you copied from has to still be open.',
+        ]],
+        ['h', 'A second window'],
+        ['p', '{{New window}} in the menu opens the app again in a window of its own, the size of the one you are in. Copy and paste work between the two windows in the same way, as long as both are open on the same address. If the browser blocks the new window, allow pop-ups for the app’s address and try again.'],
         ['h', 'Put tabs in order'],
         ['steps', [
           'Press a tab and pull it sideways.',

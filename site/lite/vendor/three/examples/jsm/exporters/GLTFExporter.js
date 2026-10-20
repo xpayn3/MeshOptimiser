@@ -357,6 +357,47 @@ function getMinMax( attribute, start, count ) {
 
 	};
 
+	// MeshOptimiser: a plain attribute is read straight from its array. The loop below went through getX() and friends for every
+	// component (and for a normalized attribute scaled each one to 0..1 and back), 60 ms of a recovery copy of a scene of three
+	// million points. The numbers are the same ones: getX() of a plain attribute is the array's value; of a normalized one the round
+	// trip gives the value back, except that a signed 8- or 16-bit one has its most negative value clamped (-32768 reads as -32767,
+	// both mean -1), which is done here too. A signed normalized 32-bit one is left to the loop (its round trip is not exact).
+	const arr = attribute.array;
+	const signedNorm = attribute.normalized === true && ( arr instanceof Int8Array || arr instanceof Int16Array );
+	if ( attribute.isInterleavedBufferAttribute !== true && ArrayBuffer.isView( arr )
+		&& ! ( attribute.normalized === true && arr instanceof Int32Array ) ) {
+
+		// (remembered on the attribute by its version and the array itself: the app bumps the version whenever the array changes,
+		// as it must for the GPU to see the change, so a later copy of the same geometry, 28 million numbers for the Scania V8,
+		// 40 ms, reads the answer back)
+		const mm = attribute._minMax;
+		if ( mm && mm.array === arr && mm.version === attribute.version && mm.start === start && mm.count === count ) {
+
+			output.min = mm.min.slice(); output.max = mm.max.slice();
+			return output;
+
+		}
+
+		const n = attribute.itemSize, min = output.min, max = output.max;
+		const floor = signedNorm ? ( arr instanceof Int8Array ? - 127 : - 32767 ) : - Infinity;
+		for ( let i = start * n, end = ( start + count ) * n; i < end; i += n ) {
+
+			for ( let a = 0; a < n; a ++ ) {
+
+				let v = arr[ i + a ];
+				if ( v < floor ) v = floor;
+				if ( v < min[ a ] ) min[ a ] = v;
+				if ( v > max[ a ] ) max[ a ] = v;
+
+			}
+
+		}
+
+		attribute._minMax = { array: arr, version: attribute.version, start, count, min: min.slice(), max: max.slice() };
+		return output;
+
+	}
+
 	for ( let i = start; i < start + count; i ++ ) {
 
 		for ( let a = 0; a < attribute.itemSize; a ++ ) {
@@ -551,6 +592,12 @@ class GLTFWriter {
 	 */
 	async writeAsync( input, onDone, options = {} ) {
 
+		// MeshOptimiser: with options.yieldMs set, the writer hands the page back to the browser between nodes once it has run
+		// for that many milliseconds, so that a copy of a big scene is many short tasks instead of one long one (the recovery
+		// copy of the Scania V8, 54 MB, held the page 180 ms). Each mesh is still written whole. A file export does not set it.
+		this._sliceStart = performance.now();
+		this._yieldMs = options.yieldMs > 0 ? options.yieldMs : 0;
+
 		this.options = Object.assign( {
 			// default options
 			binary: false,
@@ -581,7 +628,11 @@ class GLTFWriter {
 		const extensionsRequired = writer.extensionsRequired;
 
 		// Merge buffers.
-		const blob = new Blob( buffers, { type: 'application/octet-stream' } );
+		// MeshOptimiser: the binary file is built in one buffer below, with one copy of the data; the Blob is for the
+		// non-binary output only. (Every buffer is already padded to four bytes, so the sum is the merged size.)
+		let mergedByteLength = 0;
+		for ( const b of buffers ) mergedByteLength += b.byteLength;
+		const blob = options.binary === true ? null : new Blob( buffers, { type: 'application/octet-stream' } );
 
 		// Declare extensions.
 		const extensionsUsedList = Object.keys( extensionsUsed );
@@ -591,55 +642,55 @@ class GLTFWriter {
 		if ( extensionsRequiredList.length > 0 ) json.extensionsRequired = extensionsRequiredList;
 
 		// Update bytelength of the single buffer.
-		if ( json.buffers && json.buffers.length > 0 ) json.buffers[ 0 ].byteLength = blob.size;
+		if ( json.buffers && json.buffers.length > 0 ) json.buffers[ 0 ].byteLength = mergedByteLength;
 
 		if ( options.binary === true ) {
 
 			// https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#glb-file-format-specification
 
-			const reader = new FileReader();
-			reader.readAsArrayBuffer( blob );
-			reader.onloadend = function () {
-
-				// Binary chunk.
-				const binaryChunk = getPaddedArrayBuffer( reader.result );
-				const binaryChunkPrefix = new DataView( new ArrayBuffer( GLB_CHUNK_PREFIX_BYTES ) );
-				binaryChunkPrefix.setUint32( 0, binaryChunk.byteLength, true );
-				binaryChunkPrefix.setUint32( 4, GLB_CHUNK_TYPE_BIN, true );
+			// MeshOptimiser: the file is laid out in one ArrayBuffer and the data copied into it once. It used to go through a Blob
+			// of the buffers, a FileReader, a padded copy, a Blob of the five parts and a second FileReader: five copies of a 54 MB
+			// file on the main thread, 70 ms of a recovery copy. The bytes are the same.
+			{
 
 				// JSON chunk.
 				const jsonChunk = getPaddedArrayBuffer( stringToArrayBuffer( JSON.stringify( json ) ), 0x20 );
-				const jsonChunkPrefix = new DataView( new ArrayBuffer( GLB_CHUNK_PREFIX_BYTES ) );
-				jsonChunkPrefix.setUint32( 0, jsonChunk.byteLength, true );
-				jsonChunkPrefix.setUint32( 4, GLB_CHUNK_TYPE_JSON, true );
+				const binaryByteLength = getPaddedBufferSize( mergedByteLength );
+				const totalByteLength = GLB_HEADER_BYTES
+					+ GLB_CHUNK_PREFIX_BYTES + jsonChunk.byteLength
+					+ GLB_CHUNK_PREFIX_BYTES + binaryByteLength;
+				const out = new ArrayBuffer( totalByteLength ), view = new DataView( out ), bytes = new Uint8Array( out );
 
 				// GLB header.
-				const header = new ArrayBuffer( GLB_HEADER_BYTES );
-				const headerView = new DataView( header );
-				headerView.setUint32( 0, GLB_HEADER_MAGIC, true );
-				headerView.setUint32( 4, GLB_VERSION, true );
-				const totalByteLength = GLB_HEADER_BYTES
-					+ jsonChunkPrefix.byteLength + jsonChunk.byteLength
-					+ binaryChunkPrefix.byteLength + binaryChunk.byteLength;
-				headerView.setUint32( 8, totalByteLength, true );
+				view.setUint32( 0, GLB_HEADER_MAGIC, true );
+				view.setUint32( 4, GLB_VERSION, true );
+				view.setUint32( 8, totalByteLength, true );
 
-				const glbBlob = new Blob( [
-					header,
-					jsonChunkPrefix,
-					jsonChunk,
-					binaryChunkPrefix,
-					binaryChunk
-				], { type: 'application/octet-stream' } );
+				// JSON chunk.
+				let offset = GLB_HEADER_BYTES;
+				view.setUint32( offset, jsonChunk.byteLength, true );
+				view.setUint32( offset + 4, GLB_CHUNK_TYPE_JSON, true );
+				offset += GLB_CHUNK_PREFIX_BYTES;
+				bytes.set( new Uint8Array( jsonChunk ), offset );
+				offset += jsonChunk.byteLength;
 
-				const glbReader = new FileReader();
-				glbReader.readAsArrayBuffer( glbBlob );
-				glbReader.onloadend = function () {
+				// Binary chunk (the padding past the merged buffers is the zero the ArrayBuffer came with).
+				view.setUint32( offset, binaryByteLength, true );
+				view.setUint32( offset + 4, GLB_CHUNK_TYPE_BIN, true );
+				offset += GLB_CHUNK_PREFIX_BYTES;
+				// (with yieldMs the copying is sliced as the parts were: a 54 MB file is a dozen short tasks, not one of 30 ms)
+				if ( this._yieldMs ) { await new Promise( ( r ) => setTimeout( r, 0 ) ); this._sliceStart = performance.now(); }
+				for ( const b of buffers ) {
 
-					onDone( glbReader.result );
+					bytes.set( new Uint8Array( b ), offset );
+					offset += b.byteLength;
+					if ( this._yieldMs && performance.now() - this._sliceStart > this._yieldMs ) { await new Promise( ( r ) => setTimeout( r, 0 ) ); this._sliceStart = performance.now(); }
 
-				};
+				}
 
-			};
+				onDone( out );
+
+			}
 
 		} else {
 
@@ -1038,6 +1089,35 @@ class GLTFWriter {
 		const byteLength = getPaddedBufferSize( count * byteStride );
 		const dataView = new DataView( new ArrayBuffer( byteLength ) );
 		let offset = 0;
+
+		// MeshOptimiser: a plain attribute whose array already has the component type of the accessor (a Float32Array for FLOAT,
+		// a Uint16Array for UNSIGNED_SHORT, ...) and whose stride needs no padding is copied in one go. The loop below wrote every
+		// component through the DataView, one call each: a scene of three million points took a quarter of a second on the main
+		// thread for each recovery copy, and the viewport stood still for it. An unsigned normalized attribute holds the same integers
+		// the loop writes (getX() scales them to 0..1 and MathUtils.normalize() scales them back); a signed 8- or 16-bit one has its
+		// most negative value clamped by the loop (-32768 is written as -32767; both read as -1), and the copy is clamped the same way
+		// after it is made, so that the file stays the same byte for byte. A signed normalized 32-bit one is left to the loop.
+		const fastTypes = {
+			[ WEBGL_CONSTANTS.FLOAT ]: Float32Array, [ WEBGL_CONSTANTS.INT ]: Int32Array, [ WEBGL_CONSTANTS.UNSIGNED_INT ]: Uint32Array,
+			[ WEBGL_CONSTANTS.SHORT ]: Int16Array, [ WEBGL_CONSTANTS.UNSIGNED_SHORT ]: Uint16Array,
+			[ WEBGL_CONSTANTS.BYTE ]: Int8Array, [ WEBGL_CONSTANTS.UNSIGNED_BYTE ]: Uint8Array,
+		};
+		const Fast = fastTypes[ componentType ];
+		if ( Fast && attribute.isInterleavedBufferAttribute !== true && attribute.array instanceof Fast && byteStride === attribute.itemSize * componentSize && ! ( attribute.normalized === true && Fast === Int32Array ) ) {
+
+			const n = count * attribute.itemSize;
+			const copy = new Fast( dataView.buffer, 0, n );
+			copy.set( attribute.array.subarray( start * attribute.itemSize, start * attribute.itemSize + n ) );
+			if ( attribute.normalized === true && ( Fast === Int8Array || Fast === Int16Array ) ) {
+
+				const floor = Fast === Int8Array ? - 127 : - 32767;
+				for ( let k = 0; k < n; k ++ ) if ( copy[ k ] < floor ) copy[ k ] = floor;
+
+			}
+
+			offset = n * componentSize;
+
+		} else
 
 		for ( let i = start; i < start + count; i ++ ) {
 
@@ -2351,6 +2431,7 @@ class GLTFWriter {
 					const nodeIndex = await this.processNodeAsync( child );
 
 					if ( nodeIndex !== null ) children.push( nodeIndex );
+					if ( this._yieldMs && performance.now() - this._sliceStart > this._yieldMs ) { await new Promise( ( r ) => setTimeout( r, 0 ) ); this._sliceStart = performance.now(); }
 
 				}
 
@@ -2405,6 +2486,7 @@ class GLTFWriter {
 				const nodeIndex = await this.processNodeAsync( child );
 
 				if ( nodeIndex !== null ) nodes.push( nodeIndex );
+				if ( this._yieldMs && performance.now() - this._sliceStart > this._yieldMs ) { await new Promise( ( r ) => setTimeout( r, 0 ) ); this._sliceStart = performance.now(); }
 
 			}
 
