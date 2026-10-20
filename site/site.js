@@ -1252,3 +1252,60 @@
     }).observe(say);
   }
 })();
+
+// The timelapse under the home title: with reduced motion it stays on its poster picture.
+try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelectorAll('.hero-peek video').forEach(v => { v.removeAttribute('autoplay'); v.pause(); }); } catch (_) {}
+
+// The words over the timelapse: the video stays put and one word at a time comes up over it. --o (opacity), --y (a rise) and --b (a little blur)
+// on each word follow the scroll.
+try {
+  const sec = document.querySelector('[data-words]');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce), (max-width: 760px)');
+  if (sec) {
+    const words = [...sec.querySelectorAll('.word')], pin = sec.querySelector('.peek-pin');
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      if (still.matches || !words.length) { sec.classList.remove('is-live'); return; }
+      sec.classList.add('is-live');
+      const r = sec.getBoundingClientRect(), stick = parseFloat(getComputedStyle(pin).top) || 0, span = r.height - pin.offsetHeight;
+      const p = span > 0 ? Math.min(1, Math.max(0, (stick - r.top) / span)) : 0;
+      const n = words.length;
+      const g = Math.min(1, p / Math.max(0.01, (n - 1) / n)), ease = g * g * (3 - 2 * g);      // 0 when the pin starts, 1 when the last word starts, and it stays at 1
+      sec.style.setProperty('--s', (0.9 + 0.1 * ease).toFixed(4));
+      // each word comes in letter by letter (rising out of a blur, the letters a little after one another), holds, and goes out the same way
+      const cl = (v) => Math.min(1, Math.max(0, v)), eo = (t) => 1 - Math.pow(1 - t, 3);
+      words.forEach((w, i) => {
+        const x = p * n - i - 0.5;                        // 0 in the middle of this word's turn, -0.5 / 0.5 at its edges
+        const into = i ? 0.56 : 0.5;                      // (a word comes in a little before the one before it has gone)
+        const chs = w.querySelectorAll('.ch');
+        chs.forEach((ch, k) => {
+          const d = chs.length > 1 ? (k / (chs.length - 1)) * 0.1 : 0;
+          const e = eo(cl((x + into - d) / 0.32)), q = cl((x - 0.12 - d) / 0.27), qq = q * q;
+          ch.style.setProperty('--o', (e * (1 - qq)).toFixed(3));
+          ch.style.setProperty('--y', ((1 - e) * 0.4 - qq * 0.4).toFixed(3) + 'em');
+          ch.style.setProperty('--b', (((1 - e) + qq) * 12).toFixed(1) + 'px');
+        });
+        const pe = eo(cl((x + into - 0.1) / 0.3)), pq = cl((x - 0.1) / 0.25);
+        w.style.setProperty('--po', (pe * (1 - pq)).toFixed(3));
+        w.style.setProperty('--py', ((1 - pe) * 22 - pq * 14).toFixed(1) + 'px');
+        w.style.setProperty('--pb', (((1 - pe) + pq) * 6).toFixed(1) + 'px');
+      });
+    };
+    const on = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    window.addEventListener('scroll', on, { passive: true });
+    window.addEventListener('resize', on);
+    still.addEventListener?.('change', on);
+    update();
+  }
+} catch (_) {}
+
+// The text under the video slides up and fades in, one paragraph after the other, the first time it comes into view.
+try {
+  const box = document.querySelector('.intro');
+  if (box && 'IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    box.classList.add('is-armed');
+    const io = new IntersectionObserver((es) => { if (es.some(e => e.isIntersecting)) { io.disconnect(); box.classList.add('is-in'); } }, { threshold: 0.3 });
+    io.observe(box);
+  }
+} catch (_) {}

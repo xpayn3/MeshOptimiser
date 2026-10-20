@@ -41,9 +41,9 @@ const SHOWCASE = [
   { title: 'Make it yours', note: 'The app', names: ['Keyboard remapper', 'A look of your own', 'Numbers you drag', 'Cards over the model', 'Scene tabs', 'Floating Materials and Library'] },
   { title: 'Work with Claude', note: 'Ask for it', names: ['Just ask', 'You decide', 'Try it first', 'One request, a whole job', 'A whole folder', 'Pictures for a client'] },
 ];
-const CSS_V = 490;
+const CSS_V = 516;
 const RP_V = 2;           // report.js
-const JS_V = 128;
+const JS_V = 143;
 
 // The pages of an app's site, in the order of its navigation. `file` is
 // written into site.path; `nav` is false for a page the header leaves out.
@@ -309,6 +309,33 @@ ${rows.map(([label, command]) => `          <div><dt>${esc(label)}</dt><dd><code
   // The opening. With `site.pop`: a pinned section in which a real 3D model (hero3d.js, on a wide screen) pulls itself apart as the page scrolls
   // (site.js sets --p, 0 to 1). Only the model, on the page's own dark background: no picture of the app behind it. `pop.poster` is what stands in
   // until the mesh is drawn, and on a phone, without WebGL or with reduced motion.
+  // The text under the timelapse (`site.intro`): paragraphs, no title.
+  const introBand = () => {
+    const t = site.intro;
+    if (!t || !t.length) return '';
+    return `    <section class="wrap intro">
+${t.map(p => `      <p>${esc(p)}</p>`).join('\n')}
+    </section>`;
+  };
+
+  // The timelapse of the app under the hero title (`site.peek`): it rises from the bottom edge of the first screen, about half in view.
+  const peek = () => {
+    const pk = site.peek;
+    if (!pk) return '';
+    const w = site.words || [];
+    return `    <section class="hero-peek" data-words style="--n:${w.length}" aria-label="${esc(pk.label)}">
+      <div class="peek-pin">
+        <div class="peek-frame">
+          <div class="peek-bar" aria-hidden="true"><span class="peek-lights"><i></i><i></i><i></i></span><span class="peek-title">${esc(app.title)}</span></div>
+          <video muted loop playsinline autoplay preload="metadata" disablepictureinpicture poster="${asset(pk.poster)}" width="${pk.size[0]}" height="${pk.size[1]}" aria-label="${esc(pk.label)}"><source src="${asset(pk.clip)}" type="video/mp4; codecs=av01.0.08M.08" /><source src="${asset(pk.clipFallback)}" type="video/webm" /></video>
+        </div>
+${w.length ? `        <div class="words-over">
+${w.map(([word, line]) => `          <div class="word"><h2 aria-label="${esc(word)}"><span aria-hidden="true">${[...word].map(ch => `<span class="ch">${esc(ch)}</span>`).join('')}</span></h2><p>${esc(line)}</p></div>`).join('\n')}
+        </div>` : ''}
+      </div>
+    </section>`;
+  };
+
   const popHero = () => {
     const pop = site.pop;
     const cover = app.shots.find(([src]) => src === app.cover) || app.shots[0];
@@ -1220,6 +1247,10 @@ ${st.tiles.map(([label, claim, rest, line, colour], i) => `          <article cl
         <a class="btn is-large btn-gh" href="${repo}" rel="noopener">${GH_ICON}GitHub</a>
       </div>
     </section>
+
+${peek()}
+
+${introBand()}
 
 ${strengthsBand()}
 

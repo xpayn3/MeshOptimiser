@@ -569,6 +569,27 @@ window.labApps = [
       // the window without its model, and the model cut out, placed at box = [left, top, width] in % of the window
       // The opening: a truck front axle (295 parts) pulls itself apart as the page scrolls (hero3d.js; axle-mesh.json + axle-mesh.bin, baked from the app).
       // Without WebGL, on a phone or with reduced motion `poster` stands in. `note` is the small line under it, `credit` where the model comes from.
+      // The timelapse under the hero title: a screen recording of the app at work (cropped to the app window, 8x faster, 1600x900, no sound),
+      // pokes up from the bottom edge of the first screen, about half of it in view. Without motion or on a phone the poster stands in.
+      // The text under the timelapse, no title: what the app is, in two short paragraphs.
+      intro: [
+        'I was optimising big CAD models by hand and got tired of it, so I built the tool I wanted, and I kept building, so it now has tons of features. It converts STEP on your computer, finds repeated parts, hidden screws and tiny details for you, and exports one small GLB. Free, open source, nothing uploaded.',
+        'The STEP converter is built on OpenCascade and meshes a big assembly on several cores at once. Models are drawn with three.js and simplified with meshoptimizer. The app itself runs in your browser, with nothing to sign in to. It is all local. I made it as user friendly as I could. Started for fun, as a UX exercise, but it is a serious tool.',
+      ],
+      // The words that scroll past, one by one, after the timelapse (the page stays put while they change; Apple's way). Each is a big word and a
+      // line under it. Only what the app does: no figures that are not measured.
+      words: [
+        ['Light.', 'Fewer triangles, the same shape. It runs in your browser.'],
+        ['Free.', 'MIT licence. No account, no subscription.'],
+        ['Powerful.', 'A thousand parts and millions of triangles.'],
+      ],
+      peek: {
+        clip: 'Images/apps/meshoptimiser-timelapse.mp4',        // AV1 (about 3 MB); the VP9 file below is for browsers without AV1
+        clipFallback: 'Images/apps/meshoptimiser-timelapse.webm',
+        poster: 'Images/apps/meshoptimiser-timelapse_thumb.webp',
+        size: [1600, 900],
+        label: 'MeshOptimiser at work on a truck, sped up eight times',
+      },
       pop: {
         v: 2,
         poster: 'Images/apps/meshoptimiser-axle-exploded.webp',

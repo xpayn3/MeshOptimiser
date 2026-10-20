@@ -134,6 +134,21 @@ code, kbd { font-family: var(--mono); font-size: 0.86em; font-weight: 400; }
 code { padding: 2px 6px; border-radius: 4px; background: var(--surface-2); color: var(--tx); }
 
 /* ---- home: the opening ---- */
+/* The timelapse under the title: wider than the text column, and the first screen ends 30% of the way down it, so it pokes up from the
+   bottom edge. The hero above fills the first screen minus that share of the video (min-height); the variables are on :root so both can read them. */
+:root { --peek-show: 0.3; }      /* how much of the video shows on the first screen */
+@media (max-width: 1500px), (max-height: 950px) { :root { --peek-show: 0.15; } }      /* a smaller screen: just the top edge */
+:root { --peek-bar: clamp(22px, 1.9vw, 30px); --peek-w: min(100vw - clamp(24px, 4vw, 64px), 1640px, max(560px, ((100svh - var(--bar-h) - 440px) / var(--peek-show) - var(--peek-bar)) / 0.5625)); --peek-h: calc(var(--peek-w) * 0.5625 + var(--peek-bar)); }
+.hero:has(+ .hero-peek) { min-height: calc(100svh - var(--bar-h) - var(--peek-h) * var(--peek-show)); padding-bottom: clamp(24px, 3vw, 44px); box-sizing: border-box; }
+.hero-peek { width: var(--peek-w); max-width: none; margin-inline: auto; padding-inline: 0; }
+.peek-frame { overflow: hidden; border-radius: clamp(10px, 1.2vw, 18px); border: 1px solid var(--line, rgba(255, 255, 255, 0.1)); background: #101010; box-shadow: var(--shadow); }
+.peek-bar { position: relative; display: flex; align-items: center; justify-content: center; height: var(--peek-bar); background: #1c1c1e; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.peek-lights { position: absolute; left: clamp(10px, 1.1vw, 16px); display: flex; gap: clamp(6px, 0.6vw, 8px); }
+.peek-lights i { width: clamp(8px, 0.7vw, 10px); aspect-ratio: 1; border-radius: 50%; background: #ff5f57; }
+.peek-lights i:nth-child(2) { background: #febc2e; }
+.peek-lights i:nth-child(3) { background: #28c840; }
+.peek-title { color: #9a9a9e; font-size: clamp(10px, 0.8vw, 12px); letter-spacing: 0.01em; }
+.peek-frame video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
 .hero { padding-top: clamp(64px, 9vw, 128px); }
 .hero h1 { max-width: 13ch; margin-top: 22px; font-size: clamp(44px, 7.6vw, 104px); }
 .hero .lead { margin-top: clamp(22px, 2.6vw, 34px); }
@@ -1848,3 +1863,38 @@ h1, h2 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto;
 /* the version of a mesh tool, small beside its name (tv() in tools/site/build-app-site.js) */
 .tv { display: inline-block; margin-left: 8px; font: 500 10px/1 var(--font); font-style: normal; letter-spacing: 0.04em; text-transform: none; color: var(--tx-3, var(--tx)); opacity: 0.85; vertical-align: 0.15em; white-space: nowrap; cursor: default; }
 h1 .tv { font-size: 13px; margin-left: 12px; }
+
+/* ---- the words over the timelapse ----
+   The video pins on the screen (centred) while the page is scrolled through the section, 80vh a word; site.js sets --o / --y / --b on each word and
+   Without script, on a phone or with reduced motion: no pin, the words are a row of
+   plain words under the video. */
+.hero-peek { --slot: 80vh; --stick: max(var(--bar-h), calc((100svh - var(--peek-h)) / 2)); height: calc(var(--peek-h) + var(--n, 0) * var(--slot)); }
+.peek-pin { position: sticky; top: var(--stick); height: var(--peek-h); }
+.peek-frame { position: relative; }
+.hero-peek.is-live .peek-frame { transform: scale(var(--s, 0.9)); will-change: transform; }      /* a little smaller at the start and the end, full size in the middle (site.js) */
+.hero-peek.is-live .words-over { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.word { grid-area: 1 / 1; display: grid; justify-items: center; gap: clamp(10px, 1.6vw, 24px); text-align: center; padding-inline: var(--gutter); }
+.hero-peek.is-live .word h2 .ch { display: inline-block; opacity: var(--o, 0); translate: 0 var(--y, 0); filter: blur(var(--b, 0px)); will-change: opacity, translate, filter; }      /* letter by letter (site.js) */
+.hero-peek.is-live .word p { opacity: var(--po, 0); translate: 0 var(--py, 0); filter: blur(var(--pb, 0px)); }
+.word h2 { font-size: clamp(72px, 15vw, 260px); line-height: 1; padding-bottom: 0.14em; letter-spacing: -0.05em; }      /* (room for the tail of a g) */
+.word p { max-width: 34ch; margin: 0; color: var(--tx); font-size: clamp(16px, 1.6vw, 24px); line-height: 1.4; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7), 0 2px 24px rgba(0, 0, 0, 0.8); }
+@media (prefers-reduced-motion: reduce), (max-width: 760px) {
+  .hero-peek, .hero-peek.is-live { height: auto; }
+  .peek-pin, .hero-peek.is-live .peek-pin { position: static; height: auto; }
+  .words-over { position: static; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; padding-top: clamp(20px, 5vw, 36px); }
+  .hero-peek .word, .hero-peek.is-live .word { grid-area: auto; padding: 0; }
+  .hero-peek.is-live .word h2 .ch { display: inline; opacity: 1; translate: none; filter: none; }
+  .word h2 { font-size: clamp(30px, 9vw, 52px); padding-bottom: 0; text-shadow: none; }
+  .word p { display: none; }
+}
+
+/* the text under the timelapse: no title, a narrow column, big and quiet */
+.intro { display: grid; justify-items: center; gap: clamp(18px, 2vw, 28px); padding-block: clamp(120px, 16vw, 260px) clamp(120px, 16vw, 260px); }
+.intro p { max-width: 36em; margin: 0; color: var(--tx-2); font-size: clamp(17px, 1.5vw, 22px); line-height: 1.5; letter-spacing: -0.008em; text-align: center; text-wrap: balance; }
+.intro + .band { margin-top: 0; padding-top: 0; border-top: 0; }      /* (the text's own padding is the gap on both sides) */
+.intro p:first-child { color: var(--tx); }
+
+/* the text under the video slides up and fades in, a paragraph after the other (site.js adds .is-armed, then .is-in when it is in view) */
+.intro.is-armed p { opacity: 0; translate: 0 36px; transition: opacity 1s ease, translate 1.1s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.intro.is-armed p + p { transition-delay: 0.18s; }
+.intro.is-in p { opacity: 1; translate: 0 0; }
