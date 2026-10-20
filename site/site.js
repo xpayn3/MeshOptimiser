@@ -28,8 +28,20 @@
   const bar = $('#bar');
   if (bar) {
     let tick = false;
-    const mark = () => { tick = false; bar.classList.toggle('is-scrolled', window.scrollY > 6); };
+    // ...and it goes away on the way down and comes back on the way up: after 200px down (and not before the page is 240px in) it slides out; a flick of 24px up (or the top of the
+    // page, or the menu open, or a key pressed in the bar) brings it back
+    const root = document.documentElement;
+    let lastY = window.scrollY, run = 0;
+    const away = () => {
+      const y = window.scrollY, d = y - lastY; lastY = y;
+      run = d !== 0 && (d > 0) === (run > 0) ? run + d : d;
+      if (y < 80 || bar.matches(':focus-within') || (nav && nav.classList.contains('is-open'))) root.classList.remove('bar-away');
+      else if (run > 200 && y > 240) root.classList.add('bar-away');
+      else if (run < -24) root.classList.remove('bar-away');
+    };
+    const mark = () => { tick = false; bar.classList.toggle('is-scrolled', window.scrollY > 6); away(); };
     window.addEventListener('scroll', () => { if (!tick) { tick = true; requestAnimationFrame(mark); } }, { passive: true });
+    bar.addEventListener('focusin', () => root.classList.remove('bar-away'));
     mark();
   }
 

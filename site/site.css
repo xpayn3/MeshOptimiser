@@ -61,7 +61,10 @@ i, em { font-style: normal; }
 .skip:focus { top: 12px; }
 
 /* ---- the bar: the app's name, its pages, and the way to get it ---- */
-.bar { position: sticky; top: 0; z-index: 20; background: none; }
+.bar { position: sticky; top: 0; z-index: 20; background: none; transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s; }      /* (it leaves slowly, after a beat; it comes back at once, below) */
+html:not(.bar-away) .bar { transition-duration: 0.3s; transition-delay: 0s; }
+html.bar-away .bar { transform: translateY(-130%); pointer-events: none; }      /* (the bar leaves on the way down and returns on the way up: site.js) */
+@media (prefers-reduced-motion: reduce) { .bar { transition: none; } }
 /* no bar behind the menu: on scroll the menu, the name and the button float over the page, the menu as a pill with its own glass */
 .bar .nav, .bar .brand { transition: background-color 0.25s ease, box-shadow 0.25s ease, -webkit-backdrop-filter 0.25s ease, backdrop-filter 0.25s ease; }
 .bar.is-scrolled .nav { background: color-mix(in srgb, var(--bg) 90%, transparent); -webkit-backdrop-filter: saturate(1.6) blur(18px); backdrop-filter: saturate(1.6) blur(18px); box-shadow: inset 0 0 0 1px var(--line-strong), 0 10px 30px rgba(0, 0, 0, 0.35); }
@@ -1861,7 +1864,7 @@ h1, h2 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto;
   .band-head .lead { line-height: 1.62; }
 }
 /* the version of a mesh tool, small beside its name (tv() in tools/site/build-app-site.js) */
-.tv { display: inline-block; margin-left: 8px; font: 500 10px/1 var(--font); font-style: normal; letter-spacing: 0.04em; text-transform: none; color: var(--tx-3, var(--tx)); opacity: 0.85; vertical-align: 0.15em; white-space: nowrap; cursor: default; }
+.tv { display: inline-block; margin-left: 8px; font: 300 11px/1 var(--font); font-style: normal; letter-spacing: 0.02em; text-transform: none; color: var(--tx-3, var(--tx)); opacity: 0.85; vertical-align: baseline; white-space: nowrap; cursor: default; }
 h1 .tv { font-size: 13px; margin-left: 12px; }
 
 /* ---- the words over the timelapse ----

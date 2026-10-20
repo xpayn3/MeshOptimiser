@@ -1,31 +1,31 @@
 {
  "schema": 1,
  "stable": {
-  "version": "0.35.2",
+  "version": "0.35.3",
   "date": "2026-10-20",
-  "headline": "Copy parts between scenes and windows, a New window, and Animate that edits several clips at once",
+  "headline": "Smart optimise scans first, a right-click menu in the colour picker, a cleaner look",
   "notes": [
-   "Copy parts in one scene and paste them into another scene tab or another window of the app.",
-   "Menu › New window opens the app again in a window of its own.",
-   "Split meshes by material, and a Tools card with Merge, Decimate, Recentre and Align.",
-   "Animate: drag rows into order, edit several clips at once, and nothing plays until you press Play.",
-   "Claude can take its pictures in Photo mode, and asks you first.",
-   "Fixes for glass hiding what is behind it, gizmo handles that grabbed from too far, and command cards that grew past the top edge."
+   "Smart optimise scans the model first and lists what it found, with Highlight and Isolate.",
+   "A right-click menu in the colour picker: copy, paste and the colour spaces.",
+   "Click a material to pick it, double-click to open it, Delete takes it off.",
+   "A saved scene reopens with the same parts selected.",
+   "A new black, flat buttons and one check box throughout.",
+   "The Quick wand is on Q; W switches the gizmo between World and Local."
   ],
   "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
   "archive": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.2/meshoptimiser-app-0.35.2.zip",
-   "sha256": "03c3516bd116e27c2ec80a11d37a3f65d06281613895ed894e25db7c45c34220",
-   "size": 11967258
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.3/meshoptimiser-app-0.35.3.zip",
+   "sha256": "97a211ed48b2f28124fd314acf1eef04a23574949dc9985a8c064b35e7829a20",
+   "size": 11984198
   },
-  "requirements_sha256": "f1a93ffe65235c3537c454bcad32277ba82c666c35ece65e2fe598556d0f2f7d",
+  "requirements_sha256": "e3af5e22260095931b56d0d0d5c9215cd98b7540739be7eda417276748a7a322",
   "requirements_changed": false,
   "launcher": 4,
   "min_from": "",
   "installer": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.2/MeshOptimiser-v0.35.2.zip",
-   "sha256": "d75ba54b78f3d8cc8e3a7dad879158811621a7485fec45f02cad5d82fdcaaa1c",
-   "size": 12010045
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.3/MeshOptimiser-v0.35.3.zip",
+   "sha256": "9dc6e07c081ecc73110c88dadea6999135bc8fbfb8c7bf60690b3439ecabbc24",
+   "size": 12027164
   }
  }
 }
