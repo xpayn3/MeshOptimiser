@@ -205,6 +205,7 @@
   /* Font weights */
   /* No bold in the interface: labels, buttons and menu items are regular;
      only headings and titles step up, and only to medium. */
+  --fw-light:300;      /* (a tip: the hint type, thinner than the UI's own) */
   --fw-regular:400;
   --fw-medium:400;
   --fw-semibold:500;
@@ -285,6 +286,7 @@
   /* Search results: the colour of an icon by the kind of result (Settings › Search › Coloured icons) */
   --cat-file:#4db5ff; --cat-view:#35c9c0; --cat-selection:#a78bfa; --cat-edit:#fbbf24; --cat-app:#9aa3b2;
   --cat-part:#10b981; --cat-library:#fb923c; --cat-settings:#8b9bff; --cat-answer:#f472b6; --cat-controls:#7dd3fc; --cat-tool:#e879f9;
+  --anim-spin:#5aa2ff; --anim-swing:#b49aff; --anim-noise:#44d4a0; --anim-path:#f08cc0; --anim-oscillate:#f5b95a;      /* (the colour of each kind of animation: its card, its clip on the timeline) */
   --z-tooltip:10000;
   /* Floating windows and the layers of the view. A popped-out Materials or Library window is above the view's own bars, tips and cards; an open picker
      is above the windows. */
@@ -483,6 +485,12 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 #transform-panel .tform-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 #transform-panel .tform-input:disabled{cursor:not-allowed}
 #transform-panel .tform-input.mixed{color:var(--tx3);font-style:italic}
+.side-name{display:block;text-decoration:none;cursor:pointer;opacity:0;transform:translateY(var(--space-lg));transition:opacity calc(var(--dur-300) * 2) var(--ease-out),transform calc(var(--dur-300) * 2) var(--ease-out);padding:var(--space-4xl) 0 0;text-align:center;font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:var(--fs-xl);letter-spacing:-.005em;color:var(--tx3);user-select:none}      /* the name, faint, over the version at the very end of the right sidebar: it fades in and rises a little when it scrolls into view (.is-in) */
+.side-name.is-in{opacity:.5;transform:none}
+.side-name.is-in:hover{opacity:.8;transition-duration:var(--dur-fast)}
+@media (prefers-reduced-motion:reduce){.side-name{opacity:.5;transform:none;transition:none}}
+.side-name:focus-visible{outline:0;box-shadow:var(--ring-focus);border-radius:var(--r-sm)}
+.side-name+.side-ver{padding-top:var(--space-xs)}
 .side-ver{padding:14px 0 6px;text-align:center;font-size:var(--fs-10);letter-spacing:var(--tracking-mono);color:var(--tx3);opacity:.7;user-select:none}      /* the version, small, at the very end of the right sidebar: seen when it is scrolled to the bottom */
 #sidebar-right{position:relative;display:block;border-left:1px solid var(--bd);overflow-y:auto;background:var(--bg);}
 #sidebar-right .section{flex-shrink:0}
@@ -1689,6 +1697,9 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* the progress card of an import into a scene that is already open: it dims the viewport it sits in (the loader is inside the viewport's panel), not the whole app */
 #loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 62%,transparent);z-index:var(--z-window)}
 #loader.show{display:flex}
+/* Photo mode takes a moment to start (the light is loaded, the pictures are compiled): a card with a spinner in the middle of the view says so. The spinner turns on the compositor, so it keeps turning while the page is busy. */
+#photo-loading{position:absolute;left:50%;top:50%;z-index:var(--z-vp-pop);display:flex;align-items:center;gap:var(--space-2xl);padding:var(--space-2xl) var(--space-3xl);border-radius:var(--r-lg);background:color-mix(in srgb,var(--bg2) 88%,transparent);backdrop-filter:blur(12px);box-shadow:var(--surface-shadow);font-size:var(--fs-12);color:var(--tx);pointer-events:none;opacity:0;visibility:hidden;transform:translate(-50%,-50%) scale(.96);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),visibility 0s linear var(--dur-fast)}
+#photo-loading.show{opacity:1;visibility:visible;transform:translate(-50%,-50%);transition-delay:0s}
 .loader-card{width:600px;max-width:92vw;padding:var(--space-4xl) 22px 18px}
 .loader-head{display:flex;align-items:center;gap:var(--space-2xl)}
 .spinner{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--bg3);border-top-color:var(--ac);animation:spin .7s linear infinite;flex-shrink:0}
@@ -2065,11 +2076,11 @@ button.sc-row-keys:hover{background:var(--s5)}
    keyboard shortcut parsed out of the title string (e.g. "Fit (F)"). */
 .tip-pop{
   position:fixed;z-index:var(--z-tooltip);pointer-events:none;
-  color:var(--tx);
+  color:var(--tx2);      /* (softer than the main text: a tip is a hint, not a headline) */
   padding:var(--space-sm) var(--space-lg);
-  font:500 12px/1.4 var(--font-sans);
+  font:var(--fw-light) 12px/1.4 var(--font-sans);
   letter-spacing:var(--tracking-snug);
-  max-width:280px;
+  max-width:210px;      /* (a long tip runs to more lines instead of a wide window) */
   opacity:0;transform:translateY(2px);
   transition:opacity 110ms var(--ease-out),transform 110ms var(--ease-out);
 }
@@ -2533,9 +2544,11 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
    them; `quiet` only sets the label to the left, after the icon. (They used
    to be borderless rows, which read as a different kind of control.) */
 .btn-list{display:flex;flex-direction:column;gap:var(--space-sm)}
-/* Quick fixes: the six buttons in two columns */
-.btn-list:has(#btn-clean-empty){display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
-.btn-list:has(#btn-clean-empty) .btn{min-width:0;justify-content:flex-start;padding-inline:var(--space-md);gap:var(--space-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Tools: sits on the black sidebar like Shading, and its buttons are the icon buttons of the selection row above (the .sel-bar-grid): the name is in the tip */
+#sidebar-right #tools-section{background:none}
+#tools-section>.section-h{padding-left:var(--space-xs);padding-right:var(--space-xs)}
+#tools-section .section-b{padding-left:0;padding-right:0}
+#tools-card{display:flex;flex-direction:column;gap:var(--space-md)}
 .mb-field{display:flex;flex-direction:column;gap:var(--space-sm)}
 .mb-field[hidden]{display:none}
 .mb-field>span{font-size:var(--fs-12);color:var(--tx3)}
@@ -3054,7 +3067,7 @@ body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
 .cmd-foot-btn.cmd-ok.is-off{opacity:var(--op-45);pointer-events:none}
 :is(.cmd-foot-btn.cmd-ok,#_a#_b#_c){background:var(--ac);color:var(--white);padding:0 var(--space-md) 0 var(--space-xl)}
 :is(.cmd-foot-btn.cmd-ok,#_a#_b#_c):hover{background:var(--ac);color:var(--white);filter:brightness(1.08)}
-.cmd-foot-btn.cmd-ok .kbd-chip{color:inherit;opacity:var(--op-8)}
+.cmd-foot-btn.cmd-ok .kbd-chip{color:var(--white);background:var(--s6);border-color:var(--s7)}      /* (a light chip on the blue: it was the grey one at 80 %, and could not be seen) */
 /* A card with a footer button runs from there; the button in the body stays in the page (its state and Enter use it) but is not drawn. */
 .section-cmd:has(.cmd-foot .cmd-ok) [data-cmd-primary]{display:none}
 .section-cmd.cmd-in{animation:cmd-in var(--dur-160) var(--ease-out)}
@@ -4834,7 +4847,7 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 .mat-dock-h :is(.mat-split .mat-act-arrow,#_a#_b){width:16px;flex:0 0 16px;padding:0}
 /* One title bar for Batch rename, Advanced flatten, Materials and Library, built from these tokens: its height (the line under it
    included), the padding at its sides, the gap between what is in it, the title text and the close button. */
-:root{--win-bar-h:46px;--win-bar-px:var(--space-xl);--win-bar-pl:var(--space-2xl);--win-bar-gap:var(--space-xl);--win-bar-line:var(--surface-line);
+:root{--win-bar-h:42px;--win-bar-px:var(--space-xl);--win-bar-pl:var(--space-2xl);--win-bar-gap:var(--space-xl);--win-bar-line:var(--surface-line);
   --win-title-fs:var(--fs-xl);--win-title-fw:var(--fw-semibold);--win-title-ls:var(--tracking-tighter);--win-bar-btn:var(--btn-h-md);--win-bar-btn-r:var(--btn-r-sm)}
 #_brn-dialog.dlg-popup .dlg-head,#_flat-dialog.dlg-popup .dlg-head,#_anim-dialog.dlg-popup .dlg-head,#vp-materials-pop#vp-materials-pop .mat-dock-h,#vp-library-pop#vp-library-pop .mat-dock-h{box-sizing:border-box;height:var(--win-bar-h);min-height:var(--win-bar-h);flex:0 0 var(--win-bar-h);padding:0 var(--win-bar-px) 0 var(--win-bar-pl);gap:var(--win-bar-gap);align-items:center;border-bottom:1px solid var(--win-bar-line)}
 #_brn-dialog.dlg-popup .dlg-title,#_flat-dialog.dlg-popup .dlg-title,#_anim-dialog.dlg-popup .dlg-title,#vp-materials-pop#vp-materials-pop .mat-dock-h .lc-title,#vp-library-pop#vp-library-pop .mat-dock-h .lc-title{font-size:var(--win-title-fs);font-weight:var(--win-title-fw);color:var(--tx);letter-spacing:var(--win-title-ls);text-transform:none;line-height:var(--lh-compact);margin:0;padding:0}
@@ -4960,6 +4973,13 @@ body.anim-mode #vp-mode-bar{display:none}
 :is(#_anim-dialog,#vp-animate-pop) .anim-sel-n>svg{flex:0 0 auto;box-sizing:content-box;width:var(--icon-md);height:var(--icon-md);padding:var(--space-md);border-radius:var(--r-lg);background:var(--s3);color:var(--tx2)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-sel-n b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-tighter);color:var(--tx)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-sel-n span{margin-left:auto;flex:0 0 auto;font-size:var(--fs-11);color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-add{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:var(--ctl-h);height:var(--ctl-h);border-radius:50%;background:var(--ac);color:var(--white);cursor:pointer;transition:filter var(--dur-fast) var(--ease-out)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-addwrap{position:relative;flex:0 0 auto}
+:is(#_anim-dialog,#vp-animate-pop) .adk-menu.anim-sel-menu{min-width:170px}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-n .anim-sel-menu span{margin-left:0;font-size:inherit;color:inherit}      /* (not the grey status text of the card) */
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-add:hover{filter:brightness(1.1)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-add:focus-visible{box-shadow:var(--ring-focus)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-add svg{width:var(--icon-md);height:var(--icon-md);stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 :is(#_anim-dialog,#vp-animate-pop) .anim-none{font-size:var(--fs-12);color:var(--tx3);line-height:1.5}
 /* the Alpha tag next to the title: Animate is a very early feature */
 :is(#_anim-dialog,#vp-animate-pop) .anim-alpha{flex:0 0 auto;align-self:center;margin-left:var(--space-md);padding:1px var(--space-md);border-radius:var(--r-pill);background:color-mix(in srgb,var(--wn) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--wn) 45%,transparent);color:var(--wn);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wider);text-transform:uppercase;line-height:1.5;cursor:default}
@@ -4968,23 +4988,23 @@ body.anim-mode #vp-mode-bar{display:none}
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay{display:flex;align-items:stretch;border-radius:var(--r-md);background:var(--s3);transition:background var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
 /* every kind has the colour its clips have on the timeline: the icon, and the card when it is the one that is open */
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay{--c:var(--ac)}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=spin]{--c:#5aa2ff}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=swing]{--c:#b49aff}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=noise]{--c:#44d4a0}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=path]{--c:#f08cc0}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=oscillate]{--c:#f5b95a}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay.active{background:color-mix(in srgb,var(--c) 20%,var(--s3));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 55%,transparent)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=spin]{--c:var(--anim-spin)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=swing]{--c:var(--anim-swing)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=noise]{--c:var(--anim-noise)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=path]{--c:var(--anim-path)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=oscillate]{--c:var(--anim-oscillate)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay.active{background:color-mix(in srgb,var(--c) 9%,var(--s3));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 45%,transparent)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay-b{all:unset;box-sizing:border-box;flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-md) var(--space-lg);cursor:pointer;border-radius:var(--r-md)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay-b:hover{background:color-mix(in srgb,var(--white) 5%,transparent)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay-b:focus-visible,#_anim-dialog .anim-lay-x:focus-visible{box-shadow:var(--ring-focus)}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay-b>svg{flex:0 0 auto;width:var(--icon-sm);height:var(--icon-sm);color:var(--c)}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay-t{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-b>svg{flex:0 0 auto;box-sizing:content-box;width:var(--icon-md);height:var(--icon-md);padding:var(--space-md);border-radius:var(--r-lg);background:color-mix(in srgb,var(--c) 16%,var(--s2));color:var(--c)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-t{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:var(--space-lg)}      /* (one line: the name, and its few basic values at the right) */
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay-t b{font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx)}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay-t em{font-style:normal;font-size:var(--fs-11);line-height:1.4;color:var(--tx2);overflow-wrap:anywhere}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-t em{font-style:normal;font-size:var(--fs-11);margin-left:auto;min-width:0;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay-n{flex:0 0 auto;font-size:var(--fs-10);color:var(--tx3);font-variant-numeric:tabular-nums}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay-x{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:30px;color:var(--tx3);cursor:pointer;border-radius:var(--r-md)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-x{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:var(--ctl-h-sm);height:var(--ctl-h-sm);align-self:center;margin-right:var(--space-md);color:var(--tx3);cursor:pointer;border-radius:var(--r-md)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-lay-x svg{width:var(--icon-sm);height:var(--icon-sm)}
-:is(#_anim-dialog,#vp-animate-pop) .anim-lay-x:hover{color:var(--er)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-x:hover{color:var(--er);background:color-mix(in srgb,var(--er) 12%,transparent)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-types{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-xs,4px)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-types button span{font-size:var(--fs-11);overflow:hidden;text-overflow:ellipsis;max-width:100%}
 :is(#_anim-dialog,#vp-animate-pop) .anim-types button{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:var(--space-sm);padding:var(--space-lg) 0 var(--space-md);border-radius:var(--r-lg);background:var(--s2);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-medium);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
@@ -5093,6 +5113,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58
 #vp-animate-pop .adk-h{box-sizing:border-box;display:flex;height:var(--win-bar-h);min-height:var(--win-bar-h);flex:0 0 var(--win-bar-h);padding:0 var(--win-bar-px) 0 var(--win-bar-pl);gap:var(--space-lg);align-items:center;border-bottom:1px solid var(--win-bar-line);min-width:0;background:var(--bg2)}
 #vp-animate-pop .adk-h .lc-title{font-size:var(--win-title-fs);font-weight:var(--win-title-fw);color:var(--tx);letter-spacing:var(--win-title-ls);text-transform:none;line-height:var(--lh-compact);margin:0;padding:0}
 #vp-animate-pop .adk-h .lc-title{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:calc(var(--win-title-fs) * 1.25);letter-spacing:-.005em}      /* (the title in the serif of the other headings) */
+#vp-materials-pop#vp-materials-pop .mat-dock-h .lc-title,#vp-library-pop#vp-library-pop .mat-dock-h .lc-title{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:calc(var(--win-title-fs) * 1.25);letter-spacing:-.005em}      /* (Materials and Library: the same serif title as Animate) */
 #vp-animate-pop .adk-grip{position:absolute;top:0;left:0;right:0;height:5px;cursor:ns-resize;z-index:8}
 #vp-animate-pop .anim-alpha{flex:0 0 auto;padding:1px var(--space-md);border-radius:var(--r-pill);background:color-mix(in srgb,var(--wn) 16%,transparent);color:var(--wn);font-size:var(--fs-10);letter-spacing:var(--tracking-wide)}
 .adk-tr{display:flex;align-items:center;gap:var(--space-2xs);flex:0 0 auto}
@@ -5119,11 +5140,11 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58
 #anim-card .ac-tl:focus-visible{box-shadow:var(--ring-focus);outline:none}
 #anim-card .ac-tl-played{position:absolute;inset:0 auto 0 0;width:var(--p);background:color-mix(in srgb,var(--ac) 14%,transparent);pointer-events:none}
 #anim-card .ac-clip{position:absolute;height:5px;border-radius:2px;background:var(--ac);pointer-events:none}
-#anim-card .ac-clip[data-type=spin]{background:#5aa2ff}
-#anim-card .ac-clip[data-type=swing]{background:#b49aff}
-#anim-card .ac-clip[data-type=noise]{background:#44d4a0}
-#anim-card .ac-clip[data-type=path]{background:#f08cc0}
-#anim-card .ac-clip[data-type=oscillate]{background:#f5b95a}
+#anim-card .ac-clip[data-type=spin]{background:var(--anim-spin)}
+#anim-card .ac-clip[data-type=swing]{background:var(--anim-swing)}
+#anim-card .ac-clip[data-type=noise]{background:var(--anim-noise)}
+#anim-card .ac-clip[data-type=path]{background:var(--anim-path)}
+#anim-card .ac-clip[data-type=oscillate]{background:var(--anim-oscillate)}
 #anim-card .ac-clip[data-muted]{opacity:.3}
 #anim-card .ac-key{position:absolute;width:7px;height:7px;margin-left:-3.5px;background:#7dd3fc;transform:rotate(45deg);border-radius:1px;pointer-events:none}
 #anim-card .ac-key[data-name=explode]{background:#f5b95a}
@@ -5216,11 +5237,17 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58
   background-color:color-mix(in srgb,var(--c) 46%,var(--bg2));
   background-image:repeating-linear-gradient(90deg,transparent 0 calc(var(--cyc) - 1px),color-mix(in srgb,var(--c) 40%,transparent) calc(var(--cyc) - 1px) var(--cyc));
   transition:filter var(--dur-fast) var(--ease-out)}
-.adk-bar[data-type=spin]{--c:#5aa2ff}
-.adk-bar[data-type=swing]{--c:#b49aff}
-.adk-bar[data-type=noise]{--c:#44d4a0}
-.adk-bar[data-type=path]{--c:#f08cc0}
-.adk-bar[data-type=oscillate]{--c:#f5b95a}
+.adk-bar[data-type=spin]{--c:var(--anim-spin)}
+.adk-bar[data-type=swing]{--c:var(--anim-swing)}
+.adk-bar[data-type=noise]{--c:var(--anim-noise)}
+.adk-bar[data-type=path]{--c:var(--anim-path)}
+.adk-bar[data-type=oscillate]{--c:var(--anim-oscillate)}
+/* moving the rows up and down: the row that is dragged is dimmed, a line shows where it goes */
+#vp-animate-pop #adk-rows .adk-obj:not(.adk-scn-h) .adk-rh,#vp-animate-pop #adk-rows .adk-lay[data-lid] .adk-rh{cursor:grab}
+#vp-animate-pop .is-reordering,#vp-animate-pop .is-reordering *{cursor:grabbing!important}
+#vp-animate-pop .adk-row.adk-dragging{opacity:var(--op-45)}
+#vp-animate-pop .adk-row.adk-drop-before{box-shadow:inset 0 2px 0 var(--ac)}
+#vp-animate-pop .adk-row.adk-drop-after{box-shadow:inset 0 -2px 0 var(--ac)}
 
 /* the selected clip (only the one whose settings are open, not every clip of the selected object) is solid: a stronger fill and white text, no outline */
 .adk-lay.is-active .adk-bar,.adk-bar.is-active{background-color:color-mix(in srgb,var(--c) 80%,var(--bg2));color:var(--white)}
@@ -5598,7 +5625,7 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 #sidebar-right .section-b:has(>.toggle:last-child){padding-bottom:var(--space-5)}
 #sidebar-right .section-b .field:last-child{margin-bottom:0}
 /* the gap between the cards of the right sidebar: 8px */
-:is(#sidebar-right .section,#_a#_b#_c){margin-bottom:var(--space-md)}
+:is(#sidebar-right .section,#_a#_b#_c){margin-bottom:var(--space-xl)}      /* (the gap between two cards is the margin of the sidebar at its sides, --space-xl) */
 /* Claude connection: the pill in the top bar, and the Allow / Don't allow prompt */
 .claude-pill{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:var(--space-7);height:28px;padding:0 var(--space-xl);border-radius:var(--r-pill);border:1px solid var(--bd);color:var(--tx2);font-size:var(--fs-11);white-space:nowrap;cursor:pointer}
 .claude-pill:hover,.claude-pill[aria-expanded="true"]{background:var(--bg3);color:var(--tx)}
@@ -6178,19 +6205,22 @@ window.moSplash = function (msg, pct) {
           <div class="brand-menu-titles">
             <div class="brand-menu-title">MeshOptimiser</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.35.1</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.35.2</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>Big STEP files are meshed on all cores</li>
-            <li>Command cards: small switches, even rows</li>
-            <li>Wireframe only on the part in work</li>
-            <li>A brighter default light</li>
-            <li>Smoother drags on big models</li>
+            <li>Copy parts between scenes and windows</li>
+            <li>New window in the Menu</li>
+            <li>Split meshes by material</li>
+            <li>Several animations edited at once</li>
+            <li>Claude's pictures in Photo mode</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
+        <a class="brand-menu-item" id="brand-menu-website" href="https://xpayn3.github.io/MeshOptimiser/" target="_blank" rel="noopener">
+          <i data-lucide="globe"></i><span class="lbl">Website</span><i class="ext" data-lucide="external-link"></i>
+        </a>
         <a class="brand-menu-item" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener">
           <svg class="brand-gh" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12.02c0 5.09 3.29 9.4 7.86 10.93.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.3-.51-1.47.11-3.07 0 0 .96-.31 3.16 1.18a10.94 10.94 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.6.23 2.77.11 3.07.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.55C20.21 21.41 23.5 17.1 23.5 12.02 23.5 5.65 18.35.5 12 .5Z"/></svg>
           <span class="lbl">View on GitHub</span><i class="ext" data-lucide="external-link"></i>
@@ -6220,6 +6250,7 @@ window.moSplash = function (msg, pct) {
       <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="Menu (New / Open / Import / Save / Scene settings)" aria-label="Menu"><i data-lucide="menu"></i><span class="tbtn-label">Menu</span></button>
       <div id="file-menu" class="export-menu" role="menu" style="min-width:260px">
         <button class="export-menu-item" role="menuitem" data-file-cmd="new"><span class="fmt">New scene</span><span class="hint">Alt+N</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="newwindow" title="Open the app again in a window of its own"><span class="fmt">New window</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="open"><span class="fmt">Open file…</span><span class="hint">Ctrl+O</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="inbox" title="Open the app's inbox folder in your file manager: the models it has converted are kept there"><span class="fmt">Show inbox folder</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="import"><span class="fmt">Import into scene…</span><span class="hint">Ctrl+Shift+O</span></button>
@@ -6237,7 +6268,7 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
     <div class="export-wrap">
-      <button class="tbtn" id="btn-export" disabled title="Export the model (Ctrl+E)"><i data-lucide="download"></i>Export</button>
+      <button class="tbtn" id="btn-export" disabled title="Export the model (Ctrl+E)"><i data-lucide="square-arrow-right-exit"></i>Export</button>
     </div>
     <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
     <div class="divider"></div>
@@ -6269,7 +6300,7 @@ window.moSplash = function (msg, pct) {
            unselected and Show all used to be here too; they are in the
            right-click menu, the command search and on Alt+H / Shift+H.) -->
       <button class="tree-icon-btn" id="tree-collapse-toggle" title="Collapse / expand" aria-label="Collapse or expand">
-        <i data-lucide="chevrons-down-up"></i><span>Collapse</span>
+        <i data-lucide="list-chevrons-down-up"></i><span>Collapse</span>
       </button>
       <button class="tree-icon-btn" id="tree-batch-rename" title="Rename (F2)" aria-label="Rename">
         <i data-lucide="text-cursor-input"></i><span>Rename</span>
@@ -6327,6 +6358,7 @@ window.moSplash = function (msg, pct) {
     <canvas id="draw-overlay" hidden aria-hidden="true"></canvas>
     <canvas id="elem-overlay" hidden aria-hidden="true"></canvas>
     <div id="draw-hint" hidden aria-live="polite"></div>
+    <div id="photo-loading" role="status" aria-live="polite" aria-hidden="true"><span class="spinner"></span><span>Photo mode is loading…</span></div>
     <div id="vp-drop" hidden aria-hidden="true"><div class="vp-drop-card"><i data-lucide="upload"></i><div class="vp-drop-t">Drop to open</div><div class="vp-drop-s" id="vp-drop-sub"></div></div></div>
     <div id="gizmo-hud" aria-hidden="true"></div>
     <div id="vp-overlay">
@@ -6346,13 +6378,13 @@ window.moSplash = function (msg, pct) {
         <button class="vpb em-toolbtn" id="em-tool-btn" title="Selection tool: Click" aria-label="Selection tool"><i data-lucide="mouse-pointer-2"></i></button>
         <div id="em-tool-pop" class="vp-prim-pop" style="display:none" role="menu" aria-label="Selection tool"></div>
         <div class="vpb-sep"></div>
-        <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to round steps sized to the model"><i data-lucide="move"></i></button>
-        <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
-        <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
+        <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to round steps sized to the model"><i data-lucide="move-3d"></i></button>
+        <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-3d"></i></button>
+        <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scale-3d"></i></button>
         <div class="vpb-sep"></div>
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
-        <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="pencil-line"></i></button>
-        <button class="vpb" id="notes-tool" aria-pressed="false" title="Enter notes mode"><i data-lucide="message-square"></i></button>
+        <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="spline-pointer"></i></button>
+        <button class="vpb" id="notes-tool" aria-pressed="false" title="Enter notes mode"><i data-lucide="message-square-check"></i></button>
         <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): pick the selected part up and drag it over other surfaces. It rests on them and turns to face them."><i data-lucide="arrow-down-to-dot"></i></button>
         <div class="vpb-sep"></div>
         <!-- How the model is drawn, as one button like the selection tool's: it shows the view in use, a click goes to the next, holding it (or a right-click) lists the four. -->
@@ -6386,7 +6418,7 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="el-ibtn" id="btn-el-weld-open" title="Weld (points or edges): opens the Weld card, where the picked points become one, or the ones that are close enough to each other" aria-label="Weld" aria-haspopup="dialog" disabled><i data-lucide="merge"></i></button>
           <button type="button" class="el-ibtn" id="btn-el-fill" title="Fill (edges): close a hole whose whole rim is picked (a double-click on an open edge picks the loop). The cap has points of its own, so it shades on its own. One undo step" aria-label="Fill" disabled><i data-lucide="circle-dot"></i><span>Fill</span></button>
           <button type="button" class="el-ibtn" id="btn-el-close" title="Close open edges. With nothing picked: cap every rim where the surface stops, on the selected parts, for a mesh that is missing faces (open bores, a side that was never exported). With one rim picked (edges; a double-click picks the loop): cap it. With two rims picked: close the gap between them with a strip of triangles, the ring between the rims of a counterbore or the missing length of a tube. One undo step" aria-label="Close open edges" disabled><i data-lucide="circle-dot-dashed"></i><span>Close</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="flip-horizontal-2"></i><span>Reverse</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="unfold-vertical"></i><span>Reverse</span></button>
           <button type="button" class="el-ibtn" id="btn-el-dissolve" title="Dissolve: take the picked points out and close the surface over them; the polygons round them become one. For edges and polygons: the polygons become one, and the points left inside them or on a straight line of their outline go. The shape does not change there. One undo step (Ctrl+Backspace)" aria-label="Dissolve" disabled><i data-lucide="diamond-minus"></i><span>Dissolve</span></button>
           <button type="button" class="el-ibtn" id="btn-el-extract" title="Extract (polygons): take the picked polygons out into a part of their own, in the same place and with the same material. One undo step" aria-label="Extract" disabled><i data-lucide="split"></i><span>Extract</span></button>
           <label class="el-ibtn" id="el-cad-btn" title="CAD faces (polygons), on or off. On: a click picks the whole CAD face under the pointer, the area its CAD lines bound (a hole's wall, a boss, a fillet), and Delete takes the picked faces out, closes the gap with a patch that follows the surface round it and makes the triangles round it even. The faces that stay keep their CAD faces and lines. One undo step. For a part opened from a STEP with its CAD faces"><input type="checkbox" id="el-cad" aria-label="CAD faces"><i data-lucide="eraser"></i><span>CAD faces</span></label>
@@ -6430,6 +6462,11 @@ window.moSplash = function (msg, pct) {
             <div class="snap-top"><span class="vp-pill-label" id="vp-snap-label">Snap</span></div>
             <div class="snap-ruler" id="vp-snap-ruler" aria-hidden="true"></div>
           </div>
+          <!-- Something was pasted from another scene or window: says what, for a few seconds. -->
+          <div id="vp-paste-pill" class="vp-pill vp-pill-mode" hidden role="status" aria-live="polite">
+            <i class="vp-pill-icon" data-lucide="clipboard-paste" aria-hidden="true"></i>
+            <span class="vp-pill-label" id="vp-paste-label"></span>
+          </div>
         </div>
       </div>
       <!-- The camera pill: top left, opposite the view cube (top right) -->
@@ -6464,7 +6501,7 @@ window.moSplash = function (msg, pct) {
         <div class="vpb-sep"></div>
         <button class="vpb" id="tg-animate" title="Animate: timeline (Shift+A)"><i data-lucide="clapperboard"></i></button>
         <button class="vpb" id="tg-library" title="Library (Shift+L)"><i data-lucide="shapes"></i></button>
-        <button class="vpb" id="tg-materials" title="Materials (Shift+M)"><i data-lucide="palette"></i></button>
+        <button class="vpb" id="tg-materials" title="Materials (Shift+M)"><i data-lucide="swatch-book"></i></button>
         <button class="vpb" id="tg-settings" title="Viewport settings"><i data-lucide="sliders-horizontal"></i></button>
         <div class="vpb-sep"></div>
         <button class="vpb" id="vp-more" title="All commands"><i data-lucide="ellipsis"></i></button>
@@ -6568,8 +6605,8 @@ window.moSplash = function (msg, pct) {
         <div class="toggle" title="With Align: a closed shape is turned so its faces point out of it, not into it"><span id="nm-out-lbl">Point closed shapes outward</span><label><input type="checkbox" id="nm-out" aria-labelledby="nm-out-lbl" checked><span class="switch"></span></label></div>
         <button class="btn" id="nm-find" title="Look for faces that point the wrong way, parts that are inside out and shading that disagrees with the faces. Nothing is changed: the parts that have a problem are selected"><i data-lucide="scan-search"></i>Find problems</button>
         <div class="btn-row">
-          <button class="btn" id="nm-flip" title="Reverse: every face of the parts is turned round, front becomes back. Can be undone."><i data-lucide="flip-horizontal-2"></i>Reverse</button>
-          <button class="btn warn" id="nm-align" title="Align: neighbouring faces are made to agree on which side is out. Can be undone."><i data-lucide="align-center-vertical"></i>Align</button>
+          <button class="btn" id="nm-flip" title="Reverse: every face of the parts is turned round, front becomes back. Can be undone."><i data-lucide="unfold-vertical"></i>Reverse</button>
+          <button class="btn warn" id="nm-align" title="Align: neighbouring faces are made to agree on which side is out. Can be undone."><i data-lucide="layer-arrow-up"></i>Align</button>
           <button type="button" id="nm-primary" data-cmd-primary hidden aria-hidden="true" tabindex="-1"></button>
         </div>
         <div class="field-help" id="nm-info">Nothing is changed on a part that is already facing the right way.</div>
@@ -6970,7 +7007,6 @@ window.moSplash = function (msg, pct) {
     <div class="section section-cmd" data-cmd="align" hidden>
       <div class="section-h"><span>Align to floor</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b align-box" id="align-box">
-        <div class="cmd-lede">The picture shows the result before you press Align to floor.</div>
         <canvas id="align-view" class="align-view" aria-label="A drawing of the floor, the origin and the model: where it stands and which point of it sits at zero"></canvas>
         <div class="align-legend" aria-hidden="true"><span><i class="ring"></i>goes to zero</span><span><i class="arr y"></i>top</span><span><i class="arr w"></i>front</span></div>
         <div class="align-head"><span>Turn the model</span><label class="size-field" title="How far one press turns the model: 90 for quarter turns, something small to straighten a tilted model"><span>each press</span><input type="text" inputmode="decimal" id="align-step" value="90"><span>°</span></label></div>
@@ -7125,6 +7161,36 @@ window.moSplash = function (msg, pct) {
         <div class="field-help" id="fl-info"></div>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Remove</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <!-- Delete small parts: a floating command card (it was a section of the right sidebar) -->
+    <div class="section section-cmd" data-cmd="small" hidden>
+      <div class="section-h"><span>Delete small parts</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b small-card">
+        <!-- what the threshold below catches, and a way to look at it first -->
+        <!-- how small: a share of the whole model's size -->
+        <div id="thr-scrub"></div>
+        <!-- small by what measure (the select is what the rest of the app reads and sets; the buttons drive it) -->
+        <div class="small-by">
+          <span>Measured by</span>
+          <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
+            <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
+            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest</button>
+            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
+          </div>
+          <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
+        </div>
+        <!-- what the threshold catches, and a way to look at it before deleting -->
+        <div class="small-result">
+          <div class="small-found" id="thr-found"><span class="small-n" id="thr-count" hidden></span><span id="thr-info">Load a model to see what would go.</span></div>
+          <div class="btn-row">
+            <button class="btn" id="btn-isolate-small" aria-pressed="false" title="Show only the parts that would be deleted, to check them first. Press again to show everything"><i data-lucide="eye"></i>Isolate</button>
+            <button class="btn" id="tg-hilite" title="Colour the parts smaller than the threshold in the view and the tree, to see what would go"><i data-lucide="lightbulb-off"></i>Highlight</button>
+          </div>
+        </div>
+        <button class="btn danger" id="btn-delete-small" data-cmd-primary title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Delete</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <!-- ▼ Edit mesh card -->
@@ -7322,6 +7388,7 @@ window.moSplash = function (msg, pct) {
             <option value="edge" title="Triangles belong together only when they share a whole edge — solids meeting at a point stay separate, solids sharing an edge or a face are joined.">Edge connectivity</option>
             <option value="spatial" title="Group by triangle bbox overlap on a 3D grid. Doesn't read the index buffer at all — useful when topology is fused but solids are still spatially separate.">Spatial proximity (AABB)</option>
             <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
+            <option value="material" title="One part for each material of a mesh: a mesh that was imported with several materials (or given several colours) comes apart into a part for each, each wearing its own. A mesh with one material is left as it is.">Material</option>
             <option value="faces" title="Every face becomes a part: triangles that share an edge and lie within the face angle of each other stay together, every crease starts another. A flat face or a smooth curved one is one part.">Faces (split at creases)</option>
           </select>
         </div>
@@ -7402,7 +7469,7 @@ window.moSplash = function (msg, pct) {
           <div class="prop-bar"><div class="prop-bar-fill" style="width:0%"></div></div></div>
         <div class="prop-grid">
           <span class="prop-icon"><i data-lucide="boxes"></i></span><span class="prop-label">Parts</span><strong class="prop-value">—</strong>
-          <span class="prop-icon"><i data-lucide="circle-dot"></i></span><span class="prop-label">Vertices</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="vector-polygon"></i></span><span class="prop-label">Vertices</span><strong class="prop-value">—</strong>
           <span class="prop-icon"><i data-lucide="box"></i></span><span class="prop-label">Size</span><strong class="prop-value">—</strong>
           <span class="prop-icon"><i data-lucide="hard-drive"></i></span><span class="prop-label">Mesh data</span><strong class="prop-value">—</strong>
         </div>
@@ -7428,11 +7495,12 @@ window.moSplash = function (msg, pct) {
         <button id="sel-duplicate" type="button"></button>
         <button id="btn-merge-sel" type="button"></button>
         <button id="btn-group-sel" type="button"></button>
+        <button id="btn-recompute-normals" type="button"></button>      <!-- (the command Recompute normals, in the search and the menus, presses it) -->
       </div>
     </div>
 
     <div class="section" id="shading-section">
-      <div class="section-h"><i class="sec-ico" data-lucide="sun"></i><span>Shading</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="lens"></i><span>Shading</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div class="shade-row" role="group" aria-label="Shading looks">
           <div class="shade-fam" id="vw-clay" data-mode="clay"></div>
@@ -7445,15 +7513,26 @@ window.moSplash = function (msg, pct) {
 
     <div class="side-group">View</div>
 
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="wrench"></i><span>Quick fixes</span><span class="chev">▾</span></div>
-      <div class="section-b btn-list">
-        <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Empty parts</button>
-        <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy-check"></i>Duplicates</button>
-        <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="eraser"></i>Degenerate</button>
-        <button class="btn quiet" id="btn-floating" title="Remove floating pieces…: delete the small loose pieces of a part that touch nothing (plugs, shavings, dots). Opens its panel."><i data-lucide="unlink"></i>Floating…</button>
-        <button class="btn quiet" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Empty groups</button>
-        <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="refresh-ccw-dot"></i>Normals</button>
+    <div class="section" id="tools-section">
+      <div class="section-h"><i class="sec-ico" data-lucide="wrench"></i><span>Tools</span><span class="chev">▾</span></div>
+      <div class="section-b" id="tools-card">
+        <div class="sel-bar-grid is-icons">
+          <button class="btn" data-act="merge" title="Merge: join the selected parts into one (Ctrl+M)" aria-label="Merge"><i data-lucide="merge"></i></button>
+          <button class="btn" data-act="mergeColour" title="Merge by colour: one mesh for the parts of each colour" aria-label="Merge by colour"><i data-lucide="palette"></i></button>
+          <button class="btn" data-act="decimate" title="Decimate: fewer triangles on the selected parts" aria-label="Decimate"><i data-lucide="shrink"></i></button>
+          <button class="btn" data-act="normalsReverse" title="Reverse normals: turn the faces of the selected parts round, for parts that came in inside out" aria-label="Reverse normals"><i data-lucide="unfold-vertical"></i></button>
+          <button class="btn" data-act="recenter" title="Recentre model: move the middle of the model to the origin" aria-label="Recentre model"><i data-lucide="axis-3d"></i></button>
+          <button class="btn" data-act="alignFloor" title="Align to the floor: stand the model on the floor… (opens its panel)" aria-label="Align to the floor"><i data-lucide="arrow-down-to-line"></i></button>
+        </div>
+        <div class="sel-bar-grid is-icons">
+          <button class="btn" id="btn-clean-empty" title="Empty parts: delete parts that contain zero triangles" aria-label="Empty parts"><i data-lucide="circle-minus"></i></button>
+          <button class="btn" id="btn-clean-dupes" title="Duplicates: collapse parts that share identical vertex data into one geometry" aria-label="Duplicates"><i data-lucide="copy-check"></i></button>
+          <button class="btn" id="btn-clean-degenerate" title="Degenerate faces: strip zero-area triangles that confuse renderers and shaders" aria-label="Degenerate faces"><i data-lucide="eraser"></i></button>
+          <button class="btn" id="btn-floating" title="Floating pieces: delete the small loose pieces of a part that touch nothing (plugs, shavings, dots). Opens its panel" aria-label="Floating pieces"><i data-lucide="unlink"></i></button>
+          <button class="btn" data-act="smallParts" title="Delete small parts: delete the parts under a size threshold… (opens its panel)" aria-label="Delete small parts"><i data-lucide="trash-2"></i></button>
+          <button class="btn" id="btn-clean-empty-groups" title="Empty groups: remove groups whose members are all deleted or empty" aria-label="Empty groups"><i data-lucide="folder-x"></i></button>
+          <button class="btn" data-act="hiddenFaces" title="Remove hidden faces: delete the faces nobody can see, inside the parts… (opens its panel)" aria-label="Remove hidden faces"><i data-lucide="scan-eye"></i></button>
+        </div>
       </div>
     </div>
 
@@ -7513,7 +7592,7 @@ window.moSplash = function (msg, pct) {
         <div class="field" style="margin:0"><div id="tri-scrub"></div></div>
         <div class="field" style="margin:0"><div id="aspect-scrub"></div></div>
         <div class="btn-list" style="margin-top:var(--space-md)">
-          <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-poly</button>
+          <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="land-plot"></i>Flag low-poly</button>
           <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="rectangle-horizontal"></i>Flag slivers</button>
         </div>
       </div>
@@ -7531,35 +7610,6 @@ window.moSplash = function (msg, pct) {
 
 
 
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="trash-2"></i><span>Delete small parts</span><span class="chev">▾</span></div>
-      <div class="section-b small-card">
-        <!-- what the threshold below catches, and a way to look at it first -->
-        <!-- how small: a share of the whole model's size -->
-        <div id="thr-scrub"></div>
-        <!-- small by what measure (the select is what the rest of the app reads and sets; the buttons drive it) -->
-        <div class="small-by">
-          <span>Measured by</span>
-          <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
-            <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
-            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest</button>
-            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
-          </div>
-          <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
-        </div>
-        <!-- what the threshold catches, and a way to look at it before deleting -->
-        <div class="small-result">
-          <div class="small-found" id="thr-found"><span class="small-n" id="thr-count" hidden></span><span id="thr-info">Load a model to see what would go.</span></div>
-          <div class="btn-row">
-            <button class="btn" id="btn-isolate-small" aria-pressed="false" title="Show only the parts that would be deleted, to check them first. Press again to show everything"><i data-lucide="eye"></i>Isolate</button>
-            <button class="btn" id="tg-hilite" title="Colour the parts smaller than the threshold in the view and the tree, to see what would go"><i data-lucide="highlighter"></i>Highlight</button>
-          </div>
-        </div>
-        <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
-      </div>
-    </div>
-
-
     <div class="section" id="photo-section">
       <div class="section-h"><i class="sec-ico" data-lucide="camera"></i><span>Photo mode</span><span class="chev">▾</span></div>
       <div class="section-b">
@@ -7567,7 +7617,7 @@ window.moSplash = function (msg, pct) {
           <label class="prim-label" for="toggle-photo" id="toggle-photo-lbl">Photo mode</label>
           <label class="prim-toggle"><input type="checkbox" id="toggle-photo"><span></span></label>
         </div>
-        <div id="photo-fx" class="is-off" style="display:flex;flex-direction:column">
+        <div id="photo-fx" class="is-off" inert style="display:flex;flex-direction:column">
         <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base);padding:var(--space-md) 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows.</div>
         <div class="prim-row" title="The round, softly lit disc under the model that catches its shadow. Off: the model hangs in the studio light with no floor and no floor shadow.">
           <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
@@ -7689,6 +7739,7 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
 
+    <a class="side-name" role="button" tabindex="0" title="Back to the top of the sidebar">MeshOptimiser</a>
     <div class="side-ver" id="side-ver" aria-hidden="true"></div>
   </aside>
 
@@ -8157,7 +8208,7 @@ window.moSplash = function (msg, pct) {
               <button type="button" role="menuitem" data-site="myminifactory"><span>MyMiniFactory</span><small>STL</small></button>
             </div>
           </div>
-          <button class="tbtn primary" id="export-confirm" title="Export with these options"><i data-lucide="download"></i><span id="export-confirm-lbl">Export GLB</span></button>
+          <button class="tbtn primary" id="export-confirm" title="Export with these options"><i data-lucide="square-arrow-right-exit"></i><span id="export-confirm-lbl">Export GLB</span></button>
         </div>
         <button id="export-cancel" style="display:none" aria-hidden="true"></button>
       </div>
@@ -8754,12 +8805,12 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=104"></script>
-<script type="module" src="js/app.js?v=20261077-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10"></script>
+<script type="module" src="js/app.js?v=20261118-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
 <script defer src="js/cloner.js?v=20261018-undo"></script>
-<script defer src="js/help.js?v=21"></script>
+<script defer src="js/help.js?v=22"></script>
 <script>
   // Reveal the app when it says it has booted (app.js: 'mo-boot-ready', after the renderer and the
   // scene are up and the icons are drawn), the splash has been up long enough not to flash, and the

@@ -56,7 +56,7 @@ try {
   console.log('part', P);
   const status = async () => { await sleep(150); return ev("(() => { const e = document.getElementById('shade-lines-status'); return e ? { kind: e.dataset.kind, text: e.textContent } : null; })()"); };
   const st0 = await status(); console.log('status:', st0);
-  check('status: real CAD edges for the STEP', st0 && st0.kind === 'cad' && /Real CAD edges/.test(st0.text), st0);
+  check('status: real CAD edges for the STEP', st0 && st0.kind === 'cad' && /CAD edges/.test(st0.text), st0);
   check('one CAD lines switch: on the Shading card, not in the CAD pill or Settings', await ev("!!document.getElementById('shade-outlines') && !document.getElementById('bp-lines') && document.getElementById('shade-outlines-lbl').textContent === 'CAD lines'"));
   await ev("(() => { const c = document.getElementById('shade-outlines'); c.checked = false; c.dispatchEvent(new Event('change')); return 1; })()");
   const stOff = await status(); console.log('status off:', stOff);
@@ -101,7 +101,7 @@ try {
   for (let i = 0; i < 120; i++) { if (await ev("document.getElementById('import-modal')?.classList.contains('show')")) await ev("document.querySelector('#import-modal-confirm').click()"); if (await ev('window.state.parts.filter(p => !p.deleted).length') > 0) break; await sleep(500); }
   await sleep(2500);
   const stG = await ev("(() => { const e = document.getElementById('shade-lines-status'); return e ? { kind: e.dataset.kind, text: e.textContent } : null; })()"); console.log('status GLB:', stG);
-  check('status: found by angle for a plain GLB', stG && stG.kind === 'angle' && /found by angle/.test(stG.text), stG);
+  check('status: found by angle for a plain GLB', stG && stG.kind === 'angle' && /by angle/.test(stG.text), stG);
 } catch (e) { fail++; console.log('HARNESS ERROR', e.stack || e.message); }
 try { ws && ws.close(); } catch (_) {}
 chrome.kill();

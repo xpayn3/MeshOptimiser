@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.35.2** — parts can be copied between scenes and between windows, the app opens in a window of its own, and the Animate timeline edits several clips at once.
+
+- ![new][new] **Copy and paste between scene tabs and windows,** with colours, materials and pictures; a pill says what came across. *New window* is in the Menu.
+- ![new][new] **Split meshes by material,** and Animate rows that can be dragged into order, edited several at once, with a plus on the object's card.
+- ![new][new] **Claude can take its pictures in Photo mode** (and asks first); Photo mode shows a loading card at once.
+- ![new][new] **A Tools card** with Merge, Decimate, Recentre, Align and Remove hidden faces beside the clean-ups, and Delete small parts as a floating card.
+- ![fix][fix] **Glass no longer hides what is behind it,** the gizmo handles grab from nearer, and a new animation waits for Play.
+
 **v0.35.1** — big STEP files mesh on all cores, the command cards line up, and drags stay smooth on big models.
 
 - ![perf][perf] **Big STEP files are meshed on all cores:** the V8 import went from 103 s to 81 s.
@@ -317,13 +325,6 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 - ![fix][fix] **No more stalls** while idle, scrubbing, resizing or dragging on a big model, and fixes for Edit mesh dots, the far floor grid and a part that stopped drawing.
 
 **v0.35.0** — one part can wear several colours, STEP files open with cleaner meshes, and Photo mode draws the model for pictures.
-
-- ![new][new] **Several colours on one part:** pick polygons in Edit mesh and press *Colour*, or drop a material on them. The part stays one closed part; each colour is a card in its material strip; files from other programs come in the same way and go out in every format.
-- ![new][new] **Cleaner STEP meshes:** clean even strips on fillets, a *Clean* quality, CAD edit to pick whole CAD faces and remesh, and tools that read the CAD faces (Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos).
-- ![new][new] **Photo mode,** a shorter Scene card, and five photographed environments as picture cards.
-- ![new][new] **Close open edges, Untriangulate into quads,** and a Decimate that keeps the shape closer.
-- ![fix][fix] **Models from Blender open upright at their real size,** textures and UVs survive the mesh tools and exports, and undo, Claude's calls and the updater are more dependable.
-
 
 **v0.34.0** — Animate gets a timeline and a motion for pistons, Claude works with notes, and axis tools arrive.
 

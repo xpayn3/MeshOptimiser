@@ -205,5 +205,21 @@ const run = (g, o) => partition(g.attributes.position.array, g.index ? g.index.a
   ok(tb1 < 8000 && tb2 < 8000, 'and in a few seconds at most');
 }
 
+// ── by material ──────────────────────────────────────────────────────────────
+{
+  // one box (12 triangles): triangles 0-3 wear material 0, 4-5 material 2, 6-11 material 1, as a mesh with three materials has them
+  const g = box(0, 0, 0);
+  const triMat = new Uint16Array(12); triMat.fill(1); triMat.fill(0, 0, 4); triMat.fill(2, 4, 6);
+  const r = run(g, { method: 'material', triMat });
+  ok(r.count === 3 && r.sizes.join(',') === '4,2,6', 'a split by material: a piece for each material, in the order they first appear (4, 2 and 6 triangles)');
+  ok(Array.isArray(r.matOf) && r.matOf.join(',') === '0,2,1', 'and it says which material each piece wears');
+  const kids = buildChildGeometries(THREE, g, r.labels, r.count);
+  ok(kids.length === 3 && kids.map(k => k.index.count / 3).join(',') === '4,2,6', 'the pieces carry those triangles');
+  ok(run(g, { method: 'material', triMat: new Uint16Array(12) }).count === 1, 'a mesh with one material is one piece (left as it is)');
+  ok(run(g, { method: 'material' }).count === 1, 'and so is one with no material information');
+  const small = run(g, { method: 'material', triMat, minTriangles: 5 });
+  ok(small.count === 3, 'pieces under the smallest-part limit are not joined into a part of mixed materials');
+}
+
 console.log(fails ? fails + ' failed' : 'all passed');
 process.exit(fails ? 1 : 0);

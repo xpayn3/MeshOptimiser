@@ -60,6 +60,9 @@ try {
   const rest1 = await mw(id1);
   let r = await call('animate_parts', { action: 'add', ids: [id1], type: 'spin', rpm: 120, axis: 'Z' });
   check('animate_parts add spin', r.ok && r.j && r.j.animated === 1, r);
+  check('adding it does not start it playing', (await evalJS("window.__moAnimStats().playing")) === false);
+  { const a1 = await mw(id1); await sleep(500); check('and the part stands still until Play is pressed', (await mw(id1)) === a1); }
+  await evalJS("window.__moAnimPlay()"); await sleep(400);
   check('the part moved', await changed(id1, rest1));
   const tag = await evalJS("(() => { const t = document.getElementById('vp-animate-pill'); return t ? { hidden: t.hidden, text: t.textContent } : null; })()");
   check('the Playing tag is shown', tag && !tag.hidden && /Playing/.test(tag.text), tag);
@@ -114,7 +117,7 @@ try {
   await call('set_explode', { amount: 60 }); await sleep(800);
   const cEx = await cen(id1);
   check('explode moves the part', cEx !== c0, { c0, cEx });
-  await call('animate_parts', { action: 'add', ids: [id1], type: 'spin', rpm: 120 });
+  await call('animate_parts', { action: 'add', ids: [id1], type: 'spin', rpm: 120 }); await evalJS("window.__moAnimStats().playing || window.__moAnimPlay()"); 
   const mAn = await mw(id1);
   check('the part turns in the exploded view', await changed(id1, mAn));
   check('animated and exploded: it stays at its exploded place', (await cen(id1)) === cEx, { cEx, now: await cen(id1) });
@@ -134,7 +137,7 @@ try {
   const lg = await call('list_groups'); const gl = lg.j ? [...(lg.j.user_groups || []), ...(lg.j.file_groups || [])].filter(g => /^Group \d+$/.test(g.name)) : [], gname = gl.length ? gl[gl.length - 1].name : '';
   check('the new group is listed', !!gname, lg);
   r = await call('animate_parts', { action: 'add', group_contains: [gname], type: 'swing', angle_degrees: 30, seconds: 1 });
-  check('animate_parts add to a group', r.ok && r.j && r.j.animated === 1, r);
+  check('animate_parts add to a group', r.ok && r.j && r.j.animated === 1, r); await evalJS("window.__moAnimStats().playing || window.__moAnimPlay()"); 
   // clicking the group's row in the Animate window selects the group (the tree row need not be drawn)
   await call('select_all', {}); await call('select_parts', { ids: [id1], mode: 'replace' });
   await sleep(500);
@@ -150,6 +153,7 @@ try {
   const restP = await mw(id1);
   r = await call('animate_parts', { action: 'add', ids: [id1], type: 'path', shape: 'wave', plane: 'XZ', size_percent: 80, seconds: 1 });
   check('animate_parts add path', r.ok && r.j && r.j.settings.shape === 'wave', r);
+  check('adding an animation does not start it playing', (await evalJS("window.__moAnimStats().playing")) === false);      // (it never plays by itself: Play is the user's)
   check('the path moves the part', await changed(id1, restP));
   r = await call('animate_parts', { action: 'add', ids: [id1], type: 'spin', loop_mode: 'pingpong', loop_from_percent: 0, loop_to_percent: 25, rpm: 60 });
   check('animate_parts add spin with loop points', r.ok && r.j && r.j.loop && r.j.loop.mode === 'pingpong' && r.j.loop.to === 25, r);
@@ -166,7 +170,7 @@ try {
   r = await call('animate_parts', { action: 'list' });
   check('the list shows the noise settings', r.ok && /random/.test(r.s) && /detail 3/.test(r.s) && /seed 7/.test(r.s), r.s);
   await call('select_parts', { ids: [id1] }); await sleep(700);
-  check('the card of the window lists the layers with their settings', await evalJS("(() => { const l = [...document.querySelectorAll('#_anim-dialog .anim-lay')]; return l.length >= 1 && l.some(x => /random/.test(x.textContent) && /seed 7/.test(x.textContent)); })()"));
+  check('the card of the window lists the layers with their basic values only', await evalJS("(() => { const l = [...document.querySelectorAll('#_anim-dialog .anim-lay')]; return l.length >= 1 && l.some(x => /Noise/.test(x.textContent) && /\\d%/.test(x.textContent) && /\\d×/.test(x.textContent) && !/seed/.test(x.textContent)); })()"));
   await call('animate_parts', { action: 'clear' }); await sleep(200);
   check('clear: back at the start', (await mw(id1)) === restN);
   // — an instanced part (no mesh of its own until it is promoted) can be animated too —
@@ -183,7 +187,7 @@ try {
   await evalJS("document.querySelector('canvas').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 400, clientY: 300 }))");
   await sleep(300);
   await evalJS("[...document.querySelectorAll('#ctx-menu .ctx-menu-row')].find(r => /Animate/.test(r.textContent))?.click()"); await sleep(800);
-  await evalJS("document.getElementById('anim-pb-rate').click()"); await sleep(100);
+  await evalJS("window.__moAnimStats().playing || window.__moAnimPlay()"); await evalJS("document.getElementById('anim-pb-rate').click()"); await sleep(100);
   check('the playbar has a playback speed button', (await evalJS("document.getElementById('anim-pb-rate').textContent")) === '2×');
   check('the playback speed is reported', (await evalJS("window.__moAnimStats().speed")) === 2);
   await evalJS("document.getElementById('anim-pb-rate').click(); document.getElementById('anim-pb-rate').click(); document.getElementById('anim-pb-rate').click(); document.getElementById('anim-pb-rate').click();");
@@ -193,7 +197,7 @@ try {
   await evalJS("document.querySelector('#_anim-dialog .dlg-body').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }))"); await sleep(150);
   check('Space plays again', /Playing/.test(await evalJS("document.getElementById('vp-animate-pill').textContent")));
   await call('animate_parts', { action: 'clear' });
-  r = await call('animate_parts', { action: 'add', group_contains: ['Group'], type: 'spin', rpm: 30 });
+  r = await call('animate_parts', { action: 'add', group_contains: ['Group'], type: 'spin', rpm: 30 }); await evalJS("window.__moAnimStats().playing || window.__moAnimPlay()"); 
   await sleep(1500);
   const st = await evalJS("window.__moAnimStats()");
   console.log('frame cost with every group animated:', JSON.stringify(st));

@@ -58,6 +58,7 @@ try {
   await sleep(2500);
   const before = await evalJS(`({ bg: document.getElementById('bg-mode').value, shadows: document.getElementById('toggle-shadows').checked, photo: document.getElementById('toggle-photo') ? document.getElementById('toggle-photo').checked : null })`);
   check('the Photo mode switch is in the page and off', before.photo === false, before);
+  check('the effects section is inert (cannot be used) while Photo mode is off', await evalJS("document.getElementById('photo-fx').inert === true && document.getElementById('photo-fx').classList.contains('is-off')"));
   const p0 = await probe();
   check('the model is drawn before', p0.differ > 0.02, p0);
 
@@ -70,7 +71,12 @@ try {
   await sleep(2500);
   logs.length = 0; errors.length = 0;
   await evalJS(`(() => { const t = document.getElementById('toggle-photo'); t.checked = true; t.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(60);
+  check('right after the switch the loading card with the spinner is shown in the view', await evalJS("(() => { const c = document.getElementById('photo-loading'); return !!c && c.classList.contains('show') && !!c.querySelector('.spinner') && /loading/i.test(c.textContent); })()"));
   await sleep(6000);                                   // (the loft HDRI is fetched and prefiltered; the chain's shaders are compiled)
+  for (let i = 0; i < 30 && await evalJS("document.getElementById('photo-loading').classList.contains('show')"); i++) await sleep(500);
+  check('the loading card is gone once Photo mode is on', await evalJS("!document.getElementById('photo-loading').classList.contains('show') && document.body.classList.contains('photo-mode')"));
+  check('the effects can be used while Photo mode is on (not inert)', await evalJS("!document.getElementById('photo-fx').inert"));
   const on = await evalJS(`({ bg: document.getElementById('bg-mode').value, shadows: document.getElementById('toggle-shadows').checked, ctl: document.getElementById('photo-fx').classList.contains('is-off') ? 'off' : 'on', cls: document.body.classList.contains('photo-mode') })`);
   if (!on.cls) console.log('toasts:', await evalJS(`Array.from(document.querySelectorAll('[class*=toast]')).map(e => e.textContent).join(' | ').slice(0, 400)`), 'logs:', JSON.stringify(logs.slice(0, 3)).slice(0, 600), 'errors:', JSON.stringify(errors));
   check('Photo mode lights with an HDRI, turns the shadows on and undims its card', on.bg === 'hdri' && on.shadows && on.ctl === 'on' && on.cls, on);

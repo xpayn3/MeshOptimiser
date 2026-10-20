@@ -7,7 +7,7 @@
 //
 // The ceilings are today's counts (2026-10-17). THEY MAY ONLY GO DOWN: when you replace literals with tokens, lower the number to
 // what the test prints; never raise it to make a new colour pass (use a token, or define the missing one in :root).
-const MAX_HEX_LINES = 40;          // app/index.html
+const MAX_HEX_LINES = 35;         // app/index.html
 const MAX_HEX_LINES_JS = 6;        // the injected styles: the colour picker's own red, white and black (the hue strip and the square)
 const MAX_UNDEFINED_TOKENS = 0;
 const MAX_Z_NUMBERS = 2;           // .adk-menu (20) and .adk-insp (12), inside the animation dock

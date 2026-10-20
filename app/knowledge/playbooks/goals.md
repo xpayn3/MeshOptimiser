@@ -66,6 +66,7 @@ Goal: show what was optimised, looking its best. `render_image` makes big, smoot
 3. For a before and after: `compare_images` does it in one picture after the work is done: the model as it was opened on the left, as it is now on the right, same camera, the triangle and part counts and the size under each (`steps_back` to compare against an earlier step; `mode: "heat"` shows where the weight was). The scene ends exactly as it was. Tell the user the file path and the numbers.
 4. To show how it goes together: `set_explode` 50, `render_image`, then `set_explode` 0.
 5. A moving picture: `turntable_video` (one slow turn, a WebM).
+Ask the user whether they want Photo mode for pictures meant to impress (`photo_mode: true` on `render_image` or `screenshot`: soft shadows, occlusion, glow and a stage under the model; it draws its own background, so not with `transparent` or a plain colour). Leave it off for your own checks.
 Do not pick the look by yourself if the user has a house style: ask which background and which angle. `render_image` changes the camera and view for the picture: tell the user, and `set_camera_view` perspective puts it back.
 
 ## J. A whole folder of models
