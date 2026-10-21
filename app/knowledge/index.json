@@ -437,7 +437,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.",
-  "chars": 9723
+  "chars": 9934
  },
  {
   "slug": "align-to-floor",

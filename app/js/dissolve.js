@@ -118,13 +118,49 @@ export function dissolvePoints(positions, index, lab, weld, points, opts = {}) {
       let w = w0, guard = 0;
       do { const f = next.get(w); if (!f) return null; verts.push(f.va); w = f.wb; if (++guard > G.length + 1) return null; } while (w !== w0);
       if (verts.length !== G.length) return null;
-      return { verts, closed: true };
+      const order = []; w = w0;
+      do { const f = next.get(w); order.push(f); w = f.wb; } while (w !== w0);
+      return { verts, closed: true, order };
     }
     let w = first; verts.push(next.get(w).va);
     while (next.has(w)) { const f = next.get(w); verts.push(f.vb); w = f.wb; if (verts.length > G.length + 2) return null; }
     if (verts.length !== G.length + 1) return null;
     return { verts, closed: false, startW: first, endW: w };
   };
+
+  // A point on a straight line with other lines ending at it (a T): the ring of triangles is split at the two ends of the straight pair,
+  // so each side of the line is rebuilt without the point and the line itself stays one edge. null when no pair is straight or the ring
+  // is not closed.
+  function splitAtStraight(info, real, straightPair) {
+    const whole = chainOf(info);
+    if (!whole || !whole.closed) return null;
+    const ord = whole.order, n = ord.length;
+    for (let a = 0; a < real.length; a++) for (let b = a + 1; b < real.length; b++) {
+      if (!straightPair(real[a], real[b])) continue;
+      const i1 = ord.findIndex(f => f.wa === real[a]), i2 = ord.findIndex(f => f.wa === real[b]);
+      if (i1 < 0 || i2 < 0 || i1 === i2) continue;
+      const arc = (from, to) => { const G = []; for (let i = from; i !== to; i = (i + 1) % n) G.push(ord[i]); return G; };
+      const out = [];
+      for (const G of [arc(i1, i2), arc(i2, i1)]) {
+        const ch = chainOf(G);
+        if (!ch || ch.closed) { out.length = 0; break; }
+        out.push({ G, ch, label: Math.min(...G.map(f => find(LB[f.t]))) });
+      }
+      if (out.length !== 2) continue;
+      // only a fold: when both sides lie in one plane the line is not an edge of the shape and the polygons simply become one
+      const nrm = (vs) => {
+        let x = 0, y = 0, z = 0;
+        for (let i = 0; i < vs.length; i++) {
+          const p = vs[i], q = vs[(i + 1) % vs.length];
+          x += (P(p, 1) - P(q, 1)) * (P(p, 2) + P(q, 2)); y += (P(p, 2) - P(q, 2)) * (P(p, 0) + P(q, 0)); z += (P(p, 0) - P(q, 0)) * (P(p, 1) + P(q, 1));
+        }
+        const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l];
+      };
+      const n1 = nrm(out[0].ch.verts), n2 = nrm(out[1].ch.verts);
+      if (n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2] < 0.9998) return out;
+    }
+    return null;
+  }
 
   function tryDissolve(c) {
     const I = incident(c);
@@ -187,6 +223,8 @@ export function dissolvePoints(positions, index, lab, weld, points, opts = {}) {
           if (!((ch.startW === real[0] && ch.endW === real[1]) || (ch.startW === real[1] && ch.endW === real[0]))) return false;
           plan.push({ G, ch, label });
         }
+      } else if (allowMerge && !tolerant && real.length > 2 && (plan = splitAtStraight(info, real, straightPair))) {
+        // (the line the point is on stays; the polygons on each side of it become one, so the lines that ended at the point go)
       } else if (allowMerge || (tolerant && opts.limitMerge)) {
         const ch = chainOf(info);
         if (!ch) return false;
@@ -279,7 +317,7 @@ export function dissolvePoints(positions, index, lab, weld, points, opts = {}) {
     // all of it worked: the old triangles go, the new ones come
     for (const f of info) alive[f.t] = 0;
     for (const { pl, fresh } of made) for (const q of fresh) addTri(q[0], q[1], q[2], pl.label, OW[pl.G[0].t]);
-    if (plan.length === 1 && labels.size > 1) { const l0 = plan[0].label; for (const l of labels) union(l0, l); }
+    for (const pl of plan) { const l0 = pl.label; for (const f of pl.G) union(l0, find(LB[f.t])); }
     return true;
   }
 

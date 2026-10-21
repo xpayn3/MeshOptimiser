@@ -8,7 +8,7 @@ import { voxelRemesh } from './voxel.js?v=4';
 import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=13';
 import { carryUvs } from './uvcarry.js?v=2';
 import { createPhoto } from './photo.js?v=5';
-import * as MEDIT from './meshedit.js?v=5';
+import * as MEDIT from './meshedit.js?v=6';
 import { dissolvePoints } from './dissolve.js?v=3';
 import * as MT from './meshtools.js?v=5';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=3';
@@ -1604,7 +1604,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=70', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=71', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -28048,7 +28048,9 @@ function _cadMaterialFor(own) {
   if (m) return m;
   const T = THREE.TSL;
   const mc = T.texture(_cadMatcap(), T.matcapUV).rgb;
-  const col = own && own.color ? T.uniform(own.color) : T.vec3(0.75, 0.75, 0.75);
+  let col = own && own.color ? T.uniform(own.color) : T.vec3(0.75, 0.75, 0.75);
+  // (a merged or painted part keeps its colours in the vertices, and its material is white: they are read too, or it would take the matcap's grey)
+  if (own && own.vertexColors) col = col.mul(T.vertexColor().rgb);
   const W = T.vec3(0.299, 0.587, 0.114);
   const lum = T.dot(mc, W), cl = T.dot(col, W);
   const mx = T.max(T.max(col.x, col.y), col.z), mn = T.min(T.min(col.x, col.y), col.z);
@@ -49038,8 +49040,8 @@ async function mergeByColour_job() {
 }
 window._mergeByColour = mergeByColour;
 
-async function mergeSelectedIntoOne() { return _Job.run('Merge', () => mergeSelectedIntoOne_job()); }
-async function mergeSelectedIntoOne_job() { return _settledView(() => _mergeSelectedCore()); }
+async function mergeSelectedIntoOne(name) { return _Job.run('Merge', () => mergeSelectedIntoOne_job(name)); }
+async function mergeSelectedIntoOne_job(name) { return _settledView(() => _mergeSelectedCore(name)); }
 // Runs `fn` (plain or async) with an exploded view put back together, and explodes it again afterwards; the parts `fn` made or moved
 // measure their rest position first. Merge, Split and Flatten change what a part's rest is, so they must not see the view's offsets:
 // Split used to copy the exploded place as the pieces' rest, and Flatten re-measured every rest at the exploded position.
@@ -49063,7 +49065,7 @@ function _settledView(fn) {
   back();
   return r;
 }
-async function _mergeSelectedCore() {
+async function _mergeSelectedCore(name) {      // (name: what the merged part is called; Merge by group names it after the group)
   const ids = [...state.selected];
   if (ids.length < 2) { toast('Select 2+ parts to merge', '', 'warn'); return; }
   // Reversible via Ctrl+Z — no confirm prompt.
@@ -49304,7 +49306,7 @@ async function _mergeSelectedCore() {
   for (const p of consumed) avg.add(p.originalColor);
   avg.multiplyScalar(1 / consumed.length);
   const newPart = {
-    partId: newId, name: `Merged (${consumed.length} parts)`, hash: 'merged_' + newId,
+    partId: newId, name: (typeof name === 'string' && name.trim()) || `Merged (${consumed.length} parts)`, hash: 'merged_' + newId,
     triCount: totalTris, vertCount: totalVerts, bbox: overallBox.clone(),
     sizeMetrics: { diag: sz.length(), vol: sz.x*sz.y*sz.z, max: Math.max(sz.x, sz.y, sz.z) },
     visible: true, deleted: false, flagged: false,
@@ -59831,6 +59833,17 @@ setTimeout(() => _dndDecorateTree(), 0);
       try { _Brep.skip(fin); } catch (_) {}
       try { if (_polyIds.has(work)) _polyIds.set(fin, _polyIds.get(work)); if (_triOnly.has(work)) _triOnly.add(fin); } catch (_) {}
       try { fin.computeBoundingBox(); fin.computeBoundingSphere(); } catch (_) {}
+      // The picking tree of the shape it was, refitted to where the points are now, when the triangles are the same ones in the same order
+      // (the trees are built indirect: the index is never sorted). A tree built anew took half a second on two million triangles.
+      try {
+        const g0 = ed.before && ed.before.geom, bt = g0 && g0.boundsTree, i0 = g0 && g0.index, i1 = fin.index;
+        let same = !!(bt && bt._indirectBuffer && g0.attributes.position.count === fin.attributes.position.count && !!i0 === !!i1);
+        if (same && i0) { const a = i0.array, b = i1.array; if (a.length !== b.length) same = false; else for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { same = false; break; } }
+        if (same) {
+          const t = bt.constructor.deserialize({ roots: bt._roots.map(r => r.slice()), index: null, indirectBuffer: bt._indirectBuffer }, fin, { setIndex: false });
+          t.refit(); fin.boundsTree = t;
+        }
+      } catch (err) { console.warn('[edit] picking tree not refitted:', err && err.message || err); fin.boundsTree = undefined; }
       const was = p.hash, hash = 'ed_' + (state._decSeq = (state._decSeq | 0) + 1);
       state.geomByHash.set(hash, fin);
       p.mesh.geometry = _stampGeometry(fin);
@@ -61134,7 +61147,7 @@ setTimeout(() => _dndDecorateTree(), 0);
             await _nextFrame();
             state.selected.clear(); if (state.selectedGroupIds) state.selectedGroupIds.clear();
             for (const id of b[i].ids) state.selected.add(id);
-            try { await mergeSelectedIntoOne(); } catch (e) { console.warn('[merge by] ' + b[i].label + ':', e && e.message || e); continue; }
+            try { await mergeSelectedIntoOne(o.mode === 'group' ? b[i].label : undefined); } catch (e) { console.warn('[merge by] ' + b[i].label + ':', e && e.message || e); continue; }
             const np = getPart([...state.selected][0]);
             if (np && np.mesh) {
               if (o.mode === 'material' && b[i].mat) { try { _matSet(np.mesh, b[i].mat); } catch (_) {} }
@@ -62363,7 +62376,9 @@ const _Elements = (() => {
   // Points mode shows every point (corner) of the parts in work, up to this many in all; a part that would go over is left without
   // dots and the view says so. (It was 20,000 a part, with no word: a CAD part of any size showed no points at all. The dots are one
   // instanced sprite placed once, not again at each turn of the view, so a few hundred thousand cost little.)
-  const ALL_POINTS_MAX = 400000;
+  // (400,000 until the big parts were read on a worker: a part of 2.7 million triangles has 1.3 million points. Shown, they cost about
+  // 9 ms a frame zoomed in and 28 ms zoomed out on a desktop graphics card; this keeps a ceiling over that.)
+  const ALL_POINTS_MAX = 2000000;
   const OCCLUDE_MAX = 25000;             // pieces a box may test one by one for something standing in front of them
   // the mode button's pictures: a cube with its corners, one edge, one side, or all of it
   const CUBE = '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>';
@@ -62382,6 +62397,12 @@ const _Elements = (() => {
   let ov = null, ctx = null, hover = null, pending = false, down = null, lastMove = null, moveRaf = 0, group = null, ray = null;
   let box = null, stroke = null, altOrbit = false, prevButtons = null, prevView = null, ptr = null, sizing = null, sizeHold = null, gzOver = false;      // sizing: the brush being resized with the middle button; gzOver: the pointer is on a handle of the gizmo (the brush gives way to the normal pointer)
   const sel = new Map();                 // partId → { geom, R, points: Set, edges: Set, faces: Set (polygons), fill, outline, dirty }
+  // (a Set that counts its changes in .ver: the marks of the picked pieces are made again only when that, or the view, has moved)
+  class VSet extends Set {
+    add(v) { if (!super.has(v)) this.ver = (this.ver | 0) + 1; return super.add(v); }
+    delete(v) { const r = super.delete(v); if (r) this.ver = (this.ver | 0) + 1; return r; }
+    clear() { if (this.size) this.ver = (this.ver | 0) + 1; super.clear(); }
+  }
   const reads = new WeakMap();           // geometry → { key, topo, pg }
   const picks = [], unpicks = [];        // the history of what was picked: { before, after, at } (at: how long the app's own history was)
   let tc = null, tcHelper = null, pivot = null, grab = null;     // the gizmo on the picked pieces, the point it sits on, and a drag in progress
@@ -62392,7 +62413,7 @@ const _Elements = (() => {
   let OUTLINE_MAT = null, HOT_FILL_MAT = null;
   const outlineMat = () => { if (!OUTLINE_MAT) { OUTLINE_MAT = new THREE.LineBasicNodeMaterial({ color: 0xffb45c, depthWrite: false, transparent: true }); OUTLINE_MAT.positionNode = _pulledPosition('normal'); } return OUTLINE_MAT; };
   const hotFillMat = () => { if (!HOT_FILL_MAT) { HOT_FILL_MAT = new THREE.MeshBasicNodeMaterial({ color: 0xffffff, transparent: true, opacity: 0.34, depthTest: true, depthWrite: false, side: THREE.DoubleSide }); HOT_FILL_MAT.positionNode = _pulledPosition(); } return HOT_FILL_MAT; };
-  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _nm = new THREE.Matrix3(), _ptr = new THREE.Vector2();
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _nm = new THREE.Matrix3(), _ptr = new THREE.Vector2(), _boxM = new THREE.Matrix4();
   const canvas = () => $q('canvas');
   const save = () => { try { localStorage.setItem('stepopt-elements', JSON.stringify({ mode, tool, loops, cadPick, cadSet, brushR, space })); } catch (_) {} };
 
@@ -62401,12 +62422,56 @@ const _Elements = (() => {
   // the four-sided pairs of triangles meshedit.js finds (a cell of a grid, a strip of a tube wall), and a triangle of its own where
   // there is no such pair. A whole flat plate is never one polygon: a click on it would take the lot.
   const keyFor = (g) => _triOnly.has(g) ? 'tri' : _polyIds.has(g) ? 'ids' : 'quads';
+  // A part of more than READ_WORKER_TRIS triangles is read on a worker, from the moment Edit mesh first draws it: until the answer comes
+  // there is no reading (null), and a pick on the part waits for it (afterRead). Read on the page, a part of two and a half million
+  // triangles held everything up for three seconds at the first click, and the bigger parts were not read before one.
+  const READ_WORKER_TRIS = 60000;
+  const readJobs = new WeakMap();        // geometry → { key, waiters }: a worker is reading it
+  function readSoon(p) {
+    const geom = p.mesh.geometry, pos = geom.attributes.position, key = keyFor(geom), j = readJobs.get(geom);
+    if (j && j.key === key) return true;
+    if (!_MeshWorkers.available()) return false;
+    const ver = pos.version, job = { key, waiters: [] };
+    readJobs.set(geom, job);
+    _MeshWorkers.run(() => {
+      if (readJobs.get(geom) !== job) return null;                     // (not wanted any more)
+      const positions = _wireXYZ(pos, true), index = geom.index ? Uint32Array.from(geom.index.array) : null;
+      const ids = key === 'ids' ? _polyIds.get(geom) : null, poly = ids ? Int32Array.from(ids) : null;
+      const transfer = [positions.buffer]; if (index) transfer.push(index.buffer); if (poly) transfer.push(poly.buffer);
+      return { msg: { op: 'editRead', key, angle: _wireAngle(), positions, index, poly }, transfer };
+    }, { owner: '' }).then((r) => {
+      if (readJobs.get(geom) === job) readJobs.delete(geom);
+      // (kept only for the shape it was asked for: the same geometry, positions and kind of polygons, and not read on the page meanwhile)
+      const have = reads.get(geom);
+      if (r && r.ok && r.topo && keyFor(geom) === key && geom.attributes.position === pos && pos.version === ver && !(have && have.key === key)) {
+        const topo = Object.assign(r.topo, { positions: _wireXYZ(pos, false), index: geom.index ? geom.index.array : null });
+        reads.set(geom, { key, topo, pg: r.pg, lines: r.lines, corner: r.corner, slope: r.slope });
+        if (r.vn) pointNormalCache.set(topo.normal, r.vn);
+      }
+      for (const fn of job.waiters) { try { fn(); } catch (err) { console.warn('[elements] after read:', err); } }
+      if (active) { hover = null; changed(); }
+    });
+    return true;
+  }
+  const reading = (p) => { const g = p && p.mesh && p.mesh.geometry, j = g && readJobs.get(g); return !!(j && j.key === keyFor(g)); };
+  // fn, once every selected part a worker is reading has been read; false when none is being read. (Said once for each such wait.)
+  function afterRead(fn) {
+    const jobs = [];
+    for (const id of state.selected) { const p = getPart(id); if (p && p.mesh && reading(p)) jobs.push([p, readJobs.get(p.mesh.geometry)]); }
+    if (!jobs.length) return false;
+    let left = jobs.length;
+    for (const [, j] of jobs) j.waiters.push(() => { if (--left === 0 && active) fn(); });
+    const tris = jobs.reduce((n, [p]) => n + triCountOf(p), 0);
+    try { toast('Reading ' + (jobs.length === 1 ? (jobs[0][0].name || 'the part') : fmtNum(jobs.length) + ' parts'), fmtNum(tris) + ' triangles. The pick is made as soon as ' + (jobs.length === 1 ? 'it is' : 'they are') + ' read.', 'info', 3200); } catch (_) {}
+    return true;
+  }
   function read(p, build = true) {
     const geom = p && p.mesh && p.mesh.geometry, pos = geom && geom.attributes && geom.attributes.position;
     if (!pos) return null;
     const key = keyFor(geom);
     let R = reads.get(geom);
     if (R && R.key === key) return R;
+    if (triCountOf(p) > READ_WORKER_TRIS && readSoon(p)) return null;
     if (!build) return null;
     const P = _wireXYZ(pos, false), index = geom.index ? geom.index.array : null;
     const topo = R ? R.topo : MEDIT.buildTopology(P, index);
@@ -62434,14 +62499,22 @@ const _Elements = (() => {
     if (!e && make) {
       const R = read(p);
       if (!R) return null;
-      e = { geom: p.mesh.geometry, R, points: new Set(), edges: new Set(), faces: new Set(), fill: null, outline: null, dirty: false };
+      e = { geom: p.mesh.geometry, R, points: new VSet(), edges: new VSet(), faces: new VSet(), fill: null, outline: null, dirty: false };
       sel.set(p.partId, e);
     }
     return e || null;
   }
   function unshow(e) {
     let had = false;
-    for (const k of ['fill', 'outline']) if (e[k]) { try { group && group.remove(e[k]); e[k].geometry.dispose(); } catch (_) {} e[k] = null; had = true; }
+    for (const k of ['fill', 'outline']) if (e[k]) {
+      try {
+        group && group.remove(e[k]);
+        // (the fill's points are the part's own: taken off it first, or letting it go would free the buffer the part is drawn with)
+        for (const name of e[k].userData.shared || []) e[k].geometry.deleteAttribute(name);
+        e[k].geometry.dispose();
+      } catch (_) {}
+      e[k] = null; had = true;
+    }
     return had;
   }
   function drop(partId) {
@@ -62597,6 +62670,10 @@ const _Elements = (() => {
   function pick(ev, asLoop) {
     if (needPart()) return;
     let h = elementAt(ev, true);
+    if (h && h.p && !h.el && reading(h.p)) {
+      const again = { clientX: ev.clientX, clientY: ev.clientY, shiftKey: ev.shiftKey, ctrlKey: ev.ctrlKey, metaKey: ev.metaKey, altKey: ev.altKey };
+      if (afterRead(() => pick(again, asLoop))) return;
+    }
     const how = howOf(ev);
     if (h && h.instanced) h = promote(h) ? elementAt(ev, true) : null;
     record(() => {
@@ -62632,23 +62709,38 @@ const _Elements = (() => {
       if (how === 'set') clearAll();
       camera.getWorldPosition(_cam);
       const ortho = !!camera._isOrtho, look = ortho ? camera.getWorldDirection(new THREE.Vector3()).negate() : null;
-      const cand = [];                       // [entry, id, world x, y, z]
+      // the pieces found, in flat lists: their entry, their number and where they are in the world. (With the points of a part put on the
+      // screen one Vector3 call at a time and a small array for each piece, a box over a part of two and a half million triangles took
+      // over half a second a pass, and the box is picked again at each move of the drag.)
+      const cE = [], cId = [], cX = [];
+      const ve = camera.matrixWorldInverse.elements, pe = camera.projectionMatrix.elements;
       for (const p of parts.values()) {
         const e = entry(p, true); if (!e) continue;
         const { topo, pg } = e.R;
         p.mesh.updateWorldMatrix(true, false);
         const M = p.mesh.matrixWorld; _nm.getNormalMatrix(M);
-        const P3 = [0, 0, 0];
-        // every point of the part on the screen, once
-        const inside = new Uint8Array(topo.nVert);
+        const me = M.elements, ne = _nm.elements, Pp = topo.positions, rp = topo.rep, N = topo.normal;
+        // every point of the part on the screen, once: the part's place, the view and the lens in one matrix
+        const m = _boxM.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(M).elements;
+        const inside = new Uint8Array(topo.nVert), rl = rect.left, rtp = rect.top, rw = rect.width, rh = rect.height;
         for (let v = 0; v < topo.nVert; v++) {
-          MEDIT.pointPosition(topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); _v.copy(_w).project(camera);
-          if (_v.z > 1 || _v.z < -1) continue;
-          const x = rect.left + (_v.x * 0.5 + 0.5) * rect.width, y = rect.top + (-_v.y * 0.5 + 0.5) * rect.height;
-          inside[v] = (x >= L && x <= Rr && y >= T && y <= B) ? 1 : 0;
+          const r = rp[v] * 3, x = Pp[r], y = Pp[r + 1], z = Pp[r + 2];
+          const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+          const cz = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
+          if (cz > 1 || cz < -1) continue;
+          const sx = rl + ((m[0] * x + m[4] * y + m[8] * z + m[12]) / w * 0.5 + 0.5) * rw, sy = rtp + (-(m[1] * x + m[5] * y + m[9] * z + m[13]) / w * 0.5 + 0.5) * rh;
+          inside[v] = (sx >= L && sx <= Rr && sy >= T && sy <= B) ? 1 : 0;
         }
-        const faces = (t) => { if (t < 0) return false; _n.set(topo.normal[t * 3], topo.normal[t * 3 + 1], topo.normal[t * 3 + 2]).applyMatrix3(_nm); return ortho ? _n.dot(look) > 0 : (_n.x * (_cam.x - _w.x) + _n.y * (_cam.y - _w.y) + _n.z * (_cam.z - _w.z)) > 0; };
-        const at = (v) => { MEDIT.pointPosition(topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); };
+        // (at: the point v in the world, into wx, wy, wz; faces: does triangle t look at the camera from there)
+        let wx = 0, wy = 0, wz = 0;
+        const at = (v) => { const r = rp[v] * 3, x = Pp[r], y = Pp[r + 1], z = Pp[r + 2]; wx = me[0] * x + me[4] * y + me[8] * z + me[12]; wy = me[1] * x + me[5] * y + me[9] * z + me[13]; wz = me[2] * x + me[6] * y + me[10] * z + me[14]; };
+        const faces = (t) => {
+          if (t < 0) return false;
+          const a = N[t * 3], b = N[t * 3 + 1], c = N[t * 3 + 2];
+          const nx = ne[0] * a + ne[3] * b + ne[6] * c, ny = ne[1] * a + ne[4] * b + ne[7] * c, nz = ne[2] * a + ne[5] * b + ne[8] * c;
+          return ortho ? nx * look.x + ny * look.y + nz * look.z > 0 : nx * (_cam.x - wx) + ny * (_cam.y - wy) + nz * (_cam.z - wz) > 0;
+        };
+        const put = (id, x, y, z) => { cE.push(e); cId.push(id); cX.push(x, y, z); };
         if (mode === 'points') {
           const on = cornerFlags(e.R);
           for (let v = 0; v < topo.nVert; v++) {
@@ -62656,17 +62748,17 @@ const _Elements = (() => {
             at(v);
             let seen = false;
             for (let i = topo.vStart[v]; i < topo.vStart[v + 1] && !seen; i++) { const ed = topo.vEdges[i]; seen = faces(topo.edgeT[ed * 2]) || faces(topo.edgeT[ed * 2 + 1]); }
-            if (seen) cand.push([e, v, _w.x, _w.y, _w.z]);
+            if (seen) put(v, wx, wy, wz);
           }
         } else if (mode === 'edges') {
           for (let ed = 0; ed < topo.nEdge; ed++) {
             if (!pg.real[ed]) continue;
             const a = topo.edgeV[ed * 2], b = topo.edgeV[ed * 2 + 1];
             if (!inside[a] || !inside[b]) continue;
-            at(a); const ax = _w.x, ay = _w.y, az = _w.z;
+            at(a); const ax = wx, ay = wy, az = wz;
             if (!(faces(topo.edgeT[ed * 2]) || faces(topo.edgeT[ed * 2 + 1]))) continue;
             at(b);
-            cand.push([e, ed, (ax + _w.x) / 2, (ay + _w.y) / 2, (az + _w.z) / 2]);
+            put(ed, (ax + wx) / 2, (ay + wy) / 2, (az + wz) / 2);
           }
         } else {
           for (let q = 0; q < pg.count; q++) {
@@ -62674,18 +62766,19 @@ const _Elements = (() => {
             for (let i = pg.pStart[q]; ok && i < pg.pStart[q + 1]; i++) { const t = pg.pTris[i]; ok = !!(inside[topo.tri[t * 3]] && inside[topo.tri[t * 3 + 1]] && inside[topo.tri[t * 3 + 2]]); }
             if (!ok) continue;
             const t0 = pg.pTris[pg.pStart[q]];
-            at(topo.tri[t0 * 3]); let cx = _w.x, cy = _w.y, cz = _w.z;
+            at(topo.tri[t0 * 3]); let cx = wx, cy = wy, cz = wz;
             if (!faces(t0)) continue;
-            at(topo.tri[t0 * 3 + 1]); cx += _w.x; cy += _w.y; cz += _w.z;
-            at(topo.tri[t0 * 3 + 2]); cx += _w.x; cy += _w.y; cz += _w.z;
-            cand.push([e, q, cx / 3, cy / 3, cz / 3]);
+            at(topo.tri[t0 * 3 + 1]); cx += wx; cy += wy; cz += wz;
+            at(topo.tri[t0 * 3 + 2]); cx += wx; cy += wy; cz += wz;
+            put(q, cx / 3, cy / 3, cz / 3);
           }
         }
       }
       // nothing in front of it: the first thing a ray from the camera meets on the way is the piece itself
-      const check = cand.length <= OCCLUDE_MAX;
+      const check = cE.length <= OCCLUDE_MAX;
       const touched = new Set();
-      for (const [e, id, x, y, z] of cand) {
+      for (let c = 0; c < cE.length; c++) {
+        const e = cE[c], id = cId[c], x = cX[c * 3], y = cX[c * 3 + 1], z = cX[c * 3 + 2];
         if (check) {
           _v.set(x, y, z).project(camera); _ptr.set(_v.x, _v.y); ray.setFromCamera(_ptr, camera);
           const h = ray.intersectObjects(targets, false)[0];
@@ -62697,7 +62790,7 @@ const _Elements = (() => {
       for (const e of touched) e.dirty = true;
       for (const [id, e] of [...sel]) if (!e.points.size && !e.edges.size && !e.faces.size) drop(id);
     });
-    changed();
+    if (live === 'drag') { syncCard(); schedule(); } else changed();      // (the gizmo waits for the release: placed on a million picked pieces at every pass, it held the drag up)
     return found;
   }
 
@@ -62712,7 +62805,7 @@ const _Elements = (() => {
     if (b.at === b.x1 + ',' + b.y1) return;
     b.at = b.x1 + ',' + b.y1;
     restore(b.before);
-    if (boxMoved(b)) boxPick(b.x0, b.y0, b.x1, b.y1, b.how, true);
+    if (boxMoved(b)) boxPick(b.x0, b.y0, b.x1, b.y1, b.how, 'drag');
     b.wait = performance.now() + Math.min(400, (performance.now() - now) * 2);
   }
   function boxEnd(b, keep) {      // the release (keep), or the drag given up: what was picked before is back
@@ -62720,6 +62813,7 @@ const _Elements = (() => {
     restore(b.before);
     if (!keep || !boxMoved(b)) return false;
     if (needPart()) return true;
+    if (afterRead(() => boxPick(b.x0, b.y0, b.x1, b.y1, b.how))) return true;
     boxPick(b.x0, b.y0, b.x1, b.y1, b.how, true);
     const after = snap();
     if (sig(b.before) !== sig(after)) { picks.push({ before: b.before, after, at: state.history.length }); if (picks.length > 200) picks.shift(); unpicks.length = 0; }
@@ -62790,6 +62884,7 @@ const _Elements = (() => {
   }
 
   function selectAll() {
+    if (afterRead(selectAll)) return;
     record(() => {
       const any = [];                                     // every selected part, whether something of it is picked yet or not
       for (const id of state.selected) { const p = getPart(id); if (p && p.mesh && !p.deleted && !p.isSpline && !p.isPrimitive) { const e = entry(p, true); if (e) any.push([p, e]); } }
@@ -63325,7 +63420,7 @@ const _Elements = (() => {
       const raw = []; for (let i = 0; i < topo.nRaw; i++) if (welded.has(topo.weld[i])) raw.push(i);
       const orig = new Float32Array(raw.length * 3); for (let k = 0; k < raw.length; k++) { orig[k * 3] = arr[raw[k] * 3]; orig[k * 3 + 1] = arr[raw[k] * 3 + 1]; orig[k * 3 + 2] = arr[raw[k] * 3 + 2]; }
       // the same points, edges and polygons, read on the copy (its positions are the ones that move)
-      const R2 = { key: keyFor(ed.geom), topo: Object.assign({}, topo, { positions: arr }), pg: e.R.pg, lines: e.R.lines };
+      const R2 = { key: keyFor(ed.geom), topo: topoWith(topo, { positions: arr }), pg: e.R.pg, lines: e.R.lines, slope: e.R.slope, corner: e.R.corner, cornerSet: e.R.cornerSet };      // (the slopes and corners: the same triangles, and until the release the same normals)
       reads.set(ed.geom, R2);
       const oldR = e.R; e.geom = ed.geom; e.R = R2; e.dirty = true;
       p.mesh.updateWorldMatrix(true, false);
@@ -63378,55 +63473,191 @@ const _Elements = (() => {
     if (!topo || topo.nTri !== nTri) return;
     const polyOf = pg && pg.polyOf && pg.polyOf.length === nTri ? pg.polyOf : null;
     const corner = (t, k) => ix ? ix[t * 3 + k] : t * 3 + k;
-    // the normal of every triangle now (unit, and the length it had: the area, twice)
-    const fn = new Float32Array(nTri * 3), fa = new Float32Array(nTri);
-    for (let t = 0; t < nTri; t++) {
+    // (Only the triangles round the moved points are looked at: worked out for the whole part, two million triangles took a third of a
+    // second at every release of the gizmo. Each is worked out when it is first needed, the same way as before.)
+    // the normal of a triangle now (unit, and the length it had: the area, twice)
+    const fnOf = new Map();
+    const fn = (t) => {
+      let r = fnOf.get(t);
+      if (r) return r;
       const a = corner(t, 0), b = corner(t, 1), c = corner(t, 2);
       const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
       const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
-      fa[t] = l;
-      if (l > 0) { fn[t * 3] = nx / l; fn[t * 3 + 1] = ny / l; fn[t * 3 + 2] = nz / l; }
-    }
-    // the normal of each polygon (its triangles' normals added by area): what a corner is compared with, so that the two triangles of a
+      r = l > 0 ? [nx / l, ny / l, nz / l, l] : [0, 0, 0, 0];
+      fnOf.set(t, r);
+      return r;
+    };
+    // the normal of a polygon (its triangles' normals added by area): what a corner is compared with, so that the two triangles of a
     // quad, which meet at the same corners, are shaded from the very same neighbours and agree
-    let pn = null;
-    if (polyOf) {
-      pn = new Float32Array(pg.count * 3);
-      for (let t = 0; t < nTri; t++) { const q = polyOf[t] * 3; pn[q] += fn[t * 3] * fa[t]; pn[q + 1] += fn[t * 3 + 1] * fa[t]; pn[q + 2] += fn[t * 3 + 2] * fa[t]; }
-      for (let q = 0; q < pg.count; q++) { const l = Math.hypot(pn[q * 3], pn[q * 3 + 1], pn[q * 3 + 2]) || 1; pn[q * 3] /= l; pn[q * 3 + 1] /= l; pn[q * 3 + 2] /= l; }
-    }
+    const pnOf = new Map();
+    const pn = (q) => {
+      let r = pnOf.get(q);
+      if (r) return r;
+      let x = 0, y = 0, z = 0;
+      for (let i = pg.pStart[q]; i < pg.pStart[q + 1]; i++) { const f = fn(pg.pTris[i]); x += f[0] * f[3]; y += f[1] * f[3]; z += f[2] * f[3]; }
+      const l = Math.hypot(x, y, z) || 1;
+      r = [x / l, y / l, z / l];
+      pnOf.set(q, r);
+      return r;
+    };
     const moved = new Uint8Array(nRaw); for (const r of g.raw) moved[r] = 1;
-    // the triangles at each place (CSR over the welded points)
-    const nV = topo.nVert, start = new Uint32Array(nV + 1);
-    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) start[topo.tri[t * 3 + k] + 1]++;
-    for (let v = 0; v < nV; v++) start[v + 1] += start[v];
-    const fill = start.slice(0, nV), around = new Uint32Array(nTri * 3);
-    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) around[fill[topo.tri[t * 3 + k]]++] = t;
+    // the triangles to shade: those with a moved corner, and the rest of their polygons (the half of a quad that does not hold the moved
+    // corner is not left as it was), in their order
+    const hit = [], polyHit = polyOf ? new Set() : null;
+    for (let t = 0; t < nTri; t++) if (moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)]) { hit.push(t); if (polyHit) polyHit.add(polyOf[t]); }
+    let shade = hit;
+    if (polyHit) {
+      const all = new Set(hit);
+      for (const q of polyHit) for (let i = pg.pStart[q]; i < pg.pStart[q + 1]; i++) all.add(pg.pTris[i]);
+      shade = [...all].sort((a, b) => a - b);
+    }
+    // the triangles at each place those touch (over the welded points)
+    const want = new Uint8Array(topo.nVert);
+    for (const t of shade) for (let k = 0; k < 3; k++) want[topo.tri[t * 3 + k]] = 1;
+    const around = new Map();
+    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) {
+      const w = topo.tri[t * 3 + k];
+      if (!want[w]) continue;
+      let L = around.get(w); if (!L) around.set(w, L = []);
+      L.push(t);
+    }
     const cosA = Math.cos(EDIT_SHADE_DEG * Math.PI / 180);
-    // a polygon with a moved corner is shaded whole (the half of a quad that does not hold the moved corner is not left as it was)
-    const polyHit = polyOf ? new Uint8Array(pg.count) : null;
-    if (polyHit) for (let t = 0; t < nTri; t++) if (moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)]) polyHit[polyOf[t]] = 1;
-    const done = new Uint8Array(nRaw);
-    for (let t = 0; t < nTri; t++) {
-      if (!(moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)] || (polyHit && polyHit[polyOf[t]]))) continue;
+    const done = new Set();
+    for (const t of shade) {
       for (let k = 0; k < 3; k++) {
         const v = corner(t, k);
-        if (done[v]) continue;
-        done[v] = 1;
+        if (done.has(v)) continue;
+        done.add(v);
         const w = topo.tri[t * 3 + k];
-        const rx = pn ? pn[polyOf[t] * 3] : fn[t * 3], ry = pn ? pn[polyOf[t] * 3 + 1] : fn[t * 3 + 1], rz = pn ? pn[polyOf[t] * 3 + 2] : fn[t * 3 + 2];
+        const ref = polyOf ? pn(polyOf[t]) : fn(t), rx = ref[0], ry = ref[1], rz = ref[2];
         let sx = 0, sy = 0, sz = 0;
-        for (let i = start[w]; i < start[w + 1]; i++) {
-          const u = around[i];
+        for (const u of around.get(w) || []) {
+          const f = fn(u);
           const uses = corner(u, 0) === v || corner(u, 1) === v || corner(u, 2) === v;        // (a vertex that triangles share is shaded from all of them, as it was)
-          if (!(uses || (polyOf && polyOf[u] === polyOf[t]) || fn[u * 3] * rx + fn[u * 3 + 1] * ry + fn[u * 3 + 2] * rz >= cosA)) continue;
-          sx += fn[u * 3] * fa[u]; sy += fn[u * 3 + 1] * fa[u]; sz += fn[u * 3 + 2] * fa[u];
+          if (!(uses || (polyOf && polyOf[u] === polyOf[t]) || f[0] * rx + f[1] * ry + f[2] * rz >= cosA)) continue;
+          sx += f[0] * f[3]; sy += f[1] * f[3]; sz += f[2] * f[3];
         }
         const l = Math.hypot(sx, sy, sz);
         if (l > 0) { N[v * 3] = sx / l; N[v * 3 + 1] = sy / l; N[v * 3 + 2] = sz / l; }
       }
     }
     na.needsUpdate = true;
+  }
+  // The reading of a shape whose points were moved (g: a part of the drag) on its finished geometry: the drag's reading, with the normals
+  // of the triangles at the moved points, the sharp edges among their edges, the slopes of the blue lines and the dots' normals at their
+  // corners worked out again, and the faces (regions) again when they are first asked for. null: the geometry is not the dragged one.
+  const CREASE_COS = Math.cos(30 * Math.PI / 180);      // (buildTopology's own crease angle)
+  // a copy of a reading's topology with some of it changed (its faces, when they are made only when asked for, are not made by the copy)
+  const topoWith = (T, o) => Object.assign(Object.defineProperties({}, Object.getOwnPropertyDescriptors(T)), o);
+  function movedRead(g, geom) {
+    const R0 = g.e.R, T0 = R0 && R0.topo, pa = geom && geom.attributes && geom.attributes.position;
+    if (!T0 || !pa || pa.isInterleavedBufferAttribute || !(pa.array instanceof Float32Array) || pa.array.length !== T0.nRaw * 3) return null;
+    const ix = geom.index ? geom.index.array : null;
+    if (!!ix !== !!T0.index || (ix ? ix.length : T0.nRaw) !== T0.nTri * 3) return null;
+    const P = pa.array, nTri = T0.nTri, nV = T0.nVert, tri = T0.tri, weld = T0.weld;
+    const corner = (t, k) => ix ? ix[t * 3 + k] : t * 3 + k;
+    const moved = new Uint8Array(nV); for (const r of g.raw) moved[weld[r]] = 1;
+    // the triangles at a moved point get their normals again, and their edges are sharp or not again
+    const normal = T0.normal.slice(), kind = T0.kind.slice(), near = new Uint8Array(nV);
+    let kindChanged = false;
+    for (let t = 0; t < nTri; t++) {
+      if (!(moved[tri[t * 3]] || moved[tri[t * 3 + 1]] || moved[tri[t * 3 + 2]])) continue;
+      const a = corner(t, 0), b = corner(t, 1), c = corner(t, 2);
+      const ax = P[a * 3], ay = P[a * 3 + 1], az = P[a * 3 + 2];
+      const ux = P[b * 3] - ax, uy = P[b * 3 + 1] - ay, uz = P[b * 3 + 2] - az, vx = P[c * 3] - ax, vy = P[c * 3 + 1] - ay, vz = P[c * 3 + 2] - az;
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
+      normal[t * 3] = l > 0 ? nx / l : 0; normal[t * 3 + 1] = l > 0 ? ny / l : 0; normal[t * 3 + 2] = l > 0 ? nz / l : 0;
+      for (let k = 0; k < 3; k++) near[tri[t * 3 + k]] = 1;
+    }
+    for (let t = 0; t < nTri; t++) {
+      if (!(moved[tri[t * 3]] || moved[tri[t * 3 + 1]] || moved[tri[t * 3 + 2]])) continue;
+      for (let k = 0; k < 3; k++) {
+        const e = T0.triE[t * 3 + k];
+        if (T0.edgeN[e] !== 2) continue;
+        const p = T0.edgeT[e * 2] * 3, q = T0.edgeT[e * 2 + 1] * 3;
+        const lp = normal[p] || normal[p + 1] || normal[p + 2], lq = normal[q] || normal[q + 1] || normal[q + 2];
+        const d = normal[p] * normal[q] + normal[p + 1] * normal[q + 1] + normal[p + 2] * normal[q + 2];
+        const kd = (lp && lq && d < CREASE_COS) ? 1 : 0;
+        if (kd !== kind[e]) { kind[e] = kd; kindChanged = true; }
+      }
+    }
+    const topo = topoWith(T0, { positions: P, index: ix, normal, kind });
+    if (kindChanged) {
+      // (the faces, as buildTopology finds them: triangles that hang together across smooth edges; made when first asked for)
+      let region = null, nRegion = 0;
+      const make = () => {
+        if (region) return;
+        region = new Int32Array(nTri).fill(-1);
+        const stack = new Uint32Array(nTri);
+        for (let s0 = 0; s0 < nTri; s0++) {
+          if (region[s0] !== -1) continue;
+          let top = 0; stack[top++] = s0; region[s0] = nRegion;
+          while (top) {
+            const t = stack[--top];
+            for (let k = 0; k < 3; k++) {
+              const e = topo.triE[t * 3 + k];
+              if (kind[e] !== 0) continue;
+              const o = topo.edgeT[e * 2] === t ? topo.edgeT[e * 2 + 1] : topo.edgeT[e * 2];
+              if (o >= 0 && region[o] === -1) { region[o] = nRegion; stack[top++] = o; }
+            }
+          }
+          nRegion++;
+        }
+      };
+      Object.defineProperty(topo, 'region', { get() { make(); return region; }, enumerable: true });
+      Object.defineProperty(topo, 'nRegion', { get() { make(); return nRegion; }, enumerable: true });
+    }
+    // the triangles at each point that a moved triangle touches, in their order (as slopeOf and pointNormals take them)
+    const around = new Map();
+    for (let v = 0; v < nV; v++) if (near[v]) around.set(v, []);
+    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) { const w = tri[t * 3 + k]; if (near[w]) { const L = around.get(w); if (L[L.length - 1] !== t) L.push(t); } }
+    const R = { key: keyFor(geom), topo, pg: R0.pg, lines: R0.lines, corner: R0.corner, cornerSet: R0.cornerSet };
+    // the blue lines' slopes (slopeOf: the normals taken the same way round as the first, and the most turned one), at those points
+    if (R0.slope && R0.slope.length === T0.nRaw * 4) {
+      const per = new Float32Array(nV * 4);
+      for (const [w, L] of around) {
+        let rx = 0, ry = 0, rz = 0, sx = 0, sy = 0, sz = 0;
+        for (const t of L) {
+          const nx = normal[t * 3], ny = normal[t * 3 + 1], nz = normal[t * 3 + 2];
+          if (!nx && !ny && !nz) continue;
+          if (!rx && !ry && !rz) { rx = nx; ry = ny; rz = nz; }
+          const sg = (nx * rx + ny * ry + nz * rz) < 0 ? -1 : 1;
+          sx += sg * nx; sy += sg * ny; sz += sg * nz;
+        }
+        const l = Math.hypot(sx, sy, sz) || 1; sx /= l; sy /= l; sz /= l;
+        let spread = 0;
+        for (const t of L) {
+          const nx = normal[t * 3], ny = normal[t * 3 + 1], nz = normal[t * 3 + 2];
+          if (!nx && !ny && !nz) continue;
+          const a = Math.acos(Math.min(1, Math.abs(nx * sx + ny * sy + nz * sz)));
+          if (a > spread) spread = a;
+        }
+        per[w * 4] = sx; per[w * 4 + 1] = sy; per[w * 4 + 2] = sz; per[w * 4 + 3] = spread;
+      }
+      const slope = R0.slope.slice();
+      for (let i = 0; i < T0.nRaw; i++) { const w = weld[i]; if (near[w]) { slope[i * 4] = per[w * 4]; slope[i * 4 + 1] = per[w * 4 + 1]; slope[i * 4 + 2] = per[w * 4 + 2]; slope[i * 4 + 3] = per[w * 4 + 3]; } }
+      R.slope = slope;
+    }
+    // the dots' normals (pointNormals), when they were made for the shape before
+    const pn0 = pointNormalCache.get(T0.normal);
+    if (pn0) {
+      const pn = pn0.slice();
+      for (const [w, L] of around) {
+        let sx = 0, sy = 0, sz = 0;
+        for (const t of L) { sx += normal[t * 3]; sy += normal[t * 3 + 1]; sz += normal[t * 3 + 2]; }
+        const l = Math.hypot(sx, sy, sz) || 1; sx /= l; sy /= l; sz /= l;
+        let worst = 0;
+        for (const t of L) {
+          const nx = normal[t * 3], ny = normal[t * 3 + 1], nz = normal[t * 3 + 2];
+          if (!nx && !ny && !nz) continue;
+          const a = Math.acos(Math.max(-1, Math.min(1, nx * sx + ny * sy + nz * sz)));
+          if (a > worst) worst = a;
+        }
+        pn[w * 4] = sx; pn[w * 4 + 1] = sy; pn[w * 4 + 2] = sz; pn[w * 4 + 3] = worst;
+      }
+      pointNormalCache.set(normal, pn);
+    }
+    return R;
   }
   function grabEnd() {
     const g0 = grab; grab = null;
@@ -63436,9 +63667,14 @@ const _Elements = (() => {
     for (const g of g0.parts) { renormal(g); n += g.e[mode].size; }
     const verb = (state.gizmoMode === 'rotate') ? 'Turn ' : (state.gizmoMode === 'scale') ? 'Scale ' : 'Move ';
     window.__moAgent.commitGeomEdit(g0.parts.map(g => g.ed), g0.label || (verb + fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode])));
-    // the same pieces on the shape as it is now: read again, and found by the corners they stand on
+    // the same pieces on the shape as it is now. A move changes where the points are, not how the triangles hang together: the reading
+    // is kept, with what the moved points change worked out again round them (movedRead). Read again from nothing, a part of two
+    // million triangles took seconds at every release of the gizmo. (Read again, and the pieces found by their corners, only when the
+    // finished shape is not the one that was dragged.)
     for (const g of g0.parts) {
       const { p, e } = g, oldTopo = g.oldR.topo, oldPg = g.oldR.pg;
+      const kept = movedRead(g, p.mesh.geometry);
+      if (kept) { reads.set(p.mesh.geometry, kept); e.geom = p.mesh.geometry; e.R = kept; e.ew = null; e.dirty = true; continue; }
       const keep = { points: [...e.points], edges: [...e.edges], faces: [...e.faces] };
       reads.delete(p.mesh.geometry);
       sel.delete(p.partId); unshow(e);
@@ -63486,16 +63722,37 @@ const _Elements = (() => {
   }
   // the picked polygons of one part, as a mesh of their own with their outlines (new ones each time: no stale buffers that way)
   // (while the gizmo drags, the same two objects take the new positions: new buffers at every frame flicker and trail behind)
+  // (The fill is the part's own points with a list of the picked triangles: a box over a million polygons used to copy them all into a
+  // new buffer, work out normals the fill never reads and a bounding sphere, at every pass of the drag. Their outlines are drawn while
+  // there are no more than DRAW_MAX of them, as the picked points and edges are; the fill shows them all.)
   function showFaces(p, e, inPlace) {
-    const keep = !!(inPlace && e.fill && e.outline && mode === 'faces' && e.faces.size);
-    if (!keep) unshow(e);
+    const pa = p.mesh.geometry.attributes.position;
+    const keepFill = !!(inPlace && e.fill && e.fill.geometry.attributes.position === pa && mode === 'faces' && e.faces.size);
+    const keep = !!(keepFill && e.outline);
+    if (!keepFill) unshow(e); else if (!keep && e.outline) { try { group && group.remove(e.outline); e.outline.geometry.dispose(); } catch (_) {} e.outline = null; }
     e.dirty = false;
     if (mode !== 'faces' || !e.faces.size) return;
-    const { topo, pg } = e.R, P = topo.positions, ix = topo.index;
-    const tris = trisOfPolys(pg, e.faces), out = new Float32Array(tris.length * 9);
-    let o = 0;
-    for (const t of tris) for (let k = 0; k < 3; k++) { const v = (ix ? ix[t * 3 + k] : t * 3 + k) * 3; out[o++] = P[v]; out[o++] = P[v + 1]; out[o++] = P[v + 2]; }
-    let n = 0; for (const q of e.faces) n += pg.oStart[q + 1] - pg.oStart[q];
+    const { topo, pg } = e.R, ix = topo.index;
+    if (!keepFill) {
+      const tris = trisOfPolys(pg, e.faces), idx = new Uint32Array(tris.length * 3);
+      let oi = 0;
+      for (const t of tris) for (let k = 0; k < 3; k++) idx[oi++] = ix ? ix[t * 3 + k] : t * 3 + k;
+      const g = new THREE.BufferGeometry(), src = p.mesh.geometry;
+      g.setAttribute('position', pa);
+      const nm = src.attributes.normal;      // (the material asks for normals: the part's own, or none of its own to share)
+      if (nm && nm.count === pa.count) g.setAttribute('normal', nm); else g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(pa.count * 3), 3));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      g.index.version = ++_geomVersionSeq;      // (see _stampGeometry: a new buffer must not look like the one drawn before it)
+      if (!src.boundingSphere) src.computeBoundingSphere();
+      if (!src.boundingBox) src.computeBoundingBox();
+      g.boundingSphere = src.boundingSphere.clone(); g.boundingBox = src.boundingBox.clone();
+      e.fill = new THREE.Mesh(g, FILL_MAT);
+      e.fill.userData.shared = nm && nm.count === pa.count ? ['position', 'normal'] : ['position'];
+      e.fill.matrixAutoUpdate = false; e.fill.frustumCulled = false; e.fill.raycast = () => {}; e.fill.userData.partId = p.partId; e.fill.renderOrder = 6;
+      group.add(e.fill);
+    }
+    if (e.faces.size > DRAW_MAX) return;
+    let o = 0, n = 0; for (const q of e.faces) n += pg.oStart[q + 1] - pg.oStart[q];
     // (each line carries the normal of its polygon, so that it is pulled far enough in front of it when it is seen at an angle)
     const lines = new Float32Array(n * 6), lnrm = new Float32Array(n * 6), P3 = [0, 0, 0]; o = 0;
     for (const q of e.faces) {
@@ -63507,19 +63764,17 @@ const _Elements = (() => {
       }
     }
     if (keep) {
-      const fa = e.fill.geometry.attributes.position, la = e.outline.geometry.attributes.position, ln = e.outline.geometry.attributes.normal;
-      if (fa.array.length === out.length && la.array.length === lines.length && ln) { fa.array.set(out); fa.needsUpdate = true; la.array.set(lines); la.needsUpdate = true; ln.array.set(lnrm); ln.needsUpdate = true; return; }
-      unshow(e);
+      const la = e.outline.geometry.attributes.position, ln = e.outline.geometry.attributes.normal;
+      if (la.array.length === lines.length && ln) { la.array.set(lines); la.needsUpdate = true; ln.array.set(lnrm); ln.needsUpdate = true; return; }
+      try { group && group.remove(e.outline); e.outline.geometry.dispose(); } catch (_) {}
+      e.outline = null;
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(out, 3));
-    e.fill = new THREE.Mesh(_stampGeometry(g), FILL_MAT);
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.BufferAttribute(lines, 3));
     lg.setAttribute('normal', new THREE.BufferAttribute(lnrm, 3));
     e.outline = new THREE.LineSegments(_stampGeometry(lg), outlineMat());
-    for (const m of [e.fill, e.outline]) { m.matrixAutoUpdate = false; m.frustumCulled = false; m.raycast = () => {}; m.userData.partId = p.partId; group.add(m); }
-    e.fill.renderOrder = 6; e.outline.renderOrder = 7;
+    e.outline.matrixAutoUpdate = false; e.outline.frustumCulled = false; e.outline.raycast = () => {}; e.outline.userData.partId = p.partId; e.outline.renderOrder = 7;
+    group.add(e.outline);
   }
   function paint() {
     if (!active || !ov) return;
@@ -63563,7 +63818,8 @@ const _Elements = (() => {
       const why = over.length || unread.length ? over.join(',') + '/' + unread.join(',') : '';
       if (why && why !== pointsNote) {
         const n = over.length + unread.length, them = n === 1 ? 'one part' : fmtNum(n) + ' parts';
-        try { toast('Points mode', over.length ? 'The points of ' + them + ' are not shown: more than ' + fmtNum(ALL_POINTS_MAX) + ' points in all. They can still be picked with a click, the box or the brush.' : 'The points of ' + them + ' over ' + fmtNum(BIG) + ' triangles show after a first click on the part.', 'info', 4200); } catch (_) {}
+        const inWork = unread.some(id => reading(getPart(id)));
+        try { toast('Points mode', over.length ? 'The points of ' + them + ' are not shown: more than ' + fmtNum(ALL_POINTS_MAX) + ' points in all. They can still be picked with a click, the box or the brush.' : inWork ? 'Reading ' + them + ': the points show in a moment.' : 'The points of ' + them + ' over ' + fmtNum(BIG) + ' triangles show after a first click on the part.', 'info', 4200); } catch (_) {}
       }
       pointsNote = why;
       // (the same parts with the same shapes in the same places: the dots are where they were. The version of the positions counts too:
@@ -63581,24 +63837,41 @@ const _Elements = (() => {
       if (mode === 'edges' && e.edges.size) pickedEdges.push([p, e]);
       if (mode === 'points' && e.points.size) pickedDots.push({ p, topo, list: e.points });
     }
-    if (fillDots('pick', pickedDots)) render = true;
-    // the picked edges: orange, wide (an edge both of whose faces look away is behind its part and left out)
+    // (the same picks on the same shapes in the same places: the dots stay; a pass of the pointer used to place them all again)
+    const pickKey = pickedDots.map(it => { const m = it.p.mesh, pa = m.geometry.attributes.position; return it.p.partId + ':' + rid(it.topo) + ':' + rid(it.list) + ':' + (it.list.ver | 0) + ':' + it.list.size + ':' + (pa ? pa.version : 0) + ':' + m.matrixWorld.elements.join(','); }).join('|');
+    if (fillDots('pick', pickedDots, pickKey)) render = true;
+    // the picked edges: orange, wide (an edge both of whose faces look away is behind its part and left out). Their ends and faces are
+    // taken into the world once for each set of picks (edgeWorld); a paint only turns them to the camera, and leaves them alone when
+    // neither the picks nor the view have moved. (They were all worked out again at each paint, a pass of the pointer too: a tenth of a
+    // second a frame with 190,000 edges picked.)
     {
-      let n = 0; for (const [, e] of pickedEdges) n += Math.min(e.edges.size, DRAW_MAX);
-      const out = n ? new Float32Array(n * 6) : null;
-      let k = 0;
-      for (const [p, e] of pickedEdges) {
-        const M = p.mesh.matrixWorld, topo = e.R.topo;
-        _nm.getNormalMatrix(M);
-        let c = 0;
-        for (const ed of e.edges) {
-          if (++c > DRAW_MAX) break;
-          MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M);
-          if (!edgeSeen(topo, ed)) continue;
-          putEdge(out, k++, M, topo, ed, FAT.pick.px / 2 + 0.75);
+      const ce = camera.matrixWorld.elements, pe = camera.projectionMatrix.elements;
+      // (to a millionth: the controls move the camera by a few parts in 10^16 at each pass of the pointer)
+      const fig = (x) => Math.round(x * 1e6);
+      let key = mode + '|' + rect.height + '|' + Array.from(ce, fig).join(',') + '|' + Array.from(pe, fig).join(',');
+      for (const [p, e] of pickedEdges) key += '|' + edgeWorld(p, e).key;
+      const fl = fatLayers.pick, shown = !!(fl && fl.mesh.visible && fl.mesh.parent === group);
+      if (key !== pickEdgeKey || (pickEdgeN > 0 && !shown)) {
+        let n = 0; for (const [p, e] of pickedEdges) n += edgeWorld(p, e).n;
+        const out = n ? new Float32Array(n * 6) : null, reach = FAT.pick.px / 2 + 0.75;
+        let k = 0;
+        for (const [p, e] of pickedEdges) {
+          const W = edgeWorld(p, e), A = W.a, B = W.b, N0 = W.n0, N1 = W.n1;
+          for (let i = 0; i < W.n; i++) {
+            const j = i * 3, ax = A[j], ay = A[j + 1], az = A[j + 2];
+            // (does one of its faces look at the camera, from its first end)
+            const vx = ortho ? look.x : _cam.x - ax, vy = ortho ? look.y : _cam.y - ay, vz = ortho ? look.z : _cam.z - az;
+            if (!(N0[j] * vx + N0[j + 1] * vy + N0[j + 2] * vz > 0) && !(N1[j] * vx + N1[j + 1] * vy + N1[j + 2] * vz > 0)) continue;
+            _ea.set(ax, ay, az); _eb.set(B[j], B[j + 1], B[j + 2]);
+            viewAt(C, _ea, _ev);
+            const t = Math.max(tanSeen(_n.set(N0[j], N0[j + 1], N0[j + 2]), _ev), tanSeen(_n.set(N1[j], N1[j + 1], N1[j + 2]), _ev));
+            pullPoint(C, _ea, _ev, t, reach); viewAt(C, _eb, _ev); pullPoint(C, _eb, _ev, t, reach);
+            const o = k++ * 6; out[o] = _ea.x; out[o + 1] = _ea.y; out[o + 2] = _ea.z; out[o + 3] = _eb.x; out[o + 4] = _eb.y; out[o + 5] = _eb.z;
+          }
         }
+        if (fatSet('pick', out, k)) render = true;
+        pickEdgeKey = key; pickEdgeN = k;
       }
-      if (fatSet('pick', out, k)) render = true;
     }
     // what is under the pointer, light over the rest (not while a box is dragged or the brush paints)
     let hotDots = [], hotSegs = null, hotN = 0, hotKey = '', hotBuild = null;
@@ -63832,6 +64105,29 @@ const _Elements = (() => {
     return { ortho: !!camera._isOrtho, bx: e[8] / bl, by: e[9] / bl, bz: e[10] / bl, cx: _cam.x, cy: _cam.y, cz: _cam.z,
       p11: Math.abs(camera.projectionMatrix.elements[5]) || 1, h: Math.max(1, hCss), near: camera.near, far: camera.far };
   }
+  // The picked edges of a part in the world: both ends (a, b) and the unit normals of the faces on either side (n0, n1; nothing for no
+  // face), up to DRAW_MAX of them. Kept on the entry while its picks, its shape and its place stay the same.
+  let pickEdgeKey = '', pickEdgeN = 0;
+  function edgeWorld(p, e) {
+    const M = p.mesh.matrixWorld, topo = e.R.topo, pa = p.mesh.geometry.attributes.position;
+    const key = p.partId + ':' + rid(e.R) + ':' + rid(e.edges) + ':' + (e.edges.ver | 0) + ':' + e.edges.size + ':' + (pa ? pa.version : 0) + ':' + M.elements.join(',');
+    if (e.ew && e.ew.key === key) return e.ew;
+    const n = Math.min(e.edges.size, DRAW_MAX), a = new Float32Array(n * 3), b = new Float32Array(n * 3), n0 = new Float32Array(n * 3), n1 = new Float32Array(n * 3), P3 = [0, 0, 0];
+    _nm.getNormalMatrix(M);
+    let i = 0;
+    for (const ed of e.edges) {
+      if (i >= n) break;
+      const j = i++ * 3;
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); a[j] = _w.x; a[j + 1] = _w.y; a[j + 2] = _w.z;
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + 1], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); b[j] = _w.x; b[j + 1] = _w.y; b[j + 2] = _w.z;
+      for (let s = 0; s < 2; s++) {
+        const f = topo.edgeT[ed * 2 + s], d = s ? n1 : n0;
+        if (f < 0) continue;
+        _n.set(topo.normal[f * 3], topo.normal[f * 3 + 1], topo.normal[f * 3 + 2]).applyMatrix3(_nm).normalize(); d[j] = _n.x; d[j + 1] = _n.y; d[j + 2] = _n.z;
+      }
+    }
+    return (e.ew = { key, n, a, b, n0, n1 });
+  }
   // the way toward the camera from the point w of the world (along the eye ray; for an orthographic camera along its axis)
   const viewAt = (C, w, out) => C.ortho ? out.set(C.bx, C.by, C.bz) : out.set(C.cx - w.x, C.cy - w.y, C.cz - w.z).normalize();
   // w moved toward the camera: the depth steps, and `reach` CSS pixels times tanT (the tangent of the angle at which the steepest face
@@ -63969,20 +64265,7 @@ const _Elements = (() => {
   const pointNormalCache = new WeakMap();
   function pointNormals(topo) {
     let a = pointNormalCache.get(topo.normal);
-    if (a) return a;
-    const nV = topo.nVert, N = topo.normal, s = new Float32Array(nV * 3);
-    for (let t = 0; t < topo.nTri; t++) for (let k = 0; k < 3; k++) { const v = topo.tri[t * 3 + k] * 3; s[v] += N[t * 3]; s[v + 1] += N[t * 3 + 1]; s[v + 2] += N[t * 3 + 2]; }
-    a = new Float32Array(nV * 4);
-    for (let v = 0; v < nV; v++) { const l = Math.hypot(s[v * 3], s[v * 3 + 1], s[v * 3 + 2]) || 1; a[v * 4] = s[v * 3] / l; a[v * 4 + 1] = s[v * 3 + 1] / l; a[v * 4 + 2] = s[v * 3 + 2] / l; }
-    for (let t = 0; t < topo.nTri; t++) {
-      const nx = N[t * 3], ny = N[t * 3 + 1], nz = N[t * 3 + 2];
-      if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
-      for (let k = 0; k < 3; k++) {
-        const v = topo.tri[t * 3 + k] * 4, ang = Math.acos(Math.max(-1, Math.min(1, nx * a[v] + ny * a[v + 1] + nz * a[v + 2])));
-        if (ang > a[v + 3]) a[v + 3] = ang;
-      }
-    }
-    pointNormalCache.set(topo.normal, a);
+    if (!a) pointNormalCache.set(topo.normal, a = MEDIT.vertexNormals(topo));
     return a;
   }
   // items: [{ p, topo, list }] (list: a Set of the points to show, or null for all of them). Returns true when something on screen changed.
@@ -64074,6 +64357,7 @@ const _Elements = (() => {
   function dotsOff() {
     for (const L of Object.values(dotLayers)) { L.sprite.visible = false; L.sprite.count = 0; L.depth.visible = false; L.depth.count = 0; L.key = null; }
     for (const L of Object.values(fatLayers)) { L.mesh.visible = false; L.mesh.geometry.instanceCount = 0; }
+    pickEdgeKey = ''; pickEdgeN = 0;
     if (hotFill) hotFill.visible = false;
   }
 
@@ -64091,34 +64375,7 @@ const _Elements = (() => {
   // For each vertex of the surface: the average normal of the triangles that meet at its point (xyz) and how far the most turned
   // one is from it (w), so the line's shader can pull it further in front where the faces are steep to the view. The normals are
   // taken the same way round (a mesh with mixed winding would cancel itself out), made once per read.
-  function slopeOf(R) {
-    if (R.slope) return R.slope;
-    const t = R.topo, nV = t.nVert, nRaw = t.nRaw, sum = new Float32Array(nV * 3), ref = new Float32Array(nV * 3), spread = new Float32Array(nV);
-    const nrm = t.normal, tri = t.tri;
-    for (let i = 0; i < t.nTri; i++) {
-      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
-      if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
-      for (let k = 0; k < 3; k++) {
-        const w = tri[i * 3 + k] * 3;
-        if (!ref[w] && !ref[w + 1] && !ref[w + 2]) { ref[w] = nx; ref[w + 1] = ny; ref[w + 2] = nz; }
-        const s = (nx * ref[w] + ny * ref[w + 1] + nz * ref[w + 2]) < 0 ? -1 : 1;
-        sum[w] += s * nx; sum[w + 1] += s * ny; sum[w + 2] += s * nz;
-      }
-    }
-    for (let w = 0; w < nV; w++) { const l = Math.hypot(sum[w * 3], sum[w * 3 + 1], sum[w * 3 + 2]) || 1; sum[w * 3] /= l; sum[w * 3 + 1] /= l; sum[w * 3 + 2] /= l; }
-    for (let i = 0; i < t.nTri; i++) {
-      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
-      if (!nx && !ny && !nz) continue;
-      for (let k = 0; k < 3; k++) {
-        const w = tri[i * 3 + k], d = Math.abs(nx * sum[w * 3] + ny * sum[w * 3 + 1] + nz * sum[w * 3 + 2]);
-        const a = Math.acos(Math.min(1, d));
-        if (a > spread[w]) spread[w] = a;
-      }
-    }
-    const out = new Float32Array(nRaw * 4);
-    for (let i = 0; i < nRaw; i++) { const w = t.weld[i]; out[i * 4] = sum[w * 3]; out[i * 4 + 1] = sum[w * 3 + 1]; out[i * 4 + 2] = sum[w * 3 + 2]; out[i * 4 + 3] = spread[w]; }
-    return (R.slope = out);
-  }
+  function slopeOf(R) { return R.slope || (R.slope = MEDIT.lineSlopes(R.topo)); }
   function unwire(id) { const w = wires.get(id); if (!w) return false; try { group && group.remove(w.obj); w.obj.geometry.dispose(); } catch (_) {} wires.delete(id); return true; }
   function showWires() {
     let ch = false;
@@ -64145,6 +64402,7 @@ const _Elements = (() => {
         g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(_wireXYZ(attr, false)), 3));
         g.setIndex(new THREE.BufferAttribute(R.lines, 1));
         g.setAttribute('slope', new THREE.BufferAttribute(slopeOf(R), 4));
+        g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));      // (the shader reads the slope; _stampGeometry would work one out)
         const obj = new THREE.LineSegments(_stampGeometry(g), wireMat());
         obj.matrixAutoUpdate = false; obj.frustumCulled = false; obj.raycast = () => {}; obj.renderOrder = 15; obj.userData.partId = id;
         group.add(obj);
@@ -64406,6 +64664,20 @@ const _Elements = (() => {
 
   // For the self-test and for scripts: the same steps without a pointer. pickAt takes a part, a triangle of it and a place on that
   // triangle (the part's own space), and does what a click there does; boxPick and brush take places on the screen.
+  // None of the tools may throw the user out of Edit mesh: if one leaves it (whatever closed the card on the way) with a part still
+  // selected, it is entered again in the mode it was in. The picked pieces are gone after most of them anyway.
+  const keepIn = (fn) => function (...a) {
+    const was = active, m = mode;
+    const r = fn.apply(this, a);
+    if (was) {
+      const back = () => { if (!active && state.selected && state.selected.size && !state._animMode) { try { setMode(MODES.includes(m) ? m : 'faces'); } catch (_) {} } };
+      if (r && typeof r.then === 'function') r.then(back, () => back()); else setTimeout(back, 0);
+      back();
+    }
+    return r;
+  };
+  dissolvePicked = keepIn(dissolvePicked); del = keepIn(del); flipPicked = keepIn(flipPicked); planarizePicked = keepIn(planarizePicked);
+  straightenPicked = keepIn(straightenPicked); weldPicked = keepIn(weldPicked); fillPicked = keepIn(fillPicked); closeOpen = keepIn(closeOpen); extractPicked = keepIn(extractPicked);
   const api = {
     mode: (m) => { if (m) setMode(m); return current(); },
     // what is drawn in the scene now: dots (sprites), wide lines (their count), fills (meshes) (tests/e2e-edit-marks.mjs)

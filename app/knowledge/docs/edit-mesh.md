@@ -30,7 +30,7 @@ The mode button is at the top of the tool strip on the left edge of the view. It
 
 - The selected parts show their mesh lines in blue, as polygons rather than triangles.
 - The pieces you have picked are orange. The one under the pointer is light.
-- In Points mode every point of the part is shown.
+- In Points mode every point of the part is shown, up to two million points in all. A very big part is read in the background when you go into Edit mesh, so its points show a few seconds later; a click or a box you make meanwhile is made as soon as it is ready.
 
 ## Pick pieces
 

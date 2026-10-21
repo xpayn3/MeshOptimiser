@@ -4,6 +4,32 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.35.4
+
+Released 21 Oct 2026.
+
+v0.35.3 was about what the app shows you before it changes anything. v0.35.4 is about Edit mesh on big models: a part of two and a half million triangles is read in the background as soon as Edit mesh is entered, its points show, and moving, box-picking and hovering over many picked pieces no longer hold the view up. Merge by group names the merged part after its group, and a few fixes from Edit mesh and the CAD view.
+
+**Edit mesh on big models**
+
+- ![perf][perf] **A very big part is read in the background.** A part of more than 60,000 triangles is read on a worker as soon as Edit mesh is entered, and the view keeps turning meanwhile. A part of more than 400,000 triangles used to wait for a first click, which then held the app up for about three seconds on a part of 2.7 million triangles. A click, a box or Pick all made while a part is still being read is made as soon as it has been read (a short note says so).
+- ![perf][perf] **Points mode shows up to 2,000,000 points** (it was 400,000), so a part of that size shows its points a few seconds after the mode is entered. On a desktop graphics card 1.3 million points cost about 9 ms a frame zoomed in and 28 ms zoomed out.
+- ![perf][perf] **Moving points, edges or polygons on a very big part takes half a second, not five.** A move changes where the points are, not how the triangles hang together, so the part's reading is kept and only what changes round the moved points is worked out again; the picking tree is refitted instead of built anew. A frame of the drag on a part of two million triangles takes 7 ms (it was 0.4 s for the first one).
+- ![perf][perf] **The box is quick on a big part.** In Polygons mode a box over a part of 2.7 million triangles stalled for up to a second and a half at each move of the drag (13 s for one drag); a pass now takes about a tenth of a second, in every mode, and the release takes half the time. The picked polygons are drawn from the part's own points, and their outlines up to 40,000 polygons.
+- ![perf][perf] **Many picked edges or points no longer slow the view down.** With 190,000 edges picked, a move of the pointer took about 80 ms of work a frame and turning the view 110 ms; now 14 and 42. They were all placed again at every frame; now they are placed once for each pick and only turned to the view when it moves. Points mode also comes up faster on an assembly (1.0 s instead of 1.6 s for 212 parts).
+
+**New and changed**
+
+- ![new][new] **Merge by group names the merged part after its group.** Several parts in one group become one part called like the group (it used to be "Merged (N parts)"). Not yet checked by hand in the app.
+
+**Fixed**
+
+- ![fix][fix] **Dissolving a point on an edge line that has another line ending at it did nothing.** The point goes now, the edge it sat on stays one straight line, and the lines that ended at the point go with it (the two polygons beside them become one). Not yet checked by hand in the app.
+- ![fix][fix] **The CAD view painted a merged or painted part in the look's grey, whatever its colours.** Colours kept in the vertices (merged parts, painted polygons, files with vertex colours) show in the CAD view now, shaded by the matcap. Not yet checked by eye in the app.
+- ![fix][fix] **Dissolve and the other Edit mesh tools could throw me out of Edit mesh.** They now put me back in, in the same mode, when a part is still selected. The cause was not found (it never happened in a test run), so this is a guard.
+
+The Edit mesh speed-ups were measured in a test browser on this computer's graphics card, on a generated part of two million triangles and on a real assembly with a part of 2.7 million; they were not yet checked by hand in the app.
+
 ## v0.35.3
 
 Released 20 Oct 2026.

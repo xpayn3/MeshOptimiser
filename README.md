@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.35.4** — Edit mesh keeps up with big models: a part of millions of triangles is read in the background, shows its points, and moves and box-picks without holding the view up.
+
+- ![perf][perf] **Big parts are read in the background** as soon as Edit mesh is entered; a click or box made meanwhile is made when the part is ready.
+- ![perf][perf] **Points mode shows up to 2,000,000 points** (it was 400,000).
+- ![perf][perf] **Moving picked pieces on a 2-million-triangle part takes half a second, not five,** and a box over it a tenth of a second a pass.
+- ![perf][perf] **Many picked edges or points no longer slow the view down.**
+- ![new][new] **Merge by group names the merged part after its group;** a Dissolve fix, and vertex colours in the CAD view.
+
 **v0.35.3** — Smart optimise scans the model first, the colour picker has a right-click menu, a material of the Properties card is picked with a click, and the colours and buttons of the app are cleaned up.
 
 - ![new][new] **Smart optimise scans first:** a list of what it found (empty parts, exact copies, hidden parts, fasteners, small parts, holes) with Highlight and Isolate for each, before anything is changed.

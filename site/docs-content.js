@@ -3082,7 +3082,7 @@ module.exports = {
         ['list', [
           'The selected parts show their mesh lines in blue, as polygons rather than triangles.',
           'The pieces you have picked are orange. The one under the pointer is light.',
-          'In Points mode every point of the part is shown.',
+          'In Points mode every point of the part is shown, up to two million points in all. A very big part is read in the background when you go into Edit mesh, so its points show a few seconds later; a click or a box you make meanwhile is made as soon as it is ready.',
         ]],
         ['h', 'Pick pieces'],
         ['p', 'The Edit mesh tools are a bar at the right edge of the view, under the view cube. It replaces the card that earlier versions had. At the top of the bar are three tools that decide how the left mouse button picks. With all three, [[Shift]] adds to what is picked and [[Ctrl]] takes away from it.'],

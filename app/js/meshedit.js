@@ -485,3 +485,54 @@ export function outlineLines(topo, pg) {
   for (let e = 0; e < topo.nEdge; e++) if (pg.real[e]) { out[o++] = topo.rep[topo.edgeV[e * 2]]; out[o++] = topo.rep[topo.edgeV[e * 2 + 1]]; }
   return out;
 }
+
+// ── what Edit mesh's marks are drawn with (worked out here so that a worker can do it for a big part) ─────────────────────────────
+
+// For each vertex of the surface: the average normal of the triangles that meet at its point (xyz) and how far the most turned one is
+// from it (w), so the blue lines' shader can pull it further in front where the faces are steep to the view. The normals are taken the
+// same way round (a mesh with mixed winding would cancel itself out). nRaw × 4.
+export function lineSlopes(topo) {
+  const t = topo, nV = t.nVert, nRaw = t.nRaw, sum = new Float32Array(nV * 3), ref = new Float32Array(nV * 3), spread = new Float32Array(nV);
+  const nrm = t.normal, tri = t.tri;
+  for (let i = 0; i < t.nTri; i++) {
+    const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+    if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
+    for (let k = 0; k < 3; k++) {
+      const w = tri[i * 3 + k] * 3;
+      if (!ref[w] && !ref[w + 1] && !ref[w + 2]) { ref[w] = nx; ref[w + 1] = ny; ref[w + 2] = nz; }
+      const s = (nx * ref[w] + ny * ref[w + 1] + nz * ref[w + 2]) < 0 ? -1 : 1;
+      sum[w] += s * nx; sum[w + 1] += s * ny; sum[w + 2] += s * nz;
+    }
+  }
+  for (let w = 0; w < nV; w++) { const l = Math.hypot(sum[w * 3], sum[w * 3 + 1], sum[w * 3 + 2]) || 1; sum[w * 3] /= l; sum[w * 3 + 1] /= l; sum[w * 3 + 2] /= l; }
+  for (let i = 0; i < t.nTri; i++) {
+    const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+    if (!nx && !ny && !nz) continue;
+    for (let k = 0; k < 3; k++) {
+      const w = tri[i * 3 + k], d = Math.abs(nx * sum[w * 3] + ny * sum[w * 3 + 1] + nz * sum[w * 3 + 2]);
+      const a = Math.acos(Math.min(1, d));
+      if (a > spread[w]) spread[w] = a;
+    }
+  }
+  const out = new Float32Array(nRaw * 4);
+  for (let i = 0; i < nRaw; i++) { const w = t.weld[i]; out[i * 4] = sum[w * 3]; out[i * 4 + 1] = sum[w * 3 + 1]; out[i * 4 + 2] = sum[w * 3 + 2]; out[i * 4 + 3] = spread[w]; }
+  return out;
+}
+
+// For each (welded) point: a unit normal, the sum of the normals of the triangles that meet there, and (4th value) how far the most
+// turned of those triangles is from it, in radians. nVert × 4.
+export function vertexNormals(topo) {
+  const nV = topo.nVert, N = topo.normal, s = new Float32Array(nV * 3);
+  for (let t = 0; t < topo.nTri; t++) for (let k = 0; k < 3; k++) { const v = topo.tri[t * 3 + k] * 3; s[v] += N[t * 3]; s[v + 1] += N[t * 3 + 1]; s[v + 2] += N[t * 3 + 2]; }
+  const a = new Float32Array(nV * 4);
+  for (let v = 0; v < nV; v++) { const l = Math.hypot(s[v * 3], s[v * 3 + 1], s[v * 3 + 2]) || 1; a[v * 4] = s[v * 3] / l; a[v * 4 + 1] = s[v * 3 + 1] / l; a[v * 4 + 2] = s[v * 3 + 2] / l; }
+  for (let t = 0; t < topo.nTri; t++) {
+    const nx = N[t * 3], ny = N[t * 3 + 1], nz = N[t * 3 + 2];
+    if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
+    for (let k = 0; k < 3; k++) {
+      const v = topo.tri[t * 3 + k] * 4, ang = Math.acos(Math.max(-1, Math.min(1, nx * a[v] + ny * a[v + 1] + nz * a[v + 2])));
+      if (ang > a[v + 3]) a[v + 3] = ang;
+    }
+  }
+  return a;
+}

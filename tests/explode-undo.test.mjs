@@ -38,7 +38,7 @@ ok(/op\.wasExploded && p && p\.instancedMesh && p\._instOrigMat/.test(del) && /i
 // 4. tools that change what a part's rest position is put the view together first and explode it again after
 const settled = body(/function _settledView\(fn\) \{[\s\S]*?\n\}\r?\n/, '_settledView');
 ok(/if \(was\) \{ try \{ resetExplode\(\); \} catch \(_\) \{\} \}/.test(settled) && /state\._explodeBaselineDone = false;[\s\S]*?state\.explode = ex;[\s\S]*?applyExplode\(\);/.test(settled), '_settledView puts the view back, runs, and explodes again');
-ok(/async function mergeSelectedIntoOne_job\(\) \{ return _settledView\(\(\) => _mergeSelectedCore\(\)\); \}/.test(src), 'Merge runs with the view together');
+ok(/async function mergeSelectedIntoOne_job\((\w*)\) \{ return _settledView\(\(\) => _mergeSelectedCore\(\1\)\); \}/.test(src), 'Merge runs with the view together');      // (name: Merge by group names the part after its group)
 ok(/function splitSelectedParts\(epsRel, method\) \{[\s\S]*?return _settledView\(\(\) => _splitSelectedPartsCore\(epsRel, method\)\);/.test(src), 'Split runs with the view together');
 const flat = body(/async function flattenTree_job\(preset\) \{[\s\S]*?\n\}\r?\n/, 'flattenTree_job');
 ok(/return _settledView\(\(\) => _flattenTreeCore\(opts\)\)/.test(flat), 'Flatten runs with the view together once its dialog is answered');

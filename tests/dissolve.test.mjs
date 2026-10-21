@@ -131,5 +131,22 @@ const every = (topo) => { const s = new Set(); for (let v = 0; v < topo.nVert; v
   ok(dissolvePoints(m.pos, m.idx, lab, m.weld, [c], { triangulate }).dissolved === 0, 'a corner is not a point on a straight run: it stays');
 }
 
-console.log(fails ? `\n${fails} failed` : '\nall passed');
+// ── a picked point on a fold line with a third line going down from it: the fold stays, the point and the down line go ──
+{
+  const pos = [], idx = [], lab = [];
+  const quad = (a, b, c, d, l) => { const base = pos.length / 3; pos.push(...a, ...b, ...c, ...d); idx.push(base, base + 1, base + 2, base, base + 2, base + 3); lab.push(l, l); };
+  for (let i = 0; i < 3; i++) quad([i, 1, 1], [i + 1, 1, 1], [i + 1, 1, 0], [i, 1, 0], 0);                  // top, one polygon
+  quad([0, 1, 1], [0, 0, 1], [1, 0, 1], [1, 1, 1], 1);                                                      // front, left of the down line
+  quad([1, 1, 1], [1, 0, 1], [2, 0, 1], [2, 1, 1], 2); quad([2, 1, 1], [2, 0, 1], [3, 0, 1], [3, 1, 1], 2);  // front, right of it
+  const m = prep({ pos, idx }), before = area(m.pos, m.idx);
+  let c = -1; for (let v = 0; v < m.pos.length / 3; v++) if (m.pos[v * 3] === 1 && m.pos[v * 3 + 1] === 1 && m.pos[v * 3 + 2] === 1) c = m.weld[v];
+  const r = dissolvePoints(m.pos, m.idx, Int32Array.from(lab), m.weld, [c], { triangulate, strict: false, allowMerge: true });
+  const out = applyDissolve(m.idx, r);
+  ok(r.dissolved === 1, 'the point on the fold goes');
+  ok(new Set(out.poly).size === 2, `top stays its own polygon, the two front polygons became one (${new Set(out.poly).size} polygons)`);
+  ok(Math.abs(area(m.pos, out.index) - before) < 1e-5, 'the same area');
+  ok(![...out.index].some(v => m.weld[v] === c), 'nothing uses the point any more');
+}
+
+console.log(fails ?`\n${fails} failed` : '\nall passed');
 process.exit(fails ? 1 : 0);
