@@ -1601,7 +1601,7 @@ ${docs.articles.filter(a => a.group === group.id).map(a => `          <li data-w
     </section>` + footer(page);
 
   pages.changelog = (page) => head(page, `Changelog — ${app.title}`, `What changed in each version of ${app.title}, newest first. Latest: v${latest.version}.`) + header(page) +
-    pageHead('Changelog', 'What changed.', 'Every release, with the fixes that went into it. The app’s own change log on GitHub has 150 fixes in it, and the ones that mattered most are here.') + `
+    pageHead('Changelog', 'What changed.', 'Every release, with the fixes that went into it. The app’s own change log on GitHub lists every one; the ones that mattered most are here.') + `
     <section class="wrap">
       <ol class="log">${app.changelog.versions.map(entry => logEntry(entry, true)).join('')}
       </ol>

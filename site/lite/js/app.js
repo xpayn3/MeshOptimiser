@@ -8,7 +8,7 @@ import { voxelRemesh } from './voxel.js?v=4';
 import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=13';
 import { carryUvs } from './uvcarry.js?v=2';
 import { createPhoto } from './photo.js?v=5';
-import * as MEDIT from './meshedit.js?v=5';
+import * as MEDIT from './meshedit.js?v=6';
 import { dissolvePoints } from './dissolve.js?v=3';
 import * as MT from './meshtools.js?v=5';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=3';
@@ -237,12 +237,14 @@ window.addEventListener('keydown', (e) => {
 // to data-icon so they are never picked up again.
 // Lucide icons that are newer than the bundled set (1.52.0), drawn here as Lucide draws them (ISC licence, lucide.dev): `lens` (added in 1.54.0).
 // They go away from here when the bundled set is brought up to date.
-const _EXTRA_ICONS = { Lens: [['path', { d: 'M15.725 7.296h.01' }], ['path', { d: 'M6 12a6 6 0 016-6' }], ['circle', { cx: '12', cy: '12', r: '10' }]] };
+const _EXTRA_ICONS = { Lens: [['path', { d: 'M15.725 7.296h.01' }], ['path', { d: 'M6 12a6 6 0 016-6' }], ['circle', { cx: '12', cy: '12', r: '10' }]],
+  // Dynamic place: a part lowered onto a surface (an arrow into an arch standing on a line); drawn on Lucide's grid, 2px strokes, round ends
+  DynamicPlace: [['path', { d: 'M3 20h18' }], ['path', { d: 'M5 20V9a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v11' }], ['path', { d: 'M12 8v8' }], ['path', { d: 'm8.5 12.5 3.5 3.5 3.5-3.5' }]] };
 function _lucide() {
   try {
     const L = window.lucide;
     if (!L || !L.createIcons) return;
-    if (L.icons && !L.icons.Lens) Object.assign(L.icons, _EXTRA_ICONS);
+    if (L.icons) for (const k of Object.keys(_EXTRA_ICONS)) if (!L.icons[k]) L.icons[k] = _EXTRA_ICONS[k];
     if (!document.querySelector('i[data-lucide]')) return;
     L.createIcons();
     for (const svg of document.querySelectorAll('svg[data-lucide]')) {
@@ -371,6 +373,13 @@ const _Popover = (() => {
 // Single shared modal element, reused across calls. Returns a Promise so call
 // sites can `await appConfirm(...)` / `await appPrompt(...)`. Esc cancels,
 // Enter accepts. Backdrop click cancels. Visual style matches the export modal.
+// Claude mode hides the viewport, so every way into it asks first (the saved mode is restored at start without asking). True when the
+// mode is already on or the person said yes.
+async function _askClaudeMode() {
+  if (document.body.classList.contains('claude-mode')) return true;
+  try { return !!(await appConfirm('The viewport is hidden and the app follows Claude as a feed. It is in alpha.', { title: 'Enter Claude mode?', okLabel: 'Enter', cancelLabel: 'Not now' })); }
+  catch (_) { return false; }
+}
 const _Dialog = (() => {
   let bg, card, msgEl, inputEl, cancelBtn, okBtn, titleEl, iconEl, onClose;
 
@@ -1595,7 +1604,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=70', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=71', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -3203,7 +3212,7 @@ function _runFileCmd(cmd) {
     case 'settings':       _Settings.show(); break;
     case 'help':           window.MOHelp?.show(); break;
     case 'shortcuts':      try { _Shortcuts.show(); } catch (_) {} break;
-    case 'claude':         try { window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} break;
+    case 'claude':         _askClaudeMode().then(ok => { if (!ok) return; try { window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} }); break;
     case 'welcome':        try { _Welcome.show(); } catch (_) {} break;
     case 'inbox':          _showInboxFolder(); break;
     case 'quit':           _quitApp(); break;
@@ -3555,10 +3564,10 @@ const _Settings = (() => {
     ['general',  'General',     'sliders-horizontal', 'How the app starts and behaves.'],
     ['search',   'Search',      'search',             'What the search looks through, and how closely a name has to fit.'],
     ['appearance','Appearance', 'palette',            'The look of the interface: colour, type, size and shape.'],
-    ['viewport', 'Viewport',    'monitor',            'What the 3D view draws around the model.'],
+    ['viewport', 'Viewport',    'monitor-cog',            'What the 3D view draws around the model.'],
     ['camera',   'Camera',      'video',              'Projection, lens, and how the view moves.'],
     ['perf',     'Performance', 'gauge',              'Trade detail for speed on heavy models.'],
-    ...(window.__MESHOPT_DEMO ? [] : [['claude', 'Claude', 'sparkles', 'Let Claude work with the open scene through MCP, choose what it may do, and see what it has asked for.']]),
+    ...(window.__MESHOPT_DEMO ? [] : [['claude', 'Claude', 'bot-message-square', 'Let Claude work with the open scene through MCP, choose what it may do, and see what it has asked for.']]),
     ...(window.__MESHOPT_DEMO ? [] : [['updates', 'Updates', 'refresh-cw', 'Look for a newer version, choose how the app tells you, and go back to the one before.']]),
     ['data',     'Storage',     'database',           'What the app remembers on this computer.'],
     ['about',    'About',       'info',               'The version, where to find help, and what to send when something goes wrong.'],
@@ -3995,7 +4004,7 @@ const _Settings = (() => {
     el.innerHTML =
       '<div class="set-row set-claude-card" id="set-claude-card" data-state="off"><span><span class="cl-state"><i class="set-nav-dot"></i><b id="set-claude-state"></b></span><span class="set-help" id="set-claude-status"></span></span></div>' +
       _group('Connection') +
-      _toggleRow('set-claude', 'Let Claude connect', false, 'The app listens for Claude (through MCP) while this is on, and shows a “Claude connected” pill in the top bar. Off, the app asks for nothing and nobody can reach it.') +
+      _toggleRow('set-claude', 'Let Claude connect', false, 'The app listens for Claude (through MCP) while this is on, and shows a green “Claude” pill in the top bar. Off, the app asks for nothing and nobody can reach it.') +
       _toggleRow('set-claude-auto', 'Connect when the app opens', P('auto'), 'If it was on last time, it switches itself on again when you open the app. Off: you switch it on here each time.') +
       '<div class="set-row set-action"><span>Add the app to Claude<span class="set-help">Once, in a terminal on this computer: <code>' + _esc(cmd) + '</code></span></span><button class="btn" id="set-claude-copy" title="Copy the command">Copy command</button></div>' +
       _group('What Claude may do') +
@@ -5115,7 +5124,7 @@ const _LastTool = (() => {
 const _Actions = (() => {
   const _click = id => { const f = () => document.getElementById(id)?.click(); f.btnId = id; return f; };      // (btnId: the button a command presses, so the last-tool button can show that button's icon)
   const list = [
-    { id:'claudemode',   group:'File',       label:'Claude mode (alpha)', words:'claude mode (alpha): follow claude as a feed', run: () => { try { window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} } },
+    { id:'claudemode',   group:'File',       label:'Claude mode (alpha)', words:'claude mode (alpha): follow claude as a feed', run: async () => { if (!(await _askClaudeMode())) return; try { window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} } },
     { id:'newscene',     group:'File',       label:'New scene',                  kbd:'Alt+N', alt:'Ctrl+N', run: () => { try { newScene(); } catch (_) {} } },
     { id:'open',         group:'File',       label:'Open file…',                 kbd:'Ctrl+O', run: () => _openWithPicker() },
     { id:'import',       group:'File',       label:'Import…',                    kbd:'Ctrl+Shift+O', run: () => _importWithPicker() },
@@ -5126,7 +5135,7 @@ const _Actions = (() => {
     { id:'closeothers',  group:'File',       label:'Close other scenes',         run: () => _Tabs.closeOthers() },
     { id:'export',       group:'File',       label:'Export model…',              kbd:'Ctrl+E', run: () => _openExportDialog() },
     { id:'sceneSettings',group:'File',       label:'Scene settings…',            kbd:'Ctrl+;', run: () => { try { _openSceneSettings(); } catch (_) {} } },
-    { id:'wand',         group:'View',       label:'Quick wand', words:'quick wand (hold, then let go on a slice)', kbd:'W', run: () => { try { _Wand.toggle(); } catch (_) {} } },
+    { id:'wand',         group:'View',       label:'Quick wand', words:'quick wand (hold, then let go on a slice)', kbd:'Q', run: () => { try { _Wand.toggle(); } catch (_) {} } },
     { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: () => { try { if ((state.selected.size > 0 || state.selectedSpline != null) && typeof frameSelected === 'function') frameSelected(); else fitToView(); } catch (_) {} } },
     { id:'revert',       group:'File',       label:'Revert to source file…',     run: () => { try { _revertToSourceFile(); } catch (_) {} } },
     { id:'frameSel',     group:'View',       label:'Frame selection',            kbd:'F', run: () => { try { frameSelected(); } catch (_) {} } },
@@ -5140,14 +5149,15 @@ const _Actions = (() => {
     { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'E', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
     { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'R', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
     { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
-    { id:'gzPlace',      group:'View',       label:'Dynamic place on surfaces', words:'dynamic place: drag the selection over surfaces', kbd:'D', run: () => { try { _DynPlace.toggle(); } catch (_) {} } },
-    { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'Q', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
+    { id:'gzPlace',      group:'View',       icon:'dynamic-place', label:'Dynamic place on surfaces', words:'dynamic place: drag the selection over surfaces', kbd:'D', run: () => { try { _DynPlace.toggle(); } catch (_) {} } },
+    { id:'gzAxes',       group:'View',       label:'Gizmo axes: World / Local',            kbd:'W', words:'coordinate system world local toggle axes gizmo', run: () => { try { _toggleGizmoAxes(); } catch (_) {} } },
+    { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
     // (the label says what it will do now; `words` are more words the search finds it by: see _smart)
     { id:'tgGrid',       group:'View',       get label() { return state.showGrid ? 'Hide ground grid' : 'Show ground grid'; }, words:'show hide toggle scene floor ground grid', kbd:'G', run: _click('tg-grid') },
     { id:'selAll',       group:'Selection',  label:'Select all',                 kbd:'Ctrl+A', run: _click('sel-all') },
     { id:'selInvert',    group:'Selection',  label:'Invert selection',           kbd:'Ctrl+I', run: _click('sel-invert') },
     { id:'selClear',     group:'Selection',  label:'Clear selection',            kbd:'Esc', run: _click('sel-clear') },
-    { id:'animate',      group:'Selection',  label:'Animate the selection…',     icon:'play', kbd:'Shift+A', run: () => { try { _Anim.open(); } catch (e) { console.error('[animate]', e); } } },
+    { id:'animate',      group:'Selection',  label:'Animate the selection…',     icon:'tv-minimal-play', kbd:'Shift+A', run: () => { try { _Anim.open(); } catch (e) { console.error('[animate]', e); } } },
     { id:'isolate',      group:'Selection',  label:'Isolate selected',           kbd:'S', run: () => { try { isolateSelected(); } catch (_) {} } },
     { id:'showAll',      group:'Selection',  label:'Show all parts',             kbd:'Alt+H', run: () => { try { showAllParts(); } catch (_) {} } },
     { id:'hideUnsel',    group:'Selection',  label:'Hide unselected',            kbd:'Shift+H', run: () => { try { hideUnselected(); } catch (_) {} } },
@@ -5185,7 +5195,7 @@ const _Actions = (() => {
     { id:'closeOpenEdges', group:'Edit',      label:'Close open edges', words:'close open edges watertight missing faces boundary rim rims cap fill all holes cracks seal make solid closed manifold', run: () => { try { window.__moElements.closeOpen(); } catch (_) {} } },
     { id:'normals',       group:'Edit',       label:'Fix normals…',                words:'normal orientation reverse flip align unify consistent outward inside out winding face direction highlight back faces', run: () => _CmdCards.open('normals') },
     { id:'normalsFind',   group:'Edit',       label:'Find flipped normals', words:'detect check find problems faces orientation wrong direction inside out flipped reversed dark see-through select find flipped normals and inside-out parts', run: () => { try { window.__moNormals.find(); } catch (_) {} } },
-    { id:'normalsReverse',group:'Edit',       label:'Reverse normals of the selected parts', words:'flip invert turn inside out faces', run: () => { try { window.__moNormals.reverse(); } catch (_) {} } },
+    { id:'normalsReverse',group:'Edit',       label:'Reverse normals of selected', words:'flip invert turn inside out faces selected parts', run: () => { try { window.__moNormals.reverse(); } catch (_) {} } },
     { id:'normalsAlign',  group:'Edit',       label:'Align normals outward', words:'unify consistent orient fix winding inside out faces align normals: turn faces the same way, outward', run: () => { try { window.__moNormals.align(); } catch (_) {} } },
     { id:'normalsHighlight', group:'Edit',    get label() { return window.__moNormals && window.__moNormals.isHighlighting() ? 'Stop highlighting back faces' : 'Highlight back faces'; }, words:'show hide toggle flipped reversed normals inside out faces red', run: () => { try { window.__moNormals.highlight(); } catch (_) {} } },
     { id:'remesh',        group:'Edit',       label:'Remesh…', words:'remesh… (untriangulate or triangulate)', run: () => _CmdCards.open('remesh') },
@@ -5208,7 +5218,7 @@ const _Actions = (() => {
     { id:'beltRibs',      group:'Edit',       label:'Belt: remove ribs', words:'belt remove ribs ridges grooves poly-v serpentine drive belt band strap seal sweep spline profile path defeature', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves({ mode: 'belt' }); } catch (_) {} } },
     { id:'fillGroovesOutline', group:'Edit', label:'Fill solid round', words:'round part make solid fill grooves outline fins ribs fan clutch gear spin envelope proxy stand-in revolve defeature gaps', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves({ mode: 'outline' }); } catch (_) {} } },
     { id:'triangulate',   group:'Edit',       label:'Triangulate',                kbd:'Shift+U', run: () => { try { window.__showRemesh && window.__showRemesh('tr'); } catch (_) {} } },
-    { id:'smartopt',     group:'Edit',       label:'Smart optimise…',            words:'smart optimise optimize clean up reduce everything one press recipes', run: () => _CmdCards.open('smart') },
+    { id:'smartopt',     group:'Edit',       icon:'broom-sparkles', label:'Smart optimise…',            words:'smart optimise optimize clean up reduce everything one press recipes', run: () => _CmdCards.open('smart') },
     { id:'reduceTris',   group:'Edit',       label:'Reduce triangles…',          words:'reduce triangles decimate budget fewer polygons lighter smart fit report', run: () => _CmdCards.open('reduce') },
     { id:'diagnostics',  group:'App',        label:'Copy diagnostics for a bug report', run: () => _copyDiagnostics() },
     { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { _CmdCards.open('reduce'); const el = document.getElementById('budget-target'); if (el) { el.focus(); el.select(); } } },
@@ -5226,23 +5236,23 @@ const _Actions = (() => {
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
     { id:'library',      group:'App',        label:'Library',                    kbd:'Shift+L', run: _click('tg-library') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
-    { id:'noteAdd',      group:'View',       label:'Add a note', words:'note comment pin review leave', icon:'message-square-check', kbd:'N', run: () => { try { window.MONotesUI.togglePlace(); } catch (_) {} } },
-    { id:'noteSel',      group:'View',       label:'Add a note to the selected part', words:'note comment pin review', icon:'message-square', run: () => { try { window.MONotesUI.addForSelection(); } catch (_) {} } },
-    { id:'noteScene',    group:'View',       label:'Add a note about the whole scene', words:'note comment review', icon:'message-square', run: () => { try { window.MONotesUI.addForScene(); } catch (_) {} } },
-    { id:'noteList',     group:'View',       label:'Notes: open the list', words:'notes comments review pins', icon:'message-square-check', run: () => { try { window.MONotesUI.openList(); } catch (_) {} } },
-    { id:'notePins',     group:'View',       label:'Notes: show or hide the pins', words:'notes comments pins toggle', icon:'message-square', run: () => { try { window.MONotesUI.togglePins(); } catch (_) {} } },
-    { id:'noteIsolate',  group:'View',       label:'Notes: isolate noted parts', words:'notes isolate parts with notes focus review notes: show only the parts that have notes', icon:'message-square', run: () => { try { window.MONotesUI.isolateNoted(); } catch (_) {} } },
-    { id:'notePrev',     group:'View',       label:'Notes: go to the previous note', words:'notes comments previous back', icon:'message-square', run: () => { try { window.MONotesUI.prev(); } catch (_) {} } },
-    { id:'noteApprove',  group:'View',       label:'Notes: approve this scene', words:'notes review approve sign off ok', icon:'message-square', run: () => { try { window.MONotesUI.review('approved'); } catch (_) {} } },
-    { id:'noteChanges',  group:'View',       label:'Notes: ask for changes', words:'notes review changes request reject', icon:'message-square', run: () => { try { window.MONotesUI.review('changes'); } catch (_) {} } },
-    { id:'noteNext',     group:'View',       label:'Notes: go to the next note', words:'notes comments next', icon:'message-square', run: () => { try { window.MONotesUI.next(); } catch (_) {} } },
-    { id:'noteImport',   group:'File',       label:'Notes: bring in another copy…', words:'notes comments import merge scene file review notes: bring in the notes of another copy…', icon:'message-square', run: () => { try { window.MONotesUI.importFromFile(); } catch (_) {} } },
-    { id:'noteReport',   group:'File',       label:'Notes: save a report page…', words:'notes comments export report html review', icon:'message-square', run: () => { try { window.MONotesUI.saveReport(); } catch (_) {} } },
+    { id:'noteAdd',      group:'View',       label:'Add a note', words:'note comment pin review leave', icon:'sticky-note-plus', kbd:'N', run: () => { try { window.MONotesUI.togglePlace(); } catch (_) {} } },
+    { id:'noteSel',      group:'View',       label:'Add a note to the selected part', words:'note comment pin review', icon:'sticky-note-plus', run: () => { try { window.MONotesUI.addForSelection(); } catch (_) {} } },
+    { id:'noteScene',    group:'View',       label:'Add a note about the whole scene', words:'note comment review', icon:'sticky-note-plus', run: () => { try { window.MONotesUI.addForScene(); } catch (_) {} } },
+    { id:'noteList',     group:'View',       label:'Notes: open the list', words:'notes comments review pins', icon:'sticky-note', run: () => { try { window.MONotesUI.openList(); } catch (_) {} } },
+    { id:'notePins',     group:'View',       label:'Notes: show or hide the pins', words:'notes comments pins toggle', icon:'sticky-note', run: () => { try { window.MONotesUI.togglePins(); } catch (_) {} } },
+    { id:'noteIsolate',  group:'View',       label:'Notes: isolate noted parts', words:'notes isolate parts with notes focus review notes: show only the parts that have notes', icon:'sticky-note', run: () => { try { window.MONotesUI.isolateNoted(); } catch (_) {} } },
+    { id:'notePrev',     group:'View',       label:'Notes: go to the previous note', words:'notes comments previous back', icon:'sticky-note', run: () => { try { window.MONotesUI.prev(); } catch (_) {} } },
+    { id:'noteApprove',  group:'View',       label:'Notes: approve this scene', words:'notes review approve sign off ok', icon:'sticky-note-check', run: () => { try { window.MONotesUI.review('approved'); } catch (_) {} } },
+    { id:'noteChanges',  group:'View',       label:'Notes: ask for changes', words:'notes review changes request reject', icon:'sticky-note-x', run: () => { try { window.MONotesUI.review('changes'); } catch (_) {} } },
+    { id:'noteNext',     group:'View',       label:'Notes: go to the next note', words:'notes comments next', icon:'sticky-note', run: () => { try { window.MONotesUI.next(); } catch (_) {} } },
+    { id:'noteImport',   group:'File',       label:'Notes: bring in another copy…', words:'notes comments import merge scene file review notes: bring in the notes of another copy…', icon:'sticky-note', run: () => { try { window.MONotesUI.importFromFile(); } catch (_) {} } },
+    { id:'noteReport',   group:'File',       label:'Notes: save a report page…', words:'notes comments export report html review', icon:'sticky-note', run: () => { try { window.MONotesUI.saveReport(); } catch (_) {} } },
     { id:'heat',         group:'View',       label:'Heatmap view',               kbd:'Alt+4', run: () => { try { setViewMode('heat'); } catch (_) {} } },
     { id:'clay',         group:'View',       label:'Clay view',                  kbd:'5', run: () => { try { setViewMode('clay'); } catch (_) {} } },
     { id:'cad',          group:'View',       label:'CAD view',                   kbd:'6', run: () => { try { setViewMode('cad'); } catch (_) {} } },
     { id:'turntable',    group:'File',       label:'Turntable video…',           run: () => _openTurntableDialog?.() },
-    { id:'screenshot',   group:'File',       label:'Screenshot (share, copy, download)', run: _click('tg-screenshot') },
+    { id:'screenshot',   group:'File',       label:'Screenshot', words:'screenshot share copy download picture image save', run: _click('tg-screenshot') },
     { id:'toggleSidebar', group:'View',      label:'Toggle sidebar',             run: _click('btn-toggle-left') },
     { id:'transformPanel', group:'View',     label:'Transform panel', words:'transform panel (position, rotation, size)', run: _click('tg-transform') },
     { id:'transformReset', group:'Edit',     label:'Reset position, rotation and size', run: _click('tform-reset') },
@@ -5260,8 +5270,8 @@ const _Actions = (() => {
     { id:'splitAll',     group:'Edit',       label:'Split every mesh',           run: _click('btn-split-all') },
     { id:'measureClear', group:'View',       label:'Delete every measurement',   run: _click('msr-clear') },
     { id:'explodeReset', group:'View',       label:'Put exploded parts back',    run: _click('btn-explode-reset') },
-    { id:'bakeTransforms', group:'Edit',     label:'Bake transforms into the mesh', run: _click('btn-bake-transforms') },
-    { id:'centerPivot',  group:'Edit',       label:'Axis Center',   words:'pivot origin center centre axis reset rotation c4d axis center: centre the axis on the part and reset its rotation to 0, 0, 0', run: _click('btn-center-pivot') },
+    { id:'bakeTransforms', group:'Edit',     label:'Bake transforms into the mesh', run: () => bakeTransforms() },
+    { id:'centerPivot',  group:'Edit',       label:'Axis Center',   words:'pivot origin center centre axis reset rotation c4d axis center: centre the axis on the part and reset its rotation to 0, 0, 0', run: () => axisCenter() },
     { id:'axisCard',     group:'Edit',       label:'Axis…', words:'pivot axis center centre align origin reset scale object c4d axis…: centre, align and move the axis, centre the object, reset scale', run: () => _CmdCards.open('axis') },
     { id:'axisToOrigin', group:'Edit',       label:'Center Axis to the world origin', words:'pivot axis origin zero', run: () => axisSet('origin', 'keep') },
     { id:'axisToSel',    group:'Edit',       label:'Center Axis to the selection', words:'pivot axis selection centre center axis to the middle of the selection', run: () => axisSet('selection', 'keep') },
@@ -5284,6 +5294,7 @@ const _Actions = (() => {
     { id:'recipeExport', group:'File',       label:'Export recipes to a file',   run: _click('recipe-export') },
     { id:'recipeImport', group:'File',       label:'Import recipes from a file', run: _click('recipe-import') },
     { id:'treeCollapse', group:'View',       label:'Collapse all groups in the tree', run: _click('tree-collapse-toggle') },
+    { id:'treeTop',      group:'View',       icon:'arrow-up-to-line', label:'Scroll the tree to the top', words:'parts tree list scroll top first row', run: _click('tree-scroll-top') },
     { id:'photoMode',    group:'View',       label:'Photo mode',                 words:'beauty render eye candy picture studio ambient occlusion glow vignette grain', run: _click('toggle-photo') },
     { id:'photoSave',    group:'View',       label:'Save a photo of the model',  words:'picture png render beauty', run: () => { const t = document.getElementById('toggle-photo'); if (t && !t.checked) t.click(); setTimeout(() => document.getElementById('photo-save')?.click(), 900); } },
     { id:'hdriLoad',     group:'View',       label:'Load an HDRI environment…',  run: _click('hdri-load-btn') },
@@ -5463,6 +5474,8 @@ const _CmdK = (() => {
       c.querySelectorAll('svg, i[data-lucide], .n, .badge, select, input, [id$="-count"], [id$="-n"]').forEach(x => x.remove());
       return c.textContent.replace(/\(\s*\d*\s*\)/g, '').replace(/\s+\d[\d,.]*\s*$/, '').replace(/\s+/g, ' ').trim();
     };
+    // an icon-only button is listed by its tip, cut to its name: "Merge: join the selected parts into one (Ctrl+M)" is "Merge"
+    const tipName = (t) => String(t || '').replace(/\s*\([^)]*\)\s*$/, '').split(/:\s/)[0].trim();
     const reveal = (el) => {
       const head = el.closest('.section')?.querySelector('.section-h');
       if (head && head.classList.contains('collapsed')) head.click();
@@ -5494,8 +5507,9 @@ const _CmdK = (() => {
       const group = (sec.querySelector('.section-h span')?.textContent || 'Sidebar').trim();
       for (const el of sec.querySelectorAll('.section-b button, .section-b select, .section-b input, .section-b .scrub-label')) {
         if (el.closest('[hidden]') || el.style.display === 'none') continue;
+        if (el.closest('.sel-bar-grid')) continue;      // (the icon tiles of Tools: each runs a command the search lists already, so they are not listed a second time)
         if (el.matches('button')) {
-          add(group, text(el) || el.title || el.dataset.tip, () => { reveal(el); setTimeout(() => {
+          add(group, text(el) || tipName(el.title || el.dataset.tip), () => { reveal(el); setTimeout(() => {
             if (el.disabled) toast(text(el) || 'Not available', 'Not available right now — it usually needs a selection', 'info', 2600);
             else el.click();
           }, 120); }, { offFn: () => (el.disabled ? 'Not available now' : null) });
@@ -5515,17 +5529,15 @@ const _CmdK = (() => {
         }
       }
     }
-    for (const el of document.querySelectorAll('#sidebar-left .tree-toolbar button')) {
-      add('Parts tree', (el.title || el.dataset.tip || el.getAttribute('aria-label') || '').replace(/\s*\([^)]*\)\s*$/, ''), () => el.click());
-    }
+    // (the buttons of the tree's toolbar are not listed: each runs a command the search has already, and Scroll to top is one of them below)
     return out;
   }
   // Does the command open a panel (a card with options) instead of running at once? Its name ends in an ellipsis, or it opens a card.
   const _opensPanel = (a) => !!a && !a.toggle && (/…$/.test(a.label || '') || (typeof a.run === 'function' && /_CmdCards\.open\(/.test(String(a.run))));
   // An icon per command (by id), else per group.
   const ICON = {
-    newscene: 'file-plus', open: 'folder-open', import: 'file-input', savescene: 'save', export: 'square-arrow-right-exit', sceneSettings: 'clapperboard', revert: 'rotate-ccw',
-    fit: 'maximize', frameSel: 'maximize', camPersp: 'video', camTop: 'view-top', camFront: 'view-front', camSide: 'view-side',
+    newscene: 'file-plus', open: 'folder-open', import: 'file-input', savescene: 'save', export: 'square-arrow-right-exit', sceneSettings: 'columns-3-cog', dupscene: 'copy', screenshot: 'image', report: 'book-open-text', viewportSettings: 'monitor-cog', revert: 'rotate-ccw',
+    fit: 'scan-square', frameSel: 'scan-square', camPersp: 'video', camTop: 'view-top', camFront: 'view-front', camSide: 'view-side',
     solid: 'cube-solid', wire: 'cube-wire', xray: 'cube-xray', clay: 'sphere-clay', gzMove: 'move-3d', gzRotate: 'rotate-3d', gzScale: 'scale-3d', gzOff: 'circle-slash', tgGrid: 'land-plot',
     selAll: 'square-check', selInvert: 'arrow-left-right', selClear: 'square-x', isolate: 'focus', showAll: 'eye', hideUnsel: 'eye-off', hideSel: 'eye-off', reveal: 'locate',
     undo: 'undo-2', redo: 'redo-2', delete: 'trash-2', copy: 'copy', paste: 'clipboard-paste', duplicate: 'copy-plus', recenter: 'axis-3d', group: 'folder-plus', ungroup: 'folder-minus',
@@ -8022,6 +8034,14 @@ function _gizmoSpaceSet(v) {
   try { if (state.gizmo) state.gizmo.setSpace(v === 'world' ? 'world' : 'local'); } catch (_) {}
   try { _detachGizmo(); updateGizmo(); } catch (_) {}      // (detached first: a re-attach is what turns the pivot to the new axes)
   try { requestRender(); } catch (_) {}
+}
+// W: the gizmo's axes go between World and Local (any other choice, such as View, goes to World first). In Edit mesh it sets that gizmo's axes the same way.
+function _toggleGizmoAxes() {
+  let edit = false; try { edit = _Elements.isActive(); } catch (_) {}
+  const cur = edit ? _Elements.api.space() : _gizmoSpaceGet();
+  const next = cur === 'world' ? 'local' : 'world';
+  if (edit) { try { _Elements.api.space(next); } catch (_) {} } else _gizmoSpaceSet(next);
+  try { toast('Gizmo axes', next === 'world' ? "World: the scene's X, Y and Z" : "Local: the part's own axes", 'info', 1600); } catch (_) {}
 }
 // The world rotation the gizmo takes for the orientations that are not "the part's own": null means keep the default.
 //   active : the part picked last (with several parts, its axes rather than the first one's)
@@ -11308,7 +11328,7 @@ function _drawScreenshotStamp(ctx, w, h, optsIn) {
     ctx.arcTo(x,        y,        x + boxW, y,        radius);
     ctx.closePath();
   }
-  ctx.fillStyle = 'rgba(16,16,16,0.78)';
+  ctx.fillStyle = 'rgba(20,20,20,0.78)';
   ctx.fill();
   ctx.shadowColor = 'transparent';
 
@@ -13515,7 +13535,7 @@ const _ClaudeBridge = (() => {
     try { const r = window.__moTabs; for (const id of Object.keys((r && r.wins) || {})) paintPill(r.wins[id]); } catch (_) {}
     paintPill(window); notify();
   };
-  const idleText = () => 'Claude connected';
+  const idleText = () => 'Claude';
 
   // ── Settings text and the loop ───────────────────────────────────────────
   const statusText = () => superseded ? 'Another window took over the connection. Turn this on again to take it back.' : on ? 'Listening. ' + (lastTool ? 'Last request: ' + lastTool.replace(/_/g, ' ') + '.' : 'Waiting for Claude.') : 'Off.';
@@ -13696,13 +13716,13 @@ const _ClaudeBridge = (() => {
         '<div class="clp-stats">' + [['Requests', s.stats.count], ['Done', s.stats.done], ['Said no', s.stats.declined + s.stats.blocked], ['Failed', s.stats.failed]].map(([k, v]) => '<div><b>' + v + '</b><span>' + k + '</span></div>').join('') + '</div>' +
         (s.activity.length ? '<div class="clp-log">' + s.activity.slice(0, 3).map(a => '<div><span class="clp-tool">' + esc(a.tool.replace(/_/g, ' ')) + '</span><span class="clp-out is-' + a.outcome + '">' + (OUTL[a.outcome] || a.outcome) + '</span><span class="clp-ms">' + (a.ms < 1000 ? a.ms + ' ms' : (a.ms / 1000).toFixed(1) + ' s') + '</span></div>').join('') + '</div>' : '') +
         '<div class="clp-sw">' + row('clp-on', 'Let Claude connect', s.on) + row('clp-ask', 'Ask before Claude edits', CATS.some(c => modeOf(c) === 'ask')) + row('clp-askdel', 'Always ask before deleting', modeOf('delete') === 'ask') + '</div>' +
-        '<div class="clp-foot"><button type="button" class="btn quiet" id="clp-mode" title="Hide the viewport and follow Claude as a feed (alpha)">Claude mode<i class="cf-alpha">Alpha</i></button><button type="button" class="btn quiet" id="clp-copy" title="Copy the command that adds this app to Claude">Copy command</button><button type="button" class="btn quiet" id="clp-console" title="Open the console, where every request is written">Console</button><button type="button" class="btn" id="clp-more" title="Every setting for Claude">More…</button></div>';
+        '<div class="clp-foot"><button type="button" class="btn quiet" id="clp-mode" title="Hide the viewport and follow Claude as a feed (alpha)">Claude mode<i class="cf-alpha">Alpha</i></button><button type="button" class="btn quiet" id="clp-copy" title="Copy the command that adds this app to Claude">Copy cmd</button><button type="button" class="btn quiet" id="clp-console" title="Open the console, where every request is written">Console</button><button type="button" class="btn" id="clp-more" title="Every setting for Claude">Settings</button></div>';
     }
     function place() {
       const p = pill(); if (!p || !el) return;
       const r = p.getBoundingClientRect(), w = el.offsetWidth || 304;
       el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
-      el.style.top = Math.round(r.bottom + 8) + 'px';
+      el.style.top = Math.round(p.closest('#sb') ? Math.max(8, r.top - (el.offsetHeight || 0) - 8) : r.bottom + 8) + 'px';      // (in the status bar it opens upward)
     }
     function ensure() {
       if (el) return;
@@ -13718,7 +13738,7 @@ const _ClaudeBridge = (() => {
       });
       el.addEventListener('click', async (e) => {
         const b = e.target.closest('button'); if (!b) return;
-        if (b.id === 'clp-mode') { hide(); try { window.__moClaudeMode('feed'); } catch (_) {} }
+        if (b.id === 'clp-mode') { hide(); if (await _askClaudeMode()) { try { window.__moClaudeMode('feed'); } catch (_) {} } }
         else if (b.id === 'clp-more') { hide(); try { window.__openSettings && window.__openSettings('claude'); } catch (_) {} }
         else if (b.id === 'clp-console') { hide(); try { document.getElementById('sb-console-btn')?.click(); } catch (_) {} }
         else if (b.id === 'clp-stop') { api.stop(); }
@@ -17669,6 +17689,35 @@ function _treeLinesCompute(rows) {
 // done until the view comes within a few rows of the edge of that: changing
 // the rows on every scroll step would make the browser lay out and repaint
 // the panel on every frame.
+// Back to normal: both sidebars scrolled to the top, Notes mode off, the Animate window closed. On every start of the page and whenever a
+// file is opened (the browser gives a scrolled panel back its place on a refresh, and a file with new notes switched Notes mode on).
+function _resetToNormal() {
+  try { window.MONotesUI?.exitMode?.(); } catch (_) {}
+  try { _Anim.closeAll(); _Anim.exit(); } catch (_) {}
+  for (const id of ['sidebar-left', 'sidebar-right']) {
+    const root = document.getElementById(id); if (!root) continue;
+    root.scrollTop = 0;
+    for (const el of root.querySelectorAll('*')) if (el.scrollTop > 0) el.scrollTop = 0;
+  }
+  try { const t = document.getElementById('tree'); if (t) { t.scrollTop = 0; _treeView.top = 0; _treeFillVisible(); } } catch (_) {}
+}
+// Both sidebars at the top as the page starts and while a model loads. Whatever scrolls them meanwhile (a card opening, the panel for a
+// selected part, the browser putting a scroll back) is undone in the scroll event itself, which runs before the next frame is drawn, so
+// nothing is seen to scroll or jump. It lasts 4 s, or until the first wheel, click or key of the person.
+let _holdTop = null;
+function _holdAtTop() {
+  _resetToNormal();
+  if (_holdTop) _holdTop.stop();
+  const roots = ['sidebar-left', 'sidebar-right'].map(id => document.getElementById(id)).filter(Boolean);
+  const evs = ['wheel', 'pointerdown', 'keydown', 'touchstart'];
+  const onScroll = (e) => { const el = e.target; if (el && el.scrollTop > 0 && roots.some(r => r === el || r.contains(el))) el.scrollTop = 0; };
+  let timer = 0;
+  const stop = () => { clearTimeout(timer); window.removeEventListener('scroll', onScroll, true); for (const ev of evs) window.removeEventListener(ev, stop, true); if (_holdTop && _holdTop.stop === stop) _holdTop = null; };
+  window.addEventListener('scroll', onScroll, true);
+  for (const ev of evs) window.addEventListener(ev, stop, { capture: true, passive: true });
+  timer = setTimeout(stop, 4000);
+  _holdTop = { stop };
+}
 const _treeView = { top: -1, h: 0, w: 0, f0: 0, f1: -1 };     // f0..f1: the rows of _treeShownRows() that are in the document
 const _TREE_AHEAD = 40, _TREE_EDGE = 10;
 function _treeFillVisible(ev) {
@@ -20296,7 +20345,7 @@ function refreshPropertiesPanel() {
     const parts = `${n} part${n === 1 ? '' : 's'}`;
     // the badge in the card's corner: the number alone, shortened from a thousand up (the tooltip has the words and the whole number)
     const partsShort = n < 1000 ? String(n) : n < 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : n < 1e6 ? Math.round(n / 1000) + 'k' : (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
-    const hint = 'Click to see it in the Materials panel · double-click to edit · right-click for more';
+    const hint = 'Click to select it · double-click to open it · double-click its name to rename · Delete takes it off the selected parts · right-click for more';
     const fcLine = fc ? `\n${fc.mi === 0 ? 'Main colour of this part' : 'Faces of this part'}: ${fmtNum(fc.tris)} triangles` : '';
     const fcAttrs = fc ? ` data-part-id="${fc.partId}" data-fc-mi="${fc.mi}"` : '';
     const delTitle = fc && fc.mi > 0 ? 'Give these faces back to the main colour of the part (one undo step)' : 'Remove this material from the selected parts: they are left with no material (one undo step)';
@@ -20611,6 +20660,7 @@ function refreshPropertiesPanel() {
   };
   const _openMatFromProps = (mat) => {
     if (!mat) return;
+    _pickPropMat(mat);
     if (document.getElementById('vp-materials-pop')?.classList.contains('show')) _showMatInDock(mat);
     _editMat(mat);
   };
@@ -20651,8 +20701,11 @@ function refreshPropertiesPanel() {
   });
   el.querySelectorAll('.prop-mat-multi-row[data-action="edit-material"]').forEach(row => {
     const matOf = () => { const u = row.dataset.matUuid; return u && typeof _collectLiveMaterials === 'function' ? (_collectLiveMaterials().find(i => i.mat?.uuid === u) || {}).mat : null; };
-    row.addEventListener('click', (e) => { if (!_typingIn(e)) _openMatFromProps(matOf()); });
-    row.addEventListener('dblclick', (e) => _renameMatOnCard(row, matOf(), e));
+    // a click only picks the material (nothing opens); a double-click opens it; a double-click on its name renames it
+    row.addEventListener('click', (e) => { if (!_typingIn(e)) _pickPropMat(matOf()); });
+    row.addEventListener('dblclick', (e) => { if (!_typingIn(e) && !(e.target.closest && e.target.closest('.prop-mat-name'))) _openMatFromProps(matOf()); });
+    const rn = row.querySelector('.prop-mat-name');
+    if (rn) rn.addEventListener('dblclick', (e) => { e.stopPropagation(); _renameMatOnCard(row, matOf(), e); });
   });
   // The strip scrolls sideways: the wheel turns it, and a soft fade on the
   // side that has more says so (classes `more-l` / `more-r`).
@@ -20668,8 +20721,8 @@ function refreshPropertiesPanel() {
     requestAnimationFrame(fade);
   }
   if (matBtn && !matBtn.classList.contains('prop-mat-multi-row')) {
-    matBtn.addEventListener('click', (e) => { if (!_typingIn(e)) _openMatFromProps(_resolveSelectedMat()); });
-    matBtn.addEventListener('dblclick', (e) => _renameMatOnCard(matBtn, _resolveSelectedMat(), e));
+    matBtn.addEventListener('click', (e) => { if (!_typingIn(e)) _pickPropMat(_resolveSelectedMat()); });
+    matBtn.addEventListener('dblclick', (e) => { if (!_typingIn(e) && !(e.target.closest && e.target.closest('[data-mat-name]'))) _openMatFromProps(_resolveSelectedMat()); });
     // Dblclick the name → rename inline. Stop propagation so the same
     // event doesn't also open the editor (click bubbles independently).
     const nameEl = matBtn.querySelector('[data-mat-name]');
@@ -20678,7 +20731,7 @@ function refreshPropertiesPanel() {
         e.preventDefault();
         e.stopPropagation();
         const target = _resolveSelectedMat();
-        if (target) _renameMaterialInline(nameEl, target);
+        if (target) _renameMatOnCard(matBtn, target, e);
       });
     }
   }
@@ -20712,8 +20765,57 @@ function refreshPropertiesPanel() {
     });
   });
   _lucide();
+  _syncPropMatHighlight();
   _updateSelectedChip();
 }
+
+// ── The material bar of the Properties card: pick, open, delete ──────────────────────────────────────────────
+// A click on a material of the bar only picks it (it is drawn lit); a double-click opens its editor; a double-click on its name renames
+// it. The material stays lit while its editor is open; Delete, with a lit material, takes it off the selected parts as the trash
+// can on the card does (one undo step).
+let _propMatPick = null;
+function _propChipMat(chip) {
+  const u = chip && chip.dataset.matUuid;
+  if (u && typeof _collectLiveMaterials === 'function') return (_collectLiveMaterials().find(i => i.mat?.uuid === u) || {}).mat || null;
+  const ids = [...state.selected]; if (!ids.length) return null;
+  const p = getPart(ids[0]);
+  let t = p?.mesh ? _matOf(p.mesh) : null;
+  if (!t) t = p?.instancedMesh ? _matOf(p.instancedMesh) : null;
+  if (Array.isArray(t)) t = t[0];
+  return t || null;
+}
+function _syncPropMatHighlight() {
+  const open = _matEditorState && _matEditorState.popup ? _matEditorState.mat : null;
+  const lit = _propMatPick || open;
+  let found = false;
+  for (const chip of document.querySelectorAll('#prop-body .prop-mat-btn')) {
+    const on = !!lit && _propChipMat(chip) === lit;
+    chip.classList.toggle('is-picked', on);
+    if (on && lit === _propMatPick) found = true;
+  }
+  if (_propMatPick && !found && _propMatPick !== open) _propMatPick = null;      // (the material is not in the bar any more)
+}
+function _pickPropMat(mat) { _propMatPick = mat || null; _syncPropMatHighlight(); }
+// a press elsewhere lets go of the pick (not while the material's editor is open)
+document.addEventListener('pointerdown', (e) => {
+  if (!_propMatPick) return;
+  if (e.target.closest && (e.target.closest('#prop-body .prop-mat-btn') || e.target.closest('#_mat-editor-popup'))) return;
+  if (_matEditorState && _matEditorState.popup && _matEditorState.mat === _propMatPick) return;
+  _propMatPick = null; _syncPropMatHighlight();
+}, true);
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Delete' || e.ctrlKey || e.metaKey || e.altKey || !_propMatPick) return;
+  if (_typingTarget(e) || _modalOpen()) return;
+  const chip = document.querySelector('#prop-body .prop-mat-btn.is-picked');
+  if (!chip) return;
+  const mat = _propChipMat(chip);
+  if (!mat || mat !== _propMatPick) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  const fcMi = chip.dataset.fcMi != null ? parseInt(chip.dataset.fcMi, 10) : -1;
+  _propMatPick = null;
+  if (fcMi > 0) _faceGroupSet(parseInt(chip.dataset.partId, 10), fcMi, null);
+  else _removeMaterialFromSelection(mat);
+}, true);
 
 // System-wide material rename. Replaces `labelEl`'s text with an inline
 // input (same .tree-label-input style used by the tree rename), commits on
@@ -23661,9 +23763,12 @@ async function _copyDiagnostics() {
 }
 window._copyDiagnostics = _copyDiagnostics;
 
+// (a cloner and a drawn line have no triangles of their own: they are not empty, and Clean up used to delete every one)
+function _findEmptyParts() {
+  return state.parts.filter(p => !p.deleted && !p.isCloner && !p.isSpline && (p.triCount === 0 || p.vertCount === 0)).map(p => p.partId);
+}
 function cleanEmpty() {
-  // (a cloner and a drawn line have no triangles of their own: they are not empty, and Clean up used to delete every one)
-  const ids = state.parts.filter(p => !p.deleted && !p.isCloner && !p.isSpline && (p.triCount === 0 || p.vertCount === 0)).map(p => p.partId);
+  const ids = _findEmptyParts();
   if (!ids.length) return toast('No empty parts found', '', 'info');
   deleteParts(ids, 'Removed empty parts');
 }
@@ -23684,6 +23789,11 @@ function _findExactCopies() {
   return _findStackedCopies(0.01, false).extra.filter(id => { const p = getPart(id); return p && !p.isSpline; });
 }
 function cleanDegenerate() {
+  const ids = _findDegenerateParts();
+  if (!ids.length) return toast('No degenerate parts found', '', 'info');
+  deleteParts(ids, 'Removed degenerate parts');
+}
+function _findDegenerateParts() {
   const ids = [];
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   for (const p of state.parts) {
@@ -23707,8 +23817,7 @@ function cleanDegenerate() {
     }
     if (!hasArea) ids.push(p.partId);
   }
-  if (!ids.length) return toast('No degenerate parts found', '', 'info');
-  deleteParts(ids, 'Removed degenerate parts');
+  return ids;
 }
 
 // Shape fingerprint: translation- and rotation-invariant signature so that
@@ -27271,6 +27380,7 @@ function _collectSceneState(o) {
     controls: _collectSceneControls(),
     notes: notesPayload,
     anim: _animPayload(),      // (what Animate animates, as it is: found again by name when the file is opened)
+    isolated: state._isolated ? true : undefined,     // (the view was isolated: Show all / S then leave it, as before the save)
     explode: state.explode && (state.explode.x || state.explode.y || state.explode.z) ? { x: state.explode.x, y: state.explode.y, z: state.explode.z, mode: state.explodeMode || 'scene' } : null,
     parts: partsPayload,
   };
@@ -27535,6 +27645,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
     if (!p.visible) em.userData.soHidden = true;
     if (p.flagged) em.userData.soFlagged = true;
     if (p.locked) em.userData.soLocked = true;
+    if (ask.view && state.selected.has(p.partId)) em.userData.soSel = true;      // (what was selected: a view thing, so only when the view is saved)
     if (p.layers && p.layers.length) em.userData.soLayers = p.layers.slice();
   }
   // Stash the sidecar on a *named* child node so traversal on load can find it
@@ -27731,9 +27842,15 @@ function _applySceneState(s) {
         if (p._soLocked) { p.locked = true; touched++; }
         delete p._soHidden; delete p._soFlagged; delete p._soLocked;
       }
-      if (touched) {
+      // what was selected, and that the view was isolated (only when some part is hidden: an isolation with everything on show is none)
+      const picked = state.parts.filter(p => p._soSel && !p.deleted && p.visible !== false).map(p => p.partId);
+      for (const p of state.parts) delete p._soSel;
+      if (s.isolated === true && state.parts.some(p => !p.deleted && p.visible === false)) state._isolated = true;
+      if (picked.length) state.selected = new Set(picked);
+      if (touched || picked.length) {
         try { rebuildTree(); } catch (_) {}
         try { refreshFlagged(); } catch (_) {}
+        try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); _updateVpHint(); } catch (_) {}
       }
     }
     // what was animated (after the explode amount is back, so the rest poses are taken from the view as it was saved)
@@ -27931,7 +28048,9 @@ function _cadMaterialFor(own) {
   if (m) return m;
   const T = THREE.TSL;
   const mc = T.texture(_cadMatcap(), T.matcapUV).rgb;
-  const col = own && own.color ? T.uniform(own.color) : T.vec3(0.75, 0.75, 0.75);
+  let col = own && own.color ? T.uniform(own.color) : T.vec3(0.75, 0.75, 0.75);
+  // (a merged or painted part keeps its colours in the vertices, and its material is white: they are read too, or it would take the matcap's grey)
+  if (own && own.vertexColors) col = col.mul(T.vertexColor().rgb);
   const W = T.vec3(0.299, 0.587, 0.114);
   const lum = T.dot(mc, W), cl = T.dot(col, W);
   const mx = T.max(T.max(col.x, col.y), col.z), mn = T.min(T.min(col.x, col.y), col.z);
@@ -31245,6 +31364,11 @@ function wireUI() {
   // A `.section-fixed` card (Properties) is always open: no saved state, no
   // click handler.
   const _secFixed = (h) => !!h.closest('.section-fixed, .section-cmd');
+  // For the cards that are built later (Notes) so that they open and close the same way, and are remembered the same way.
+  window.__moSection = {
+    apply: (h, defaultCollapsed) => { const m = _readSecState(), k = _secKey(h); h.classList.toggle('collapsed', Object.prototype.hasOwnProperty.call(m, k) ? !!m[k] : defaultCollapsed !== false); },
+    save: (h) => { const m = _readSecState(); m[_secKey(h)] = h.classList.contains('collapsed'); _writeSecState(m); },
+  };
   document.querySelectorAll('#sidebar-right .section-h').forEach(h => {
     if (_secFixed(h)) { h.classList.remove('collapsed'); return; }
     const key = _secKey(h);
@@ -31561,7 +31685,7 @@ function wireUI() {
   //               Ctrl+G group · Ctrl+Shift+G ungroup · Ctrl+D duplicate · Del delete
   //   visibility  H hide · Shift+H hide the rest · Alt+H show all · S isolate / back
   //   selection   Ctrl+A all · Ctrl+I invert · Esc none · Shift+S find in the tree
-  //   view        F frame · 1-5 shading · Ctrl+1-4 camera · G grid · E R T Q gizmo · M measure
+  //   view        F frame · 1-5 shading · Ctrl+1-4 camera · G grid · E R T gizmo · M measure
   //   panels      Shift+C or Ctrl+K search · Shift+M materials · Shift+L library · ` console · Ctrl+, settings · Ctrl+; scene · ? shortcuts
   //   file        Alt+N new · Ctrl+O open · Ctrl+Shift+O import · Ctrl+S save · Ctrl+E export · Ctrl+Shift+F4 close all
   // Lossy tools (decimate) deliberately have no single key.
@@ -31578,6 +31702,7 @@ function wireUI() {
     // (these two work on the selection only: a key must never change the whole scene by accident)
     'U':            () => { if (!state.selected.size) { toast('Untriangulate', 'Select a part first', 'info', 2200); return; } try { window.__moAgent && window.__moAgent.untriangulate && window.__moAgent.untriangulate(); } catch (_) {} },
     'Shift+U':      () => { if (!state.selected.size) { toast('Triangulate', 'Select a part first', 'info', 2200); return; } try { window.__moAgent && window.__moAgent.triangulate && window.__moAgent.triangulate(); } catch (_) {} },
+    'W':            () => _toggleGizmoAxes(),
     'B':            () => { try { window.__moQuickRemesh && window.__moQuickRemesh.toggle(); } catch (err) { console.warn('[quick remesh]', err); } },
     'L':            () => _CmdCards.open('draw'),
     'D':            () => _DynPlace.toggle(),
@@ -31634,7 +31759,6 @@ function wireUI() {
     else if (plain && (e.key === 'e' || e.key === 'E')) setGizmoMode('translate');
     else if (plain && (e.key === 'r' || e.key === 'R')) setGizmoMode('rotate');       // (Ctrl+R stays the browser's reload)
     else if (plain && (e.key === 't' || e.key === 'T')) setGizmoMode('scale');
-    else if (plain && (e.key === 'q' || e.key === 'Q')) setGizmoMode('off');
     else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'g' || e.key === 'G')) {
       // Ctrl/⌘+G — group the current selection (same as the tree's
       // "Group selected" context-menu entry). Sits BEFORE the bare-G grid
@@ -35411,7 +35535,7 @@ const _Draw = (() => {
     if (_hudLook && now - _hudLookAt < 1500) return _hudLook;
     const cs = getComputedStyle(document.documentElement), v = (n, d) => (cs.getPropertyValue(n) || '').trim() || d;
     _hudLookAt = now;
-    return (_hudLook = { bg: v('--glass-strong', 'rgba(20,20,20,.92)'), line: v('--bd', '#2c2c2c'), tx: v('--tx', '#ededed'), dim: v('--tx3', '#8c8c8c') });
+    return (_hudLook = { bg: v('--glass-strong', 'rgba(20,20,20,.92)'), line: v('--bd', '#303030'), tx: v('--tx', '#ededed'), dim: v('--tx3', '#8c8c8c') });
   }
   function text(t, x, y, tag) {
     const L = hudLook(), FAM = 'Inter, -apple-system, Segoe UI, sans-serif', F = '11px ' + FAM, FT = '600 9px ' + FAM;
@@ -36400,6 +36524,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // don't leave it sticky for the next load.
   const importMode = !!state._importMode;
   state._importMode = false;
+  if (!importMode) _holdAtTop();      // (from here to the end of the load the sidebars cannot scroll off the top)
   setLoaderProgress(60);
   // the file's own convention brought into the scene's (see _toSceneConvention); the loaders say which it is
   try { if (sceneRoot.userData && sceneRoot.userData.__moConv !== undefined) { _toSceneConvention(sceneRoot, sceneRoot.userData.__moConv); delete sceneRoot.userData.__moConv; } } catch (e) { console.warn('[import] could not bring the file into the scene\'s axes and units:', e); }
@@ -36541,6 +36666,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (m.userData.soHidden) { partInfo._soHidden = true; delete m.userData.soHidden; }
     if (m.userData.soFlagged) { partInfo._soFlagged = true; delete m.userData.soFlagged; }
     if (m.userData.soLocked) { partInfo._soLocked = true; delete m.userData.soLocked; }
+    if (m.userData.soSel) { partInfo._soSel = true; delete m.userData.soSel; }
     if (m.userData.soUid) { partInfo.uid = String(m.userData.soUid).slice(0, 60); delete m.userData.soUid; }      // (the id the notes know this part by)
     if (!_strippedGeoms.has(geom.uuid)) {
       _strippedGeoms.add(geom.uuid);
@@ -36645,7 +36771,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     }
   }
   if (importMode) { try { recomputeStats(); } catch (_) {} onSceneActivated(); }
-  else onModelLoaded(file.name);
+  else { onModelLoaded(file.name); _holdAtTop(); }
   _buildBVHsForAllGeoms();
   requestRender();
   setLoaderProgress(100);
@@ -38365,7 +38491,7 @@ const _alignView = (() => {
     _alignPend.Q.identity();
     const p = _alignPrefs(); p.a = _ALIGN_DEFAULT.a; p.b = _ALIGN_DEFAULT.b; p.up = _ALIGN_DEFAULT.up; _alignSave(p);
     segSyncs.forEach(f => f());
-    if (alignModelToFloor({ reset: true })) toast('Back to how it was loaded', '', 'success'); _alignPreview(); });
+    if (alignModelToFloor({ reset: true })) toast('Original position restored', '', 'success'); _alignPreview(); });
   const box = document.getElementById('align-box');
   box?.addEventListener('pointerenter', () => { labels(); _alignRefreshInfo(); });
   box?.closest('.section-cmd')?.addEventListener('cmd-open', () => setTimeout(() => { labels(); _alignRefreshInfo(); }, 0));
@@ -38972,8 +39098,7 @@ function wireAdvancedUI() {
   // the Tools card: the tiles with a data-act run that command of the palette (Merge, Split, Group...), the others are the old buttons
   $('tools-card')?.addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (!b) return; const a = _Actions.list.find(x => x.id === b.dataset.act); if (a) { try { a.run(); } catch (err) { console.warn('[tools]', err); } } });
   $('btn-recenter')?.addEventListener('click', recenterModel);
-  $('btn-bake-transforms')?.addEventListener('click', bakeTransforms);
-  $('btn-center-pivot')?.addEventListener('click', () => axisCenter());
+  $('tree-scroll-top')?.addEventListener('click', () => { const t = $('tree'); if (t) t.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); });
 }
 
 // ─── wireUI chain helper ──────────────────────────────────────────────────
@@ -39449,7 +39574,7 @@ const _ModelInspector = (() => {
       .mi2 button[data-mi2]:not(.mi2-pi):not(.mi2-x):hover{background:var(--s5);color:var(--tx)}
       .mi2-ref{flex:0 0 auto}
       .mi2-scanrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px;color:var(--tx3);font-size:11px}
-      .mi2 .mi2-go{background:var(--ac)!important;color:var(--white)!important}
+      .mi2 .mi2-go{background:var(--btn-primary-bg)!important;color:var(--btn-primary-fg)!important}
       .mi2-prog{height:3px;border-radius:2px;background:var(--s4);overflow:hidden;margin:6px 8px 0}
       .mi2-prog i{display:block;height:100%;background:var(--ac);transition:width 120ms linear}
     `;
@@ -39637,13 +39762,15 @@ function _collectLiveMaterials() {
 // the material looks like.
 const _matPreviewCache = new WeakMap();
 const _matThumb = (() => {
-  function render(mat) {
+  // `size` (an even number of device pixels, optional): the picture drawn at the size it is shown at, so the ball's edges fall on whole
+  // pixels. The ball stands in the middle of the picture, with a whole-pixel radius; its ground shadow is drawn under it.
+  function render(mat, size) {
     try {
-      const SIZE = 96;
+      const SIZE = size > 0 ? size : 96;
       const cvs = document.createElement('canvas');
       cvs.width = cvs.height = SIZE;
       const g = cvs.getContext('2d');
-      const cx = SIZE / 2, cy = SIZE / 2 + 2, r = SIZE * 0.40;
+      const cx = SIZE / 2, cy = SIZE / 2, r = Math.round(SIZE * 0.40);
       const baseHex = '#' + (mat?.color?.getHexString?.() || 'cccccc');
       const rough = Math.max(0, Math.min(1, mat?.roughness ?? 0.55));
       const metal = Math.max(0, Math.min(1, mat?.metalness ?? 0));
@@ -40193,10 +40320,9 @@ function _fillMaterialsList() {
         try { _openMaterialEditor(info); } catch (err) { console.warn('[mat] swap failed:', err); }
         return;
       }
-      // Editor closed → existing panel-select toggle.
-      const wasOnly = _matPanelSelected.size === 1 && _matPanelSelected.has(m);
+      // Editor closed → a click picks this material. (A click on the picked one does not let go of it: Ctrl/Shift+click toggles.)
       _matPanelSelected.clear();
-      if (!wasOnly) _matPanelSelected.add(m);
+      _matPanelSelected.add(m);
       _refreshPanelSelection();
     });
     cell.addEventListener('dblclick', (e) => {
@@ -40261,9 +40387,8 @@ function _renderMatListRows(list, mats) {
         try { _openMaterialEditor(info); } catch (err) { console.warn('[mat] swap failed:', err); }
         return;
       }
-      const wasOnly = _matPanelSelected.size === 1 && _matPanelSelected.has(m);
       _matPanelSelected.clear();
-      if (!wasOnly) _matPanelSelected.add(m);
+      _matPanelSelected.add(m);
       _refreshPanelSelection();
     });
     row.addEventListener('dblclick', (e) => {
@@ -40395,7 +40520,9 @@ const _MatPreviewBall = (() => {
       try {
         // Cache key is the Material reference; clear so each draw is fresh.
         if (typeof _matPreviewCache !== 'undefined') _matPreviewCache.delete(material);
-        const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(material) : null;
+        // (an <img> gets a picture at the size it is shown at, in device pixels and an even number of them: no scaling, a ball on whole pixels)
+        const px = target.tagName === 'IMG' ? Math.max(2, Math.round((target.clientWidth || 56) * (window.devicePixelRatio || 1) / 2) * 2) : 0;
+        const url = px ? _matThumb.render(material, px) : (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(material) : null;
         if (!url) return;
         // Accept either an <img> (set src) or a <canvas> (drawImage onto it).
         if (target.tagName === 'IMG') {
@@ -40667,6 +40794,7 @@ function _openMaterialEditor(info) {
         try { window._closeColorPicker?.(); } catch (_) {}
         if (_matEditorState?._previewBall) _matEditorState._previewBall.dispose();
         _matEditorState = null;
+        _propMatPick = null; try { _syncPropMatHighlight(); } catch (_) {}      // (the material of the bar is lit while its editor is open)
       },
     });
     _matEditorState = { popup, mat: null, info: null, _previewBall: null, _matSnapshot: null };
@@ -40675,6 +40803,7 @@ function _openMaterialEditor(info) {
 
   _matEditorState.mat = mat;
   _matEditorState.info = info;
+  try { _syncPropMatHighlight(); } catch (_) {}
   // Whenever the pointer comes to the editor, what it shows is checked against the material first (once for the popup).
   if (!popup._staleGuard && (popup.card || popup.el)) {
     popup._staleGuard = true;
@@ -43325,6 +43454,7 @@ function _ctxBuild(items, x, y) {
   const m = $('ctx-menu'); if (!m) return;
   m.innerHTML = '';
   m.style.maxHeight = '';
+  m.style.zIndex = '';
   _ctxFill(m, items, m);
   m.style.display = 'block';
   _ctxPlace(m, x, y);
@@ -43381,22 +43511,22 @@ const _SelCmds = (() => {
       dRow(0.25), dRow(0.75), dRow(0.9),
       { id: 'invert', icon: 'arrow-left-right', label: 'Invert selection', kbd: 'Ctrl+I', tip: 'Select what is not selected, deselect the rest', fn: act('selInvert') },
       { id: 'intree', icon: 'locate', label: 'Show in tree', kbd: 'Shift+S', tip: 'Show the selection in the tree', fn: () => revealSelectedInTree() },
-      { id: 'pivot', icon: 'crosshair', label: 'Centre pivot', tip: 'Move the pivot to the middle of the part', fn: click('btn-center-pivot') },
+      { id: 'pivot', icon: 'crosshair', label: 'Centre pivot', tip: 'Move the pivot to the middle of the part', fn: () => axisCenter() },
       { id: 'normals', icon: 'refresh-ccw-dot', label: 'Recompute normals', tip: 'Recompute the normals of the selection', fn: click('btn-recompute-normals') },
     ];
   }
   return { commands: () => registry(measure()) };
 })();
 // ── Quick wand ─────────────────────────────────────────────────────────────
-// Hold W over the viewport: a ring opens around the pointer. Move toward a
+// Hold Q over the viewport: a ring opens around the pointer. Move toward a
 // slice (it takes the direction, not the distance: a short flick is enough)
-// and let go of W to run it. A slice that holds a group (Reduce, More) opens a
+// and let go of Q to run it. A slice that holds a group (Reduce, More) opens a
 // fan of commands around it as soon as the pointer is on it; move out onto one
-// of them and let go. In the middle, or Esc, nothing happens. A quick tap of W
+// of them and let go. In the middle, or Esc, nothing happens. A quick tap of Q
 // leaves the ring open instead: click a slice to run it, Esc to close.
 //
 // It must never be left on screen or act by accident: anything that is not
-// "let go of W on a command" closes it without running anything (Esc, any other
+// "let go of Q on a command" closes it without running anything (Esc, any other
 // key, the wheel, a click outside, a lost focus or a hidden tab, a build that
 // fails), and it does not open while a mouse button is down (an orbit or a
 // gizmo drag), in a text field, behind a dialog, or outside the viewport.
@@ -43412,7 +43542,10 @@ const _Wand = (() => {
   let ox = 0, oy = 0, cx = 0, cy = 0, px = 0, py = 0;
   let slots = [], hot = -1, sub = -1, fanFor = -1, lastX = 0, lastY = 0;
   let lastButtons = 0, closedAt = -1e9;           // the mouse buttons last seen down; when the ring last closed
-  let entryD = 0, committed = false;          // how far out the pointer was when a group's fan opened; whether it has gone on outward since
+  let hideT = 0;                              // the timer that takes the ring off the screen once it has shrunk away
+  let aimQ = 0;                               // the frame an aim is waiting for (the pointer can report faster than the screen draws)
+  let pvx = 0, pvy = 0;                       // where the pointer was at the last aim, to tell a slide along the ring from a move outward
+  let entryD = 0, committed = false;         // how far out the pointer was when a group's fan opened; whether it has gone on outward since
   const esc = (t) => escapeHtml(String(t));
   const pol = (r, a) => [r * Math.sin(a * Math.PI / 180), -r * Math.cos(a * Math.PI / 180)];
   const arc = (r0, r1, a0, a1) => {
@@ -43455,7 +43588,7 @@ const _Wand = (() => {
     }
     const mode = (m, label, kbd) => L('m-' + m, m === 'solid' ? 'cube-solid' : m === 'wire' ? 'cube-wire' : 'cube-xray', label, 'Draw the model as ' + label.toLowerCase(), () => setViewMode(m), { kbd });
     return [
-      { leaf: L('fit', 'maximize', 'Fit view', 'Zoom to the whole model', () => fitToView(), { kbd: 'F', off: none }) },
+      { leaf: L('fit', 'scan-square', 'Fit view', 'Zoom to the whole model', () => fitToView(), { kbd: 'F', off: none }) },
       { leaf: L('selall', 'square-check', 'Select all', 'Select every part', click('sel-all'), { kbd: 'Ctrl+A', off: none }) },
       { group: 'View', icon: 'video', items: [
         L('v-persp', 'video', 'Camera view', 'Perspective camera', () => _setPerspectiveView(), { kbd: 'Ctrl+1' }),
@@ -43547,6 +43680,13 @@ const _Wand = (() => {
     const dx = px - ox, dy = py - oy, d = Math.hypot(dx, dy);
     let a = Math.atan2(dx, -dy) * 180 / Math.PI; if (a < 0) a += 360;
     let h = -1, sj = -1;
+    // Sliding along the ring from one slice to the next does not need a trip back to the middle: a move that goes
+    // sideways rather than outward lets go of the group the pointer was heading for, so the slice it slides onto lights up.
+    const mvx = px - pvx, mvy = py - pvy; pvx = px; pvy = py;
+    if (fanFor >= 0 && d > 0 && d <= R_OUT + 4) {
+      const radial = (dx * mvx + dy * mvy) / d, tang = Math.abs(dx * mvy - dy * mvx) / d;
+      if (tang > 0.5 && tang > Math.abs(radial) * 1.5) { committed = false; entryD = d; }
+    }
     if (d >= DEAD) {
       h = Math.round(a / slice) % slots.length;
       // A fan lies across the directions of other slices, so the way to one of its commands can cross them.
@@ -43599,12 +43739,12 @@ const _Wand = (() => {
   function show(asSticky) {
     if (open) return;
     try { _ctxClose(); } catch (_) {}
-    ox = px = lastX; oy = py = lastY; sticky = !!asSticky; moved = false; startedAt = performance.now(); hot = -1; sub = -1; fanFor = -1; committed = false;
+    ox = px = pvx = lastX; oy = py = pvy = lastY; sticky = !!asSticky; moved = false; startedAt = performance.now(); hot = -1; sub = -1; fanFor = -1; committed = false;
     try {
       build(); place();
       open = true;
       try { window.__moHoverLink && window.__moHoverLink.off(); } catch (_) {}      // (no row of the tree stays lit under the ring)
-      root.classList.remove('is-in'); root.style.display = 'block'; void root.offsetWidth; root.classList.add('is-in');
+      clearTimeout(hideT); root.classList.remove('is-in'); root.style.display = 'block'; void root.offsetWidth; root.classList.add('is-in');
       aim();
     } catch (err) {                                   // whatever went wrong: no half-built ring stays on screen
       console.warn('[wand] could not open:', err);
@@ -43617,8 +43757,10 @@ const _Wand = (() => {
   // Merge, Group and Decimate buttons) are not real ones, and go through.
   function close(run, byPress) {
     if (!open || !root) return;
+    if (aimQ) { cancelAnimationFrame(aimQ); aimQ = 0; if (run) { try { aim(); } catch (_) {} } }      // (what is run is what is under the pointer now)
     const go = run && runCurrent();
-    open = false; sticky = false; closedAt = performance.now(); root.style.display = 'none'; root.classList.remove('is-in');
+    open = false; sticky = false; closedAt = performance.now(); root.classList.remove('is-in');
+    clearTimeout(hideT); hideT = setTimeout(() => { if (!open && root) root.style.display = 'none'; }, 160);      // (it shrinks and fades first, as it grew; nothing in it takes a click meanwhile)
     if (go && byPress) {
       const swallow = (e) => { if (!e.isTrusted) return; e.stopPropagation(); e.preventDefault(); window.removeEventListener('click', swallow, true); };
       window.addEventListener('click', swallow, true);
@@ -43626,15 +43768,16 @@ const _Wand = (() => {
     }
   }
   const overViewport = () => { const e = document.elementFromPoint(lastX, lastY); return !!(e && e.closest && e.closest('#viewport')); };
-  // W, whatever the layout: the letter itself, or (for a layout without Latin letters) the key in the W place
-  const isW = (e) => e.key === 'w' || e.key === 'W' || (!/^[a-z]$/i.test(e.key || '') && e.code === 'KeyW');
+  // Q, whatever the layout: the letter itself, or (for a layout without Latin letters) the key in the Q place
+  const isW = (e) => e.key === 'q' || e.key === 'Q' || (!/^[a-z]$/i.test(e.key || '') && e.code === 'KeyQ');      // (named isW from when the ring was on W)
   const isModifier = (k) => k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'CapsLock' || k === 'AltGraph';
   window.addEventListener('pointermove', (e) => {
     lastX = e.clientX; lastY = e.clientY; lastButtons = e.buttons;
     if (!open) return;
     px = e.clientX; py = e.clientY;
     if (Math.hypot(px - ox, py - oy) >= DEAD) moved = true;
-    try { aim(); } catch (err) { console.warn('[wand]', err); close(false); }
+    if (aimQ) return;
+    aimQ = requestAnimationFrame(() => { aimQ = 0; if (!open) return; try { aim(); } catch (err) { console.warn('[wand]', err); close(false); } });      // (once a frame, however fast the mouse reports)
   }, true);
   window.addEventListener('pointerup', (e) => { lastButtons = e.buttons; }, true);
   window.addEventListener('keydown', (e) => {
@@ -43662,9 +43805,9 @@ const _Wand = (() => {
     lastButtons = e.buttons;
     if (!open) return;
     e.preventDefault(); e.stopPropagation();
-    // a click on the ring keeps the colour under the pointer; a click in the middle window or outside the wheel puts the colour back
+    // a click on a slice or a command of a fan runs it; a click in the middle, outside, or with another button closes the ring and runs nothing
     const d = Math.hypot(e.clientX - ox, e.clientY - oy);
-    if (e.button === 0 && d > HOLE && d <= R + 6) { px = e.clientX; py = e.clientY; moved = true; try { aim(); } catch (_) {} close(true, true); }
+    if (e.button === 0 && d >= DEAD) { px = e.clientX; py = e.clientY; moved = true; try { aim(); } catch (_) {} close(true, true); }
     else close(false, true);
   }, true);
   // the right button also opens the app's own menu: not on top of, or just after, the ring
@@ -43755,7 +43898,7 @@ const _QuickColour = (() => {
       #qc-wheel .qc-dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-sizing:border-box;border:2px solid var(--black);pointer-events:none;display:none;transform:translate3d(var(--x,0px),var(--y,0px),0);transition:background 180ms ease-out}
       /* crossing the cancel line (either way) the dot and the pill glide to their new place; while the pointer drags them they follow it at once */
       #qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:background 180ms ease-out,opacity 140ms ease-out,transform 240ms cubic-bezier(.16,1,.3,1)}
-      #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.94);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 3px 9px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
+      #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:rgba(20,20,20,.94);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 3px 9px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
       #qc-wheel .qc-cancel svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
       #qc-wheel .qc-cancel em{font-style:normal;color:var(--tx3);font-size:11px}
       #qc-wheel.cancelling .qc-cancel{opacity:1;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%)}
@@ -44085,7 +44228,7 @@ function _openCommandsMenu(anchor, at) {
   const items = [
     { icon: 'split',          label: 'Split…',               kbd: 'X',      off: needAny, fn: () => _CmdCards.open('split') },
     { icon: 'circle-off',     label: 'Remove holes…',          kbd: 'P',      off: needAny, fn: () => _CmdCards.open('fillholes') },
-    { icon: 'wand-sparkles', label: 'Smart optimise…',                    off: needAny, fn: act('smartopt') },
+    { icon: 'broom-sparkles', label: 'Smart optimise…',                    off: needAny, fn: act('smartopt') },
     { icon: 'triangle',       label: 'Reduce triangles…',                   off: needAny, fn: act('reduceTris') },
     { icon: 'shrink',       label: 'Decimate',                            off: needSel, fn: click('btn-decimate-sel') },
     { icon: 'gauge',          label: 'Fit to triangle budget',              off: needAny, fn: act('budget') },
@@ -44108,8 +44251,8 @@ function _openCommandsMenu(anchor, at) {
     '---',
     { icon: 'arrow-down-to-line', label: 'Align to the floor…',             off: needAny, fn: act('alignFloor') },
     { icon: 'axis-3d',         label: 'Recentre on origin',                  off: needAny, fn: act('recenter') },
-    { icon: 'crosshair',      label: 'Centre pivot',                        off: needSel, fn: click('btn-center-pivot') },
-    { icon: 'check',          label: 'Bake transforms',                     off: needAny, fn: click('btn-bake-transforms') },
+    { icon: 'crosshair',      label: 'Centre pivot',                        off: needSel, fn: () => axisCenter() },
+    { icon: 'check',          label: 'Bake transforms',                     off: needAny, fn: () => bakeTransforms() },
     { icon: 'refresh-ccw-dot',       label: 'Recompute normals',                   off: needAny, fn: click('btn-recompute-normals') },
     { icon: 'list-tree',      label: 'Flatten hierarchy…',                  off: needAny, fn: act('flatten') },
     '---',
@@ -46288,7 +46431,7 @@ const _Anim = (() => {
     // the scene's own tracks
     const names = Object.keys(TRACK_NAMES).filter(nm => tracks[nm] && tracks[nm].keys.length);
     if (names.length) {
-      out.push(`<div class="adk-row adk-obj adk-scn-h"><div class="adk-rh"><i data-lucide="clapperboard" class="adk-ico"></i><span class="adk-n">Scene</span><em></em></div><div class="adk-rl"></div></div>`);
+      out.push(`<div class="adk-row adk-obj adk-scn-h"><div class="adk-rh"><i data-lucide="tv-minimal-play" class="adk-ico"></i><span class="adk-n">Scene</span><em></em></div><div class="adk-rl"></div></div>`);
       for (const nm of names) {
         const tr = tracks[nm], T = TRACK_NAMES[nm];
         out.push(`<div class="adk-row adk-lay adk-keys${tr.muted ? ' is-muted' : ''}" data-scene="${nm}"><div class="adk-rh" data-scenehead="${nm}"><i data-lucide="${T[1]}" class="adk-ico"></i><span class="adk-n">${T[0]}</span><em>${tr.keys.length} keys</em><span class="adk-act">${btn('data-smute="' + nm + '"', tr.muted ? 'Switch it on' : 'Switch it off', tr.muted ? 'eye-off' : 'eye')}${btn('data-srm="' + nm + '"', 'Remove this track', 'x')}</span></div><div class="adk-rl" data-kr="1">${spanHtml(tr.keys)}${kfHtml(tr.keys)}</div></div>`);
@@ -46892,6 +47035,7 @@ const _Anim = (() => {
   function toDock() { switching = true; try { if (ui.mini) ui.mini.hide(); mode = 'dock'; saveTl(); openDock(); } finally { switching = false; } }
   const shown = () => !!((ui.dock && ui.dock.root.classList.contains('show')) || (ui.mini && ui.mini.el.classList.contains('show')));
   function open() { if (mode === 'mini') openMini(); else openDock(); }
+  function closeAll() { try { if (ui.dock && ui.dock.root.classList.contains('show')) closeDock(); if (ui.mini && ui.mini.el.classList.contains('show')) ui.mini.hide(); } catch (_) {} }      // (back to normal on a refresh and when a file opens)
   function toggle() { if (!shown()) open(); else if (ui.dock && ui.dock.root.classList.contains('show')) closeDock(); else ui.mini.hide(); }
   // the button on the bottom toolbar and Shift+A
   { const b = $id('tg-animate'); if (b) b.addEventListener('click', (e) => { e.stopPropagation(); toggle(); }); }
@@ -46984,7 +47128,7 @@ const _Anim = (() => {
     fmt: (t) => fmtTC(t),
     rates: RATES,
   };
-  return { ctl, open, toggle, suspend, resume, reset, run, bake, remove, hold, seek, pause, play, exit, rewind, refresh, api, serialize, deserialize, hasScene: () => sceneN() > 0, count: () => items.size + sceneN(), isPlaying: () => anyAnim() && !paused, fps: () => projFps };
+  return { ctl, open, closeAll, toggle, suspend, resume, reset, run, bake, remove, hold, seek, pause, play, exit, rewind, refresh, api, serialize, deserialize, hasScene: () => sceneN() > 0, count: () => items.size + sceneN(), isPlaying: () => anyAnim() && !paused, fps: () => projFps };
 })();
 
 // ── The Animation card of the right sidebar: play, pause, rewind, a scrubber, speed and loop, and a way to open the timeline. It is there while
@@ -47021,7 +47165,7 @@ const _Anim = (() => {
     const I = _Anim.ctl.info(), on = I.n > 0;
     sec.hidden = !on; if (grp) grp.hidden = !on;
     if (!on) { if (bars.firstChild) bars.textContent = ''; lastVer = -1; return I; }      // (nothing animated: the miniature is emptied too)
-    if (!opened) { opened = true; sec.querySelector('.section-h')?.classList.remove('collapsed'); }      // (it opens itself the first time it appears)
+    if (!opened) opened = true;      // (it no longer opens itself: open or closed is what the person left it, as for every card)
     icon(play, I.playing ? 'pause' : 'play'); play.title = I.playing ? 'Pause' : 'Play'; play.setAttribute('aria-label', play.title);
     const m = MODES[I.mode]; icon(loop, m[0]); loop.title = m[1]; loop.setAttribute('aria-label', m[1]); loop.classList.toggle('on', I.mode !== 'once'); loop.dataset.mode = I.mode;
     back.classList.toggle('on', I.reverse); back.setAttribute('aria-pressed', String(I.reverse));
@@ -48564,8 +48708,8 @@ if (typeof document !== 'undefined') {
       e.preventDefault();
       const items = [];
       const _pt = { clientX: e.clientX, clientY: e.clientY };
-      const _noteHere = { icon: 'message-square', label: 'Add a note here', kbd: 'N', off: state.parts.some(p => !p.deleted) ? false : 'The scene is empty', fn: () => { try { window.MONotesUI.addAt(_pt); } catch (_) {} } };
-      const _notePart = { icon: 'message-square', label: 'Add a note to this part', off: state.parts.some(p => !p.deleted) ? false : 'The scene is empty', fn: () => { try { window.MONotesUI.addToPartAt(_pt); } catch (_) {} } };
+      const _noteHere = { icon: 'sticky-note-plus', label: 'Add a note here', kbd: 'N', off: state.parts.some(p => !p.deleted) ? false : 'The scene is empty', fn: () => { try { window.MONotesUI.addAt(_pt); } catch (_) {} } };
+      const _notePart = { icon: 'sticky-note-plus', label: 'Add a note to this part', off: state.parts.some(p => !p.deleted) ? false : 'The scene is empty', fn: () => { try { window.MONotesUI.addToPartAt(_pt); } catch (_) {} } };
       if (state.selected.size > 0) {
         // Most used first: look at it, copy it, select more of it; notes and delete at the end.
         items.push({ icon: 'crosshair',       label: `Frame selected (${state.selected.size})`, fn: frameSelected });
@@ -48597,7 +48741,7 @@ if (typeof document !== 'undefined') {
         items.push(_noteHere, _notePart, '---');
         // The everyday commands are listed; the views, the display modes and the less used ones are in second menus.
         const gridOn = !!state.showGrid;
-        items.push({ icon: 'maximize',         label: 'Fit view',            kbd: 'F',     off: _noParts, fn: fitToView });
+        items.push({ icon: 'scan-square',      label: 'Fit view',            kbd: 'F',     off: _noParts, fn: fitToView });
         items.push({ icon: 'video',            label: 'Views', sub: [
           { label: 'Camera view',         kbd: 'Ctrl+1', fn: () => _setPerspectiveView() },
           { label: 'Top view',            kbd: 'Ctrl+2', fn: () => _setStandardView('top') },
@@ -48896,8 +49040,8 @@ async function mergeByColour_job() {
 }
 window._mergeByColour = mergeByColour;
 
-async function mergeSelectedIntoOne() { return _Job.run('Merge', () => mergeSelectedIntoOne_job()); }
-async function mergeSelectedIntoOne_job() { return _settledView(() => _mergeSelectedCore()); }
+async function mergeSelectedIntoOne(name) { return _Job.run('Merge', () => mergeSelectedIntoOne_job(name)); }
+async function mergeSelectedIntoOne_job(name) { return _settledView(() => _mergeSelectedCore(name)); }
 // Runs `fn` (plain or async) with an exploded view put back together, and explodes it again afterwards; the parts `fn` made or moved
 // measure their rest position first. Merge, Split and Flatten change what a part's rest is, so they must not see the view's offsets:
 // Split used to copy the exploded place as the pieces' rest, and Flatten re-measured every rest at the exploded position.
@@ -48921,7 +49065,7 @@ function _settledView(fn) {
   back();
   return r;
 }
-async function _mergeSelectedCore() {
+async function _mergeSelectedCore(name) {      // (name: what the merged part is called; Merge by group names it after the group)
   const ids = [...state.selected];
   if (ids.length < 2) { toast('Select 2+ parts to merge', '', 'warn'); return; }
   // Reversible via Ctrl+Z — no confirm prompt.
@@ -49162,7 +49306,7 @@ async function _mergeSelectedCore() {
   for (const p of consumed) avg.add(p.originalColor);
   avg.multiplyScalar(1 / consumed.length);
   const newPart = {
-    partId: newId, name: `Merged (${consumed.length} parts)`, hash: 'merged_' + newId,
+    partId: newId, name: (typeof name === 'string' && name.trim()) || `Merged (${consumed.length} parts)`, hash: 'merged_' + newId,
     triCount: totalTris, vertCount: totalVerts, bbox: overallBox.clone(),
     sizeMetrics: { diag: sz.length(), vol: sz.x*sz.y*sz.z, max: Math.max(sz.x, sz.y, sz.z) },
     visible: true, deleted: false, flagged: false,
@@ -49937,7 +50081,7 @@ const _FlattenDialog = (() => {
     if (spec.one) { const H = spec.one.length * RH + 8, W = TW + 8; return '<svg class="flat-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' + tree(spec.one, 4) + '</svg>'; }
     const H = Math.max(spec.b.length, spec.a.length) * RH + 8, W = TW * 2 + GAP + 8, ay = H / 2;
     return '<svg class="flat-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' + tree(spec.b, 2)
-      + '<path class="arr" d="M' + (TW + 7) + ' ' + (ay + 1) + 'c5 -2 9 1.5 14 -.5s5 -1 7 .2M' + (TW + 24.5) + ' ' + (ay - 3.5) + 'l4.5 3.8l-4.8 3.4"/>'
+      + '<path class="arr" d="M' + (TW + 8) + ' ' + Math.round(ay) + 'h' + (GAP - 12) + 'M' + (TW + GAP - 8) + ' ' + (Math.round(ay) - 4) + 'l4 4l-4 4"/>'      // (a straight arrow, on whole pixels: it was drawn by hand, a wavy line that looked bent)
       + tree(spec.a, TW + GAP + 2) + '</svg>';
   }
 
@@ -55124,9 +55268,11 @@ setTimeout(() => _dndDecorateTree(), 0);
   function _buildPopover() {
     if (popEl) return;
     const css = `
-      .cp-pop{position:fixed;z-index:var(--z-colour-picker);width:300px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:none;box-sizing:border-box;padding:12px;border-radius:16px;background:color-mix(in srgb,var(--bg2) 92%,var(--black));border:1px solid var(--bd2);box-shadow:0 5px 13px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset;color:var(--tx);font:12px var(--font-sans);opacity:0;transform:translateY(6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 170ms var(--ease-out),background 120ms linear,border-color 120ms linear}
+      .cp-pop{position:fixed;z-index:var(--z-colour-picker);width:276px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:none;box-sizing:border-box;padding:12px;border:0;border-radius:var(--surface-pop-r,14px);color:var(--tx);font:12px var(--font-sans);animation:none;opacity:0;visibility:hidden;pointer-events:none;will-change:opacity;transition:opacity 50ms linear,visibility 0s linear 50ms,background 120ms linear}
+      /* (the background, the edge and the shadow come from the stylesheet, as for the other pop-ups. Only the opacity is animated, which the graphics card does by itself: 80 ms in, 50 ms out, and it is not painted at all while it is away) */
+      .cp-pop.show{visibility:visible;transition:opacity 80ms var(--ease-out),visibility 0s,background 120ms linear}
       .cp-pop::-webkit-scrollbar{display:none}
-      .cp-pop.show{opacity:1;transform:none;pointer-events:auto}
+      .cp-pop.show{opacity:1;pointer-events:auto}
       .cp-pop *{box-sizing:border-box}
       .cp-top{display:flex;align-items:center;gap:6px;margin-bottom:10px}
       .cp-spacer{flex:1}
@@ -55134,6 +55280,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-seg button{flex:1;min-width:0;border:0;background:transparent;color:var(--tx3);font:inherit;font-size:11px;letter-spacing:.02em;padding:5px 9px;border-radius:8px;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out)}
       .cp-seg button:hover{color:var(--tx)}
       .cp-seg button.on{background:rgba(255,255,255,.1);color:var(--tx)}
+      .cp-modes button{flex:0 0 56px}
       .cp-ico{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:9px;background:rgba(255,255,255,.05);color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out)}
       .cp-ico:hover{background:rgba(255,255,255,.1);color:var(--tx)}
       .cp-ico[hidden]{display:none}
@@ -55154,12 +55301,11 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-wheel-wrap .cp-bar{width:100%}
       .cp-compare{display:flex;height:40px;margin-top:12px;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
       .cp-compare span{flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
-      .cp-compare b{font-weight:400;font-size:10px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
-      .cp-compare i{font-style:normal;letter-spacing:.02em}
+      .cp-compare b{flex:0 0 32px;font-weight:400;font-size:10px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+      .cp-compare i{flex:0 0 56px;text-align:right;font-style:normal;letter-spacing:.02em}      /* (the words and the colour have boxes of whole pixels) */
       .cp-compare .cp-old{cursor:pointer;transition:filter 120ms var(--ease-out)}
       .cp-compare .cp-old:hover{filter:brightness(1.12)}
-      .cp-models{margin-top:12px}
-      .cp-fields{display:grid;gap:6px;margin-top:8px}
+      .cp-fields{display:grid;gap:6px;margin-top:12px}
       .cp-fields.n3{grid-template-columns:repeat(3,1fr)}
       .cp-fields.n4{grid-template-columns:repeat(4,1fr)}
       .cp-f{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -55172,7 +55318,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-sw-h{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 0;padding:4px 2px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:10px;color:var(--tx3);letter-spacing:.04em;text-transform:uppercase;cursor:pointer;text-align:left;transition:color 120ms var(--ease-out)}
       .cp-sw-h:hover{color:var(--tx)}
       .cp-sw-h svg{flex:0 0 10px;width:10px;height:10px;transition:transform 140ms var(--ease-out)}
-      .cp-sw-h em{margin-left:auto;font-style:normal;letter-spacing:0;text-transform:none;opacity:.7}
+      .cp-sw-h em{margin-left:auto;flex:0 0 16px;text-align:right;font-style:normal;letter-spacing:0;text-transform:none;opacity:.7}
       .cp-sw-block.cp-fold .cp-sw-h svg{transform:rotate(-90deg)}
       .cp-sw-block.cp-fold .cp-sw-row{display:none}
       .cp-sw-row{padding-top:6px}
@@ -55182,7 +55328,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-hint{margin-top:12px;font-size:10px;color:var(--tx3);text-align:center}
       html.cp-dragging .modal-bg{opacity:0!important;pointer-events:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transition:opacity 60ms linear!important}
       /* while a colour is dragged only the control in hand stays, so the model and the colour can be seen */
-      .cp-pop.cp-drag{background:transparent;border-color:transparent;box-shadow:none}
+      .cp-pop.cp-drag{background:transparent;box-shadow:none}
       .cp-pop.cp-drag *{visibility:hidden}
       .cp-pop.cp-drag .cp-hot,.cp-pop.cp-drag .cp-hot *,.cp-pop.cp-drag .cp-compare,.cp-pop.cp-drag .cp-compare *{visibility:visible}
       .cp-pop.cp-drag .cp-compare{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 6px 17px rgba(0,0,0,.5)}
@@ -55218,7 +55364,6 @@ setTimeout(() => _dndDecorateTree(), 0);
         </div>
       </div>
       <div class="cp-compare"><span class="cp-old" title="The colour it was: click to go back to it"><b>Was</b><i></i></span><span class="cp-new"><b>New</b><i></i></span></div>
-      <div class="cp-seg cp-models">${MODELS.map(([k, l]) => `<button type="button" data-model="${k}">${l}</button>`).join('')}</div>
       <div class="cp-fields"></div>
       <div class="cp-sw-block" data-row="recent"><button type="button" class="cp-sw-h" data-fold="recent" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Recent<em></em></button><div class="cp-sw-row"></div></div>
       <div class="cp-sw-block" data-row="scene"><button type="button" class="cp-sw-h" data-fold="scene" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>In this scene<em></em></button><div class="cp-sw-row"></div></div>
@@ -55286,8 +55431,10 @@ setTimeout(() => _dndDecorateTree(), 0);
         _histPush();
         fn(e);
         popEl.classList.add('cp-drag'); document.documentElement.classList.add('cp-dragging'); hot.classList.add('cp-hot');
-        const move = (ev) => fn(ev);
+        let last = null, raf = 0;
+        const move = (ev) => { last = ev; if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (last) fn(last); }); };
         const up = () => {
+          if (raf) { cancelAnimationFrame(raf); raf = 0; if (last) fn(last); }      // (the last position is the one that counts)
           popEl.classList.remove('cp-drag'); document.documentElement.classList.remove('cp-dragging'); hot.classList.remove('cp-hot');
           el.removeEventListener('pointermove', move);
           for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) el.removeEventListener(t, up);
@@ -55318,6 +55465,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (b.classList.contains('cp-sw')) { _histPush(); _setHex(b.dataset.c); return; }
     });
     els.oldS.addEventListener('click', () => { _histPush(); _setHex(seedHex); });
+    window.addEventListener('contextmenu', _onContext, true);
     // numbers: typing sets the colour as it goes; the arrow keys step (Shift: ten at a time)
     els.fields.addEventListener('input', (e) => { if (e.target.matches('input')) _fieldsChanged(e.target); });
     els.fields.addEventListener('focusin', (e) => { if (e.target.matches('input')) e.target._cpDirty = false; e.target.select && e.target.select(); });
@@ -55330,7 +55478,6 @@ setTimeout(() => _dndDecorateTree(), 0);
       t.value = String(+(Math.max(0, Math.min(spec[1], (parseFloat(t.value) || 0) + step))).toFixed(spec[2]));
       _fieldsChanged(t, true);
     });
-    popEl.addEventListener('wheel', () => {}, { passive: true });
   }
 
   // ── what is shown follows the colour ─────────────────────────────────────
@@ -55372,14 +55519,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     const hueRgb = rgbToHex(hsvToRgb(h, 1, 1));
     if (mode === 'square') {
       els.sv.style.background = hueRgb;
-      els.svCur.style.left = (s * 100) + '%'; els.svCur.style.top = ((1 - v) * 100) + '%';
-      els.hueCur.style.left = (h * 100) + '%'; els.hueCur.style.background = hueRgb;
+      els.svCur.style.left = Math.round(s * els.sv.clientWidth) + 'px'; els.svCur.style.top = Math.round((1 - v) * els.sv.clientHeight) + 'px';
+      els.hueCur.style.left = Math.round(h * els.hue.clientWidth) + 'px'; els.hueCur.style.background = hueRgb;
     } else {
       _drawWheel();
-      const ang = h * Math.PI * 2, rr = 50 * s;
-      els.wCur.style.left = (50 + Math.cos(ang) * rr) + '%'; els.wCur.style.top = (50 + Math.sin(ang) * rr) + '%';
+      const ang = h * Math.PI * 2, rr = (WHEEL / 2) * s;
+      els.wCur.style.left = Math.round(WHEEL / 2 + Math.cos(ang) * rr) + 'px'; els.wCur.style.top = Math.round(WHEEL / 2 + Math.sin(ang) * rr) + 'px';
       els.val.style.background = `linear-gradient(to right,#000,${rgbToHex(hsvToRgb(h, s, 1))})`;
-      els.valCur.style.left = (v * 100) + '%'; els.valCur.style.background = hex;
+      els.valCur.style.left = Math.round(v * els.val.clientWidth) + 'px'; els.valCur.style.background = hex;
     }
     // each half is its colour, and its text is the one of the two (dark or light) that reads on it
     const ink = (x) => { const c = hexToRgb(x); return (c.r * 299 + c.g * 587 + c.b * 114) / 1000 > 0.58 ? '#111' : '#fff'; };
@@ -55442,6 +55589,55 @@ setTimeout(() => _dndDecorateTree(), 0);
     const done = () => { btn.innerHTML = IC_OK; setTimeout(() => { btn.innerHTML = IC_COPY; }, 900); };
     try { navigator.clipboard.writeText(text).then(done, done); } catch (_) { done(); }
   }
+  // ── the right-click menu: copy, paste, and the colour spaces (which used to be a strip of buttons in the window) ──
+  const _textIn = (m, rgb) => { rgb = rgb || rgbNow(); return m === 'hex' ? rgbToHex(rgb).toUpperCase() : SPEC[m].css(SPEC[m].from(rgb)); };
+  // a colour from text: #rgb, #rrggbb, rrggbb, rgb(r, g, b), hsl(h, s%, l%), hsv(h, s%, v%), or three numbers (r g b)
+  function _parseColourText(t) {
+    t = String(t || '').trim();
+    if (!t) return null;
+    const hx = parseHex(t); if (hx) return hexToRgb(hx);
+    const nums = (t.match(/-?\d+(?:[.,]\d+)?/g) || []).map(x => parseFloat(x.replace(',', '.')));
+    if (nums.length < 3) return null;
+    const kind = (/^\s*(rgb|hsl|hsv)/i.exec(t) || [0, 'rgb'])[1].toLowerCase();
+    const f = SPEC[kind].f;
+    const vals = [0, 1, 2].map(i => Math.max(0, Math.min(f[i][1], nums[i])));
+    return SPEC[kind].to(vals);
+  }
+  async function _pasteColour() {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch (_) { toast('Colour picker', 'The clipboard could not be read: allow it for this page, or type the colour in the field', 'warn', 3500); return; }
+    const rgb = _parseColourText(text);
+    if (!rgb) { toast('Colour picker', 'There is no colour in the clipboard (a hex like #2365D1, or rgb(35, 101, 209))', 'warn', 3000); return; }
+    _histPush(); _setRgb(rgb);
+  }
+  function _copyAs(m, rgb) {
+    const text = _textIn(m, rgb);
+    const done = () => toast('Copied', text, 'success', 1400);
+    try { navigator.clipboard.writeText(text).then(done, done); } catch (_) { done(); }
+  }
+  // The menu opens on the colour field and on the swatches under it, and nowhere else in the window (a right-click on the rest does nothing:
+  // not the browser's menu, not the app's). It is caught on the window, before the number fields' own menu and the view's. On a swatch,
+  // Copy and Copy as are that swatch's colour; Paste and the number spaces are the picker's.
+  function _onContext(e) {
+    if (!popEl || !e.target.closest || !popEl.contains(e.target)) return;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    if (!session) return;
+    const sw = e.target.closest('.cp-sw');
+    if (sw) { const x = parseHex(sw.dataset.c); _openMenu(e, x ? hexToRgb(x) : null); return; }
+    if (e.target.closest('.cp-fields')) _openMenu(e, null);
+  }
+  function _openMenu(e, rgb) {
+    const names = { hex: 'HEX', rgb: 'RGB', hsv: 'HSV', hsl: 'HSL' };
+    _ctxBuild([
+      { icon: 'copy', label: 'Copy colour', fn: () => _copyAs(model, rgb) },
+      { icon: 'clipboard-paste', label: 'Paste colour', fn: () => { _pasteColour(); } },
+      '---',
+      { icon: 'clipboard-type', label: 'Copy as', sub: MODELS.map(([k]) => ({ label: names[k] + '  ' + _textIn(k, rgb), fn: () => _copyAs(k, rgb) })) },
+      { icon: 'sliders-horizontal', label: 'Show numbers as', sub: MODELS.map(([k]) => ({ label: names[k] + (k === model ? '  ✓' : ''), fn: () => { model = k; setPref('stepopt-cp-model', model); _buildFields(); _sync(); } })) },
+    ], e.clientX, e.clientY);
+    const m = $('ctx-menu'); if (m) m.style.zIndex = '401';      // (over the picker, which stands over the other menus)
+  }
+
   async function _eyedrop() {
     try {
       const r = await new window.EyeDropper().open();
@@ -55494,7 +55690,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (session && session.moved) {      // moved by hand: it stays where it was put (only kept inside the window)
       const l = Math.min(Math.max(8, session.moved.left), Math.max(8, window.innerWidth - pr.width - 8));
       const t = Math.min(Math.max(8, session.moved.top), Math.max(8, window.innerHeight - pr.height - 8));
-      popEl.style.left = l + 'px'; popEl.style.top = t + 'px';
+      popEl.style.left = Math.round(l) + 'px'; popEl.style.top = Math.round(t) + 'px';
       return;
     }
     let left = ar.left - pr.width - 8;        // prefer left of anchor
@@ -55503,13 +55699,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (left + pr.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pr.width - 8);
     if (top + pr.height > window.innerHeight - 8) top = window.innerHeight - pr.height - 8;
     if (top < 8) top = 8;
-    popEl.style.left = left + 'px';
-    popEl.style.top  = top  + 'px';
+    popEl.style.left = Math.round(left) + 'px';
+    popEl.style.top  = Math.round(top)  + 'px';
   }
 
   let _movedAt = 0;      // when the picker was last let go after being moved: the click that ends a drag is not an outside click
   function _onDocClick(e) {
     if (popEl && popEl.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('#ctx-menu')) return;      // (its menu: copy, paste, the colour spaces)
     if (performance.now() - _movedAt < 400) return;
     // Clicking another swatch should re-open with new context, not close. The swatch handler runs after this in bubble
     // phase and opens the picker again, which re-seeds session — let it through without canceling.
@@ -55540,6 +55737,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     _sync();
   }
   function _onKeyDown(e) {
+    if (e.key === 'Escape' && $('ctx-menu') && $('ctx-menu').style.display === 'block') { e.preventDefault(); e.stopPropagation(); _ctxClose(); return; }      // (the menu first)
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _cancel(); }
     else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); _commit(); }
     else if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -55588,6 +55786,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     mode = pref('stepopt-cp-mode', 'square') === 'wheel' ? 'wheel' : 'square';
     const m = pref('stepopt-cp-model', 'hex'); model = (m === 'hex' || SPEC[m]) ? m : 'hex';
     _layout(); _buildFields(); _fillSwatches();
+    _position(anchor);                                // (in its place before it shows: it used to appear at the corner and jump a frame later)
     popEl.classList.add('show');
     requestAnimationFrame(() => _position(anchor));
     // the first look must not call the caller back with a colour: it is the one it already has
@@ -56539,8 +56738,8 @@ setTimeout(() => _dndDecorateTree(), 0);
       st.textContent = `
 .qr{position:fixed;z-index:var(--z-quick-ring);width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:var(--surface-shadow);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
 .qr.is-in{opacity:1;transform:none}
-.qr.is-out{opacity:0;transform:scale(.92);transition:opacity 110ms ease,transform 110ms ease}
-.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
+.qr.is-out{opacity:0;transform:scale(.92);transition:opacity 90ms ease,transform 90ms ease}
+.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac);box-shadow:0 4px 14px color-mix(in srgb, var(--ac) 40%, transparent);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
 .qr.is-first .qr-thumb{background:var(--s5,rgba(255,255,255,.1));box-shadow:none}
 .qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--tx3);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr-i.is-near{color:var(--tx2)}
@@ -56800,7 +56999,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       S = null;
       const el = sess.el;
       el.classList.remove('is-in'); el.classList.add('is-out');
-      setTimeout(() => { try { el.remove(); } catch (_) {} }, 140);
+      setTimeout(() => { try { el.remove(); } catch (_) {} }, 110);
     }
     // the geometries that were worked out and are not worn go
     function dropUnused(sess, keepGeoms) {
@@ -58175,7 +58374,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const items = opts.glassHides ? all : all.filter(it => !seeThrough(it.srcMat));
     const within = opts.scope === 'sel' && state.selected.size ? new Set(state.selected) : null;
     const candidates = items.filter(it => it.part && !it.isClone && (!within || within.has(it.part.partId)));
-    if (!candidates.length || items.length < 2) { toast('Select hidden parts', within ? 'Nothing in the selection could be hidden' : 'There is nothing that could be hidden', 'info', 3000); return null; }
+    if (!candidates.length || items.length < 2) { if (!opts.silent) toast('Select hidden parts', within ? 'Nothing in the selection could be hidden' : 'There is nothing that could be hidden', 'info', 3000); return null; }
     const box = new THREE.Box3(), tmpBox = new THREE.Box3();
     for (const it of items) {
       if (!it.geom.boundingBox) it.geom.computeBoundingBox();
@@ -58191,8 +58390,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     const gl = cv.getContext('webgl2', { antialias: false, alpha: true, depth: false, stencil: false });
     if (!gl) { toast('Select hidden parts', 'WebGL2 is not available in this browser', 'error', 4000); return null; }
     _hiddenBusy = true;
-    setLoader(true, 'Looking for hidden parts…', `${fmtNum(candidates.length)} parts from ${nViews} directions`);
-    setLoaderProgress(2);
+    if (opts.silent) { if (opts.onProgress) opts.onProgress(0.02, `${nViews} directions`); }
+    else { setLoader(true, 'Looking for hidden parts…', `${fmtNum(candidates.length)} parts from ${nViews} directions`); setLoaderProgress(2); }
     const seen = new Uint8Array(candidates.length + 1);
     let ok = false, size = 0, cancelled = false;
     state._cancelJob = () => { cancelled = true; };
@@ -58292,8 +58491,8 @@ setTimeout(() => _dndDecorateTree(), 0);
           last = w;
           seen[w & 0xFFFFFF] = 1;          // (alpha is the top byte)
         }
-        setLoaderProgress(5 + Math.round((d + 1) / dirs.length * 93));
-        await _nextFrame();
+        if (opts.silent) { if (opts.onProgress) opts.onProgress((d + 1) / dirs.length, `direction ${d + 1} of ${dirs.length}`); await new Promise(r => setTimeout(r, 0)); }
+        else { setLoaderProgress(5 + Math.round((d + 1) / dirs.length * 93)); await _nextFrame(); }
       }
       ok = !cancelled;
     } catch (e) {
@@ -58302,10 +58501,10 @@ setTimeout(() => _dndDecorateTree(), 0);
     } finally {
       try { gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch (_) {}
       state._cancelJob = null;
-      setLoader(false);
+      if (!opts.silent) setLoader(false);
       _hiddenBusy = false;
     }
-    if (cancelled) { toast('Check cancelled', 'The selection was not changed', 'info', 3000); return null; }
+    if (cancelled) { if (!opts.silent) toast('Check cancelled', 'The selection was not changed', 'info', 3000); return null; }
     if (!ok) return null;
 
     // A part smaller than two pixels of the check could be in plain view and
@@ -58323,6 +58522,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       hidden.push(p.partId);
       tris += p.triCount || 0;
     });
+    if (opts.dryRun) return { count: hidden.length, tris, share: tris / Math.max(1, _sceneTris()), unsure, filtered, ids: hidden };   // (a count for the Smart optimise scan: nothing is selected or said)
     if (!hidden.length) {
       const why = filtered ? `${fmtNum(filtered)} hidden ${filtered === 1 ? 'part was' : 'parts were'} left out by the filters` : unsure ? `Every part can be seen from outside (${fmtNum(unsure)} too small to judge)` : 'Every part can be seen from outside';
       toast('No hidden parts', why, filtered ? 'info' : 'success', 4000);
@@ -58367,7 +58567,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const glass = $id('sh-glass'), add = $id('sh-add'), pct = $id('sh-max'), name = $id('sh-name'), info = $id('sh-info'), after = $id('sh-after');
     const idle = () => {
       const n = state.selected.size;
-      return o.scope === 'sel' ? (n ? `Checks the ${fmtNum(n)} selected ${n === 1 ? 'part' : 'parts'} against the whole scene.` : 'Select the parts to check first, or look in the whole scene.')
+      return o.scope === 'sel' ? (n ? `Checks the ${fmtNum(n)} selected ${n === 1 ? 'part' : 'parts'} against the whole scene.` : '')
         : '';
     };
     let result = null;
@@ -58540,7 +58740,10 @@ setTimeout(() => _dndDecorateTree(), 0);
     const found = [];
     const sv = new THREE.Vector3(), v3 = new THREE.Vector3();
     try {
-      if (big) {
+      if (opts.silent) {
+        state._cancelJob = () => { cancelled = true; };
+        if (opts.onProgress) opts.onProgress(0.02, fmtNum(items.length) + ' parts');
+      } else if (big) {
         setLoader(true, 'Looking for fasteners…', fmtNum(items.length) + ' parts, by shape');
         setLoaderProgress(2);
         state._cancelJob = () => { cancelled = true; };
@@ -58571,14 +58774,14 @@ setTimeout(() => _dndDecorateTree(), 0);
         }
         if (c.r) found.push({ part: it.part, r: c.r, s: even ? (Math.cbrt(Math.abs(sv.x * sv.y * sv.z)) || 1) : 1 });
         if (performance.now() - slice > 14) {
-          if (big) setLoaderProgress(2 + Math.round((i + 1) / items.length * 96));
-          await _nextFrame();
+          if (opts.silent) { if (opts.onProgress) opts.onProgress((i + 1) / items.length, fmtNum(i + 1) + ' of ' + fmtNum(items.length) + ' parts'); await new Promise(r => setTimeout(r, 0)); }
+          else { if (big) setLoaderProgress(2 + Math.round((i + 1) / items.length * 96)); await _nextFrame(); }
           slice = performance.now();
         }
       }
     } finally {
       state._cancelJob = null;
-      if (big) setLoader(false);
+      if (big && !opts.silent) setLoader(false);
       _fastBusy = false;
     }
     if (cancelled) { say('Check cancelled', 'The selection was not changed', 'info', 3000); return null; }
@@ -58620,6 +58823,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       say('No fasteners found', tooBig ? fmtNum(tooBig) + ' larger than M' + maxD + ' left alone' : 'No part has the shape of a bolt, a nut or a washer', 'info', 4000);
       return res;
     }
+    if (opts.dryRun) return res;           // (a count for the Smart optimise scan: nothing is selected)
     _fastSelect(res.ids, opts.add);
     say(fmtNum(picks.length) + (picks.length === 1 ? ' fastener selected' : ' fasteners selected'),
       fmtNum(tris) + ' triangles (' + (res.share * 100).toFixed(1) + '% of the scene). Delete removes them; S isolates them first.', 'success', 8000);
@@ -59629,6 +59833,17 @@ setTimeout(() => _dndDecorateTree(), 0);
       try { _Brep.skip(fin); } catch (_) {}
       try { if (_polyIds.has(work)) _polyIds.set(fin, _polyIds.get(work)); if (_triOnly.has(work)) _triOnly.add(fin); } catch (_) {}
       try { fin.computeBoundingBox(); fin.computeBoundingSphere(); } catch (_) {}
+      // The picking tree of the shape it was, refitted to where the points are now, when the triangles are the same ones in the same order
+      // (the trees are built indirect: the index is never sorted). A tree built anew took half a second on two million triangles.
+      try {
+        const g0 = ed.before && ed.before.geom, bt = g0 && g0.boundsTree, i0 = g0 && g0.index, i1 = fin.index;
+        let same = !!(bt && bt._indirectBuffer && g0.attributes.position.count === fin.attributes.position.count && !!i0 === !!i1);
+        if (same && i0) { const a = i0.array, b = i1.array; if (a.length !== b.length) same = false; else for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { same = false; break; } }
+        if (same) {
+          const t = bt.constructor.deserialize({ roots: bt._roots.map(r => r.slice()), index: null, indirectBuffer: bt._indirectBuffer }, fin, { setIndex: false });
+          t.refit(); fin.boundsTree = t;
+        }
+      } catch (err) { console.warn('[edit] picking tree not refitted:', err && err.message || err); fin.boundsTree = undefined; }
       const was = p.hash, hash = 'ed_' + (state._decSeq = (state._decSeq | 0) + 1);
       state.geomByHash.set(hash, fin);
       p.mesh.geometry = _stampGeometry(fin);
@@ -59761,6 +59976,25 @@ setTimeout(() => _dndDecorateTree(), 0);
     try { _scrubField(document.getElementById('fl-size'), { min: 0.1, max: 5000, step: 0.5, decimals: 1 }); _scrubField(document.getElementById('fl-tris'), { min: 0, max: 100000, step: 10 }); } catch (_) {}
   }
 
+  // ── Icon grids that balance their rows ───────────────────────────────────
+  // An icon grid marked `data-balance` (the Tools card) never leaves one button alone on the last row: with n buttons showing and room for
+  // six in a row it uses as few rows as it can and spreads the buttons over them (12 → 6 + 6, 11 → 6 + 5, 7 → 4 + 3, 13 → 5 + 5 + 3). The
+  // buttons keep the size they have in six columns. Hidden buttons (display:none, hidden) are not counted.
+  (function _balanceIconGrids() {
+    const MAX = 6;
+    const grids = [...document.querySelectorAll('.sel-bar-grid[data-balance]')];
+    const fit = (g) => {
+      let n = 0;
+      for (const b of g.children) if (!b.hidden && b.style.display !== 'none') n++;
+      const rows = Math.max(1, Math.ceil(n / MAX)), cols = Math.max(1, Math.ceil(n / rows));
+      g.style.setProperty('--cols', String(cols));
+    };
+    for (const g of grids) {
+      fit(g);
+      try { new MutationObserver(() => fit(g)).observe(g, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'hidden'] }); } catch (_) {}
+    }
+  })();
+
   // ── Smart optimise ───────────────────────────────────────────────────────
   // The floating card "Smart optimise" (index.html, .section-cmd[data-cmd="smart"]): the app's
   // clean-ups run one after another on the whole scene. A level is a set of
@@ -59833,7 +60067,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     // the scene changed (a file opened, something deleted): a level's own
     // numbers follow it; answers changed by hand are left as they are
     let soonT = 0;
-    const soon = () => { if (busy) return; clearTimeout(soonT); soonT = setTimeout(() => { if (level !== 'custom') apply(resolved()); refresh(); }, 200); };
+    const soon = () => { if (busy) return; clearTimeout(soonT); soonT = setTimeout(() => { if (level !== 'custom') apply(resolved()); refresh(); scanMark(); }, 200); };
     { const _rs = recomputeStats; recomputeStats = function () { const r = _rs.apply(this, arguments); soon(); return r; }; }
 
     for (const b of document.querySelectorAll('#smart-level button')) b.addEventListener('click', () => {
@@ -59846,6 +60080,206 @@ setTimeout(() => _dndDecorateTree(), 0);
     el('smart-small')?.addEventListener('input', () => { if (applying) return; level = 'custom'; refresh(); });
     el('smart-target')?.addEventListener('input', () => { targetTyped = true; refresh(); });
     el('smart-target')?.addEventListener('change', () => { targetTyped = true; refresh(); });
+
+
+    // ── Scan ───────────────────────────────────────────────────────────
+    // A look through the scene that changes nothing: how many parts each step would find, written beside the step. The
+    // scan is run on a press (the hidden-parts check draws the scene from many sides, so it is not run on every change);
+    // when the number of triangles or parts changes afterwards the counts are old, and the Rescan button comes back.
+    let scanSig = '', scanBusy = false;
+    const scanIds = {};                       // step id → the part ids the scan found for it (what Highlight and Isolate act on)
+    const scanVals = {};                      // step id → { n, extra }: what the scan counted (shown in the list under Scan, not beside the steps)
+    const FIND_NAMES = { clean: 'Empty parts', dupes: 'Exact copies', hidden: 'Hidden parts', fast: 'Fasteners', small: 'Small parts', holes: 'Holes' };
+    const liveIds = (id) => (scanIds[id] || []).filter(x => { const p = getPart(x); return p && !p.deleted; });
+    const sameSel = (ids) => ids.length === state.selected.size && ids.every(x => state.selected.has(x));
+    function renderFinds() {
+      const ul = el('smart-finds'); if (!ul) return;
+      const rows = Object.keys(FIND_NAMES).filter(k => scanSig && scanVals[k]);
+      ul.hidden = !rows.length;
+      ul.innerHTML = '';
+      for (const k of rows) {
+        const ids = liveIds(k), v = scanVals[k], li = document.createElement('li');
+        li.dataset.id = k;
+        li.innerHTML = '<span class="sf-name"></span><span class="sf-n"></span>'
+          + (ids.length ? '<button type="button" class="lc-icon-btn" data-act="hi"><i data-lucide="crosshair"></i></button>'
+          + '<button type="button" class="lc-icon-btn" data-act="iso"><i data-lucide="focus"></i></button>' : '<span class="sf-gap"></span>');
+        li.querySelector('.sf-name').textContent = FIND_NAMES[k];
+        const sn = li.querySelector('.sf-n');
+        if (v.n) sn.innerHTML = fmtNum(v.n) + (v.extra ? '<small>' + v.extra + '</small>' : ''); else { sn.textContent = 'none'; sn.dataset.none = '1'; }
+        if (!ids.length) { ul.appendChild(li); continue; }
+        const hi = li.querySelector('[data-act="hi"]'), iso = li.querySelector('[data-act="iso"]');
+        hi.title = 'Highlight these ' + FIND_NAMES[k].toLowerCase() + ': select them so they are outlined in the view';
+        iso.title = 'Isolate these ' + FIND_NAMES[k].toLowerCase() + ': show only them (press again to show everything)';
+        hi.setAttribute('aria-label', hi.title); iso.setAttribute('aria-label', iso.title);
+        hi.classList.toggle('active', sameSel(ids));
+        iso.classList.toggle('active', !!state._isolated && sameSel(ids));
+        ul.appendChild(li);
+      }
+      try { _lucide(); } catch (_) {}
+    }
+    el('smart-finds')?.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-act]'); if (!b) return;
+      const k = b.closest('li').dataset.id, ids = liveIds(k); if (!ids.length) return;
+      if (b.dataset.act === 'hi') {
+        if (sameSel(ids)) _fastSelect([], false); else _fastSelect(ids, false);     // (a second press lets go)
+      } else {
+        if (!sameSel(ids)) _fastSelect(ids, false);
+        toggleIsolate();
+      }
+      renderFinds();
+    });
+
+    const sigNow = () => _sceneTris() + ':' + liveParts();
+    const NIDS = ['clean', 'dupes', 'hidden', 'fast', 'holes'];   // (small is counted again whenever its percentage is typed)
+    const setN = (id, n, extra) => { if (n == null) delete scanVals[id]; else scanVals[id] = { n, extra: extra || '' }; };
+    const pctOf = (tris) => { const t = _sceneTris(); return t > 0 && tris > 0 ? (tris / t * 100 < 0.1 ? '<0.1' : (tris / t * 100).toFixed(1)) + '%' : ''; };
+    const sumTris = (ids) => { let t = 0; for (const id of ids) { const p = getPart(id); if (p && !p.deleted) t += p.triCount || 0; } return t; };
+    // the Small parts count follows the percentage typed, with no new scan
+    function scanSmall() {
+      if (!scanSig) return;
+      const c = read(), cut = c.small / 100 * (state.modelDiag || 0);
+      if (!(c.small > 0)) { setN('small', null); scanIds.small = []; renderFinds(); return; }
+      const ids = cut > 0 ? state.parts.filter(p => !p.deleted && p.sizeMetrics && p.sizeMetrics.diag < cut).map(p => p.partId) : [];
+      scanIds.small = ids;
+      setN('small', ids.length, pctOf(sumTris(ids)));
+      renderFinds();
+    }
+    function scanMark() {
+      const box = el('smart-scan'), t = el('smart-scan-t'), btn = el('smart-scan-btn'), card = box && box.closest('.smart-card');
+      if (!box) return;
+      const n = liveParts();
+      btn.disabled = scanBusy || !n;
+      if (scanBusy) { t.textContent = 'Scanning…'; return; }
+      if (!n) { box.dataset.state = 'none'; t.textContent = 'Load a model first'; btn.textContent = 'Scan'; if (card) card.dataset.scan = ''; return; }
+      if (!scanSig) { box.dataset.state = 'none'; t.textContent = 'Not scanned yet'; btn.textContent = 'Scan'; if (card) card.dataset.scan = ''; return; }
+      const fresh = scanSig === sigNow();
+      box.dataset.state = fresh ? 'fresh' : 'stale';
+      if (card) card.dataset.scan = fresh ? 'fresh' : 'stale';
+      t.textContent = fresh ? 'Counts are up to date' : 'The scene changed';
+      btn.textContent = 'Rescan';
+      renderFinds();
+    }
+    // The scan's own card (#scan-pop): one row for each look, each with its state and, when it is done, what it found.
+    const SCAN_ROWS = [
+      { id: 'clean',  name: 'Empty parts',   w: 5 },
+      { id: 'dupes',  name: 'Exact copies',  w: 10 },
+      { id: 'holes',  name: 'Holes',         w: 20 },
+      { id: 'fast',   name: 'Fasteners',     w: 20 },
+      { id: 'hidden', name: 'Hidden parts',  w: 45 },
+    ];
+    const pop = { t0: 0, timer: 0, cancelled: false, done: 0 };
+    function popOpen() {
+      const root = el('scan-pop'); if (!root) return;
+      pop.t0 = performance.now(); pop.cancelled = false; pop.done = 0;
+      el('scp-facts').textContent = `${fmtNum(liveParts())} ${liveParts() === 1 ? 'part' : 'parts'} · ${short(_sceneTris())} triangles`;
+      const ul = el('scp-rows'); ul.innerHTML = '';
+      for (const r of SCAN_ROWS) {
+        const li = document.createElement('li');
+        li.dataset.id = r.id; li.dataset.state = 'wait';
+        li.innerHTML = '<span class="scp-dot"></span><span class="scp-name"></span><span class="scp-sub"></span><span class="scp-val"></span>';
+        li.querySelector('.scp-name').textContent = r.name;
+        ul.appendChild(li);
+      }
+      popProgress(0);
+      el('scp-time').textContent = '0.0s';
+      clearInterval(pop.timer);
+      pop.timer = setInterval(() => { el('scp-time').textContent = ((performance.now() - pop.t0) / 1000).toFixed(1) + 's'; }, 100);
+      root.classList.add('show');
+      try { el('scp-cancel').focus({ preventScroll: true }); } catch (_) {}
+    }
+    function popClose() {
+      clearInterval(pop.timer); pop.timer = 0;
+      el('scan-pop')?.classList.remove('show');
+    }
+    function popProgress(frac) {
+      const f = Math.max(0, Math.min(1, frac));
+      el('scp-pct').textContent = Math.round(f * 100) + '%';
+      el('scp-bar-fill').style.width = (f * 100).toFixed(1) + '%';
+    }
+    // a row's state: 'run' (with a line saying how far), 'done' (with the finding), 'skip', or 'wait'
+    function popRow(id, state, sub, val) {
+      const li = document.querySelector('#scp-rows li[data-id="' + id + '"]'); if (!li) return;
+      li.dataset.state = state;
+      if (sub !== undefined) li.querySelector('.scp-sub').textContent = sub;
+      if (val !== undefined) { const v = li.querySelector('.scp-val'); v.textContent = val; v.dataset.hit = val && val !== 'none' ? '1' : ''; }
+    }
+    const rowStart = (id) => { let w = 0; for (const r of SCAN_ROWS) { if (r.id === id) break; w += r.w; } return w; };
+    const rowW = (id) => SCAN_ROWS.find(r => r.id === id).w;
+    const totalW = SCAN_ROWS.reduce((n, r) => n + r.w, 0);
+    // run one look: the row shows it is running, then its finding; the bar moves by the row's share of the whole scan
+    async function popStep(id, fn) {
+      if (pop.cancelled) { popRow(id, 'skip', 'Skipped', ''); return null; }
+      popRow(id, 'run', 'Looking…', '');
+      const onProgress = (frac, text) => { popProgress((rowStart(id) + rowW(id) * frac) / totalW); if (text) popRow(id, 'run', text); };
+      let r = null;
+      try { r = await fn(onProgress); } catch (_) { r = null; }
+      popProgress((rowStart(id) + rowW(id)) / totalW);
+      if (pop.cancelled) { popRow(id, 'skip', 'Stopped', ''); return null; }
+      if (!r) { popRow(id, 'skip', 'Could not check', ''); return null; }
+      popRow(id, 'done', r[1] ? r[1] + ' of the triangles' : '', r[0] ? fmtNum(r[0]) : 'none');
+      return r;
+    }
+    el('scp-cancel')?.addEventListener('click', () => { pop.cancelled = true; try { if (state._cancelJob) state._cancelJob(); } catch (_) {} el('scp-cancel').disabled = true; el('scp-cancel').textContent = 'Stopping…'; });
+    el('scan-pop')?.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); el('scp-cancel')?.click(); } });
+    async function smartScan() {
+      if (scanBusy || busy || !liveParts()) return;
+      scanBusy = true; scanMark();
+      const keepSel = new Set(state.selected);
+      const sig = sigNow();
+      const out = {};
+      const share = (r) => r && r.count ? (r.share * 100 < 0.1 ? '<0.1' : (r.share * 100).toFixed(1)) + '%' : '';
+      popOpen();
+      el('scp-cancel').disabled = false; el('scp-cancel').textContent = 'Cancel';
+      await _nextFrame();
+      try {
+        for (const k of Object.keys(scanIds)) delete scanIds[k];
+        out.clean = await popStep('clean', async () => { await _nextFrame(); const ids = [...new Set([..._findEmptyParts(), ..._findDegenerateParts()])]; scanIds.clean = ids; return [ids.length, '']; });
+        out.dupes = await popStep('dupes', async () => { await _nextFrame(); const dup = _findExactCopies(); scanIds.dupes = dup; return [dup.length, pctOf(sumTris(dup))]; });
+        const holeSize = parseFloat(String(el('fill-holes-size') ? el('fill-holes-size').value : '').replace(',', '.'));
+        if (holeSize > 0) {
+          out.holes = await popStep('holes', async (prog) => {
+            const r = await _fillHolesRun((patch) => { if (patch && typeof patch.pct === 'number') prog(patch.pct / 100); }, { maxSize: holeSize, dryRun: true, quiet: true, targets: state.parts.filter(p => !p.deleted && p.mesh) });
+            return [r && r.tally ? (r.tally.holes | 0) : 0, ''];
+          });
+        } else popRow('holes', 'skip', 'Set a size in Remove holes', '');
+        out.fast = await popStep('fast', async (prog) => {
+          const r = await _selectFasteners({ quiet: true, silent: true, onProgress: prog, dryRun: true, bolts: true, nuts: true, washers: true, pins: false, maxD: 30, minD: 0, minScore: 0.6, minUses: 1, scope: 'all', add: false });
+          if (r && r.ids) scanIds.fast = r.ids;
+          return r === null && pop.cancelled ? null : [r ? r.count | 0 : 0, share(r)];
+        });
+        if (liveParts() >= 2) {
+          out.hidden = await popStep('hidden', async (prog) => {
+            const r = await _selectHiddenParts({ silent: true, onProgress: prog, dryRun: true });
+            if (r && r.ids) scanIds.hidden = r.ids;
+            return r === null && pop.cancelled ? null : [r ? r.count | 0 : 0, share(r)];
+          });
+        } else popRow('hidden', 'done', '', 'none');
+        if (!pop.cancelled) {
+          popProgress(1);
+          scanSig = sig;
+          for (const id of NIDS) { const v = out[id]; if (v) setN(id, v[0], v[1]); else setN(id, null); }
+          scanSmall();
+          const adv = el('smart-adv'); if (adv) adv.open = true;       // the counts sit beside the steps: show them
+          await new Promise(r => setTimeout(r, 450));                   // (a moment to read the finished card)
+        }
+      } finally {
+        scanBusy = false;
+        popClose();
+        // the detectors must not leave the selection changed
+        try {
+          if (keepSel.size !== state.selected.size || [...keepSel].some(id => !state.selected.has(id))) {
+            state.selected.clear(); for (const id of keepSel) state.selected.add(id);
+            applySelectionColors(); rebuildTreeSelectionOnly();
+          }
+        } catch (_) {}
+        scanMark(); refresh();
+      }
+    }
+    el('smart-scan-btn')?.addEventListener('click', smartScan);
+    el('smart-small')?.addEventListener('input', scanSmall);
+    el('smart-small')?.addEventListener('change', scanSmall);
+    window.__moSmartScan = smartScan;
+    scanMark();
 
     async function smartRun() { return _Job.run('Smart optimise', () => smartRun_job()); }
     async function smartRun_job() {
@@ -59915,7 +60349,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         busy = false;
         targetTyped = false;
         if (level !== 'custom') apply(resolved());
-        refresh();
+        refresh(); scanMark();
         const t1 = _sceneTris(), gone = p0 - liveParts();
         const bits = [];
         if (t1 < t0) bits.push(`${fmtNum(t0)} → ${fmtNum(t1)} triangles (−${((t0 - t1) / Math.max(1, t0) * 100).toFixed(1)}%)`);
@@ -60713,7 +61147,7 @@ setTimeout(() => _dndDecorateTree(), 0);
             await _nextFrame();
             state.selected.clear(); if (state.selectedGroupIds) state.selectedGroupIds.clear();
             for (const id of b[i].ids) state.selected.add(id);
-            try { await mergeSelectedIntoOne(); } catch (e) { console.warn('[merge by] ' + b[i].label + ':', e && e.message || e); continue; }
+            try { await mergeSelectedIntoOne(o.mode === 'group' ? b[i].label : undefined); } catch (e) { console.warn('[merge by] ' + b[i].label + ':', e && e.message || e); continue; }
             const np = getPart([...state.selected][0]);
             if (np && np.mesh) {
               if (o.mode === 'material' && b[i].mat) { try { _matSet(np.mesh, b[i].mat); } catch (_) {} }
@@ -60972,7 +61406,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     mo.observe(m, { attributes: true, attributeFilter: ['class'] });
   };
   $id('welcome-shortcuts')?.addEventListener('click', () => aside('shortcuts-modal', () => run('shortcuts')));
-  $id('welcome-claude')?.addEventListener('click', () => { try { $id('welcome-close')?.click(); window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} });
+  $id('welcome-claude')?.addEventListener('click', async () => { if (!(await _askClaudeMode())) return; try { $id('welcome-close')?.click(); window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} });
   $id('welcome-settings')?.addEventListener('click', () => aside('settings-modal', () => _Settings.show('general')));
 
   // Start from a shape: an empty scene with one primitive in it.
@@ -61204,6 +61638,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     const btn = e.target.closest && e.target.closest('#tg-materials, #tg-library, #tg-animate');
     if (!btn) return;
     const mine = OF[btn.id];
+    if (document.getElementById(mine)?.classList.contains('is-float')) return;      // (a floating window is not a dock in the swap: it rises in its own layer, over the drawer that is open, and leaves it where it is)
     const open = Object.values(OF).some(id => { const d = document.getElementById(id); return d && d.classList.contains('show') && !d.classList.contains('is-float'); });
     const meOpen = document.getElementById(mine)?.classList.contains('show');
     const B = document.body;
@@ -61941,7 +62376,9 @@ const _Elements = (() => {
   // Points mode shows every point (corner) of the parts in work, up to this many in all; a part that would go over is left without
   // dots and the view says so. (It was 20,000 a part, with no word: a CAD part of any size showed no points at all. The dots are one
   // instanced sprite placed once, not again at each turn of the view, so a few hundred thousand cost little.)
-  const ALL_POINTS_MAX = 400000;
+  // (400,000 until the big parts were read on a worker: a part of 2.7 million triangles has 1.3 million points. Shown, they cost about
+  // 9 ms a frame zoomed in and 28 ms zoomed out on a desktop graphics card; this keeps a ceiling over that.)
+  const ALL_POINTS_MAX = 2000000;
   const OCCLUDE_MAX = 25000;             // pieces a box may test one by one for something standing in front of them
   // the mode button's pictures: a cube with its corners, one edge, one side, or all of it
   const CUBE = '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>';
@@ -61960,6 +62397,12 @@ const _Elements = (() => {
   let ov = null, ctx = null, hover = null, pending = false, down = null, lastMove = null, moveRaf = 0, group = null, ray = null;
   let box = null, stroke = null, altOrbit = false, prevButtons = null, prevView = null, ptr = null, sizing = null, sizeHold = null, gzOver = false;      // sizing: the brush being resized with the middle button; gzOver: the pointer is on a handle of the gizmo (the brush gives way to the normal pointer)
   const sel = new Map();                 // partId → { geom, R, points: Set, edges: Set, faces: Set (polygons), fill, outline, dirty }
+  // (a Set that counts its changes in .ver: the marks of the picked pieces are made again only when that, or the view, has moved)
+  class VSet extends Set {
+    add(v) { if (!super.has(v)) this.ver = (this.ver | 0) + 1; return super.add(v); }
+    delete(v) { const r = super.delete(v); if (r) this.ver = (this.ver | 0) + 1; return r; }
+    clear() { if (this.size) this.ver = (this.ver | 0) + 1; super.clear(); }
+  }
   const reads = new WeakMap();           // geometry → { key, topo, pg }
   const picks = [], unpicks = [];        // the history of what was picked: { before, after, at } (at: how long the app's own history was)
   let tc = null, tcHelper = null, pivot = null, grab = null;     // the gizmo on the picked pieces, the point it sits on, and a drag in progress
@@ -61970,7 +62413,7 @@ const _Elements = (() => {
   let OUTLINE_MAT = null, HOT_FILL_MAT = null;
   const outlineMat = () => { if (!OUTLINE_MAT) { OUTLINE_MAT = new THREE.LineBasicNodeMaterial({ color: 0xffb45c, depthWrite: false, transparent: true }); OUTLINE_MAT.positionNode = _pulledPosition('normal'); } return OUTLINE_MAT; };
   const hotFillMat = () => { if (!HOT_FILL_MAT) { HOT_FILL_MAT = new THREE.MeshBasicNodeMaterial({ color: 0xffffff, transparent: true, opacity: 0.34, depthTest: true, depthWrite: false, side: THREE.DoubleSide }); HOT_FILL_MAT.positionNode = _pulledPosition(); } return HOT_FILL_MAT; };
-  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _nm = new THREE.Matrix3(), _ptr = new THREE.Vector2();
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _nm = new THREE.Matrix3(), _ptr = new THREE.Vector2(), _boxM = new THREE.Matrix4();
   const canvas = () => $q('canvas');
   const save = () => { try { localStorage.setItem('stepopt-elements', JSON.stringify({ mode, tool, loops, cadPick, cadSet, brushR, space })); } catch (_) {} };
 
@@ -61979,12 +62422,56 @@ const _Elements = (() => {
   // the four-sided pairs of triangles meshedit.js finds (a cell of a grid, a strip of a tube wall), and a triangle of its own where
   // there is no such pair. A whole flat plate is never one polygon: a click on it would take the lot.
   const keyFor = (g) => _triOnly.has(g) ? 'tri' : _polyIds.has(g) ? 'ids' : 'quads';
+  // A part of more than READ_WORKER_TRIS triangles is read on a worker, from the moment Edit mesh first draws it: until the answer comes
+  // there is no reading (null), and a pick on the part waits for it (afterRead). Read on the page, a part of two and a half million
+  // triangles held everything up for three seconds at the first click, and the bigger parts were not read before one.
+  const READ_WORKER_TRIS = 60000;
+  const readJobs = new WeakMap();        // geometry → { key, waiters }: a worker is reading it
+  function readSoon(p) {
+    const geom = p.mesh.geometry, pos = geom.attributes.position, key = keyFor(geom), j = readJobs.get(geom);
+    if (j && j.key === key) return true;
+    if (!_MeshWorkers.available()) return false;
+    const ver = pos.version, job = { key, waiters: [] };
+    readJobs.set(geom, job);
+    _MeshWorkers.run(() => {
+      if (readJobs.get(geom) !== job) return null;                     // (not wanted any more)
+      const positions = _wireXYZ(pos, true), index = geom.index ? Uint32Array.from(geom.index.array) : null;
+      const ids = key === 'ids' ? _polyIds.get(geom) : null, poly = ids ? Int32Array.from(ids) : null;
+      const transfer = [positions.buffer]; if (index) transfer.push(index.buffer); if (poly) transfer.push(poly.buffer);
+      return { msg: { op: 'editRead', key, angle: _wireAngle(), positions, index, poly }, transfer };
+    }, { owner: '' }).then((r) => {
+      if (readJobs.get(geom) === job) readJobs.delete(geom);
+      // (kept only for the shape it was asked for: the same geometry, positions and kind of polygons, and not read on the page meanwhile)
+      const have = reads.get(geom);
+      if (r && r.ok && r.topo && keyFor(geom) === key && geom.attributes.position === pos && pos.version === ver && !(have && have.key === key)) {
+        const topo = Object.assign(r.topo, { positions: _wireXYZ(pos, false), index: geom.index ? geom.index.array : null });
+        reads.set(geom, { key, topo, pg: r.pg, lines: r.lines, corner: r.corner, slope: r.slope });
+        if (r.vn) pointNormalCache.set(topo.normal, r.vn);
+      }
+      for (const fn of job.waiters) { try { fn(); } catch (err) { console.warn('[elements] after read:', err); } }
+      if (active) { hover = null; changed(); }
+    });
+    return true;
+  }
+  const reading = (p) => { const g = p && p.mesh && p.mesh.geometry, j = g && readJobs.get(g); return !!(j && j.key === keyFor(g)); };
+  // fn, once every selected part a worker is reading has been read; false when none is being read. (Said once for each such wait.)
+  function afterRead(fn) {
+    const jobs = [];
+    for (const id of state.selected) { const p = getPart(id); if (p && p.mesh && reading(p)) jobs.push([p, readJobs.get(p.mesh.geometry)]); }
+    if (!jobs.length) return false;
+    let left = jobs.length;
+    for (const [, j] of jobs) j.waiters.push(() => { if (--left === 0 && active) fn(); });
+    const tris = jobs.reduce((n, [p]) => n + triCountOf(p), 0);
+    try { toast('Reading ' + (jobs.length === 1 ? (jobs[0][0].name || 'the part') : fmtNum(jobs.length) + ' parts'), fmtNum(tris) + ' triangles. The pick is made as soon as ' + (jobs.length === 1 ? 'it is' : 'they are') + ' read.', 'info', 3200); } catch (_) {}
+    return true;
+  }
   function read(p, build = true) {
     const geom = p && p.mesh && p.mesh.geometry, pos = geom && geom.attributes && geom.attributes.position;
     if (!pos) return null;
     const key = keyFor(geom);
     let R = reads.get(geom);
     if (R && R.key === key) return R;
+    if (triCountOf(p) > READ_WORKER_TRIS && readSoon(p)) return null;
     if (!build) return null;
     const P = _wireXYZ(pos, false), index = geom.index ? geom.index.array : null;
     const topo = R ? R.topo : MEDIT.buildTopology(P, index);
@@ -62012,14 +62499,22 @@ const _Elements = (() => {
     if (!e && make) {
       const R = read(p);
       if (!R) return null;
-      e = { geom: p.mesh.geometry, R, points: new Set(), edges: new Set(), faces: new Set(), fill: null, outline: null, dirty: false };
+      e = { geom: p.mesh.geometry, R, points: new VSet(), edges: new VSet(), faces: new VSet(), fill: null, outline: null, dirty: false };
       sel.set(p.partId, e);
     }
     return e || null;
   }
   function unshow(e) {
     let had = false;
-    for (const k of ['fill', 'outline']) if (e[k]) { try { group && group.remove(e[k]); e[k].geometry.dispose(); } catch (_) {} e[k] = null; had = true; }
+    for (const k of ['fill', 'outline']) if (e[k]) {
+      try {
+        group && group.remove(e[k]);
+        // (the fill's points are the part's own: taken off it first, or letting it go would free the buffer the part is drawn with)
+        for (const name of e[k].userData.shared || []) e[k].geometry.deleteAttribute(name);
+        e[k].geometry.dispose();
+      } catch (_) {}
+      e[k] = null; had = true;
+    }
     return had;
   }
   function drop(partId) {
@@ -62175,6 +62670,10 @@ const _Elements = (() => {
   function pick(ev, asLoop) {
     if (needPart()) return;
     let h = elementAt(ev, true);
+    if (h && h.p && !h.el && reading(h.p)) {
+      const again = { clientX: ev.clientX, clientY: ev.clientY, shiftKey: ev.shiftKey, ctrlKey: ev.ctrlKey, metaKey: ev.metaKey, altKey: ev.altKey };
+      if (afterRead(() => pick(again, asLoop))) return;
+    }
     const how = howOf(ev);
     if (h && h.instanced) h = promote(h) ? elementAt(ev, true) : null;
     record(() => {
@@ -62210,23 +62709,38 @@ const _Elements = (() => {
       if (how === 'set') clearAll();
       camera.getWorldPosition(_cam);
       const ortho = !!camera._isOrtho, look = ortho ? camera.getWorldDirection(new THREE.Vector3()).negate() : null;
-      const cand = [];                       // [entry, id, world x, y, z]
+      // the pieces found, in flat lists: their entry, their number and where they are in the world. (With the points of a part put on the
+      // screen one Vector3 call at a time and a small array for each piece, a box over a part of two and a half million triangles took
+      // over half a second a pass, and the box is picked again at each move of the drag.)
+      const cE = [], cId = [], cX = [];
+      const ve = camera.matrixWorldInverse.elements, pe = camera.projectionMatrix.elements;
       for (const p of parts.values()) {
         const e = entry(p, true); if (!e) continue;
         const { topo, pg } = e.R;
         p.mesh.updateWorldMatrix(true, false);
         const M = p.mesh.matrixWorld; _nm.getNormalMatrix(M);
-        const P3 = [0, 0, 0];
-        // every point of the part on the screen, once
-        const inside = new Uint8Array(topo.nVert);
+        const me = M.elements, ne = _nm.elements, Pp = topo.positions, rp = topo.rep, N = topo.normal;
+        // every point of the part on the screen, once: the part's place, the view and the lens in one matrix
+        const m = _boxM.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(M).elements;
+        const inside = new Uint8Array(topo.nVert), rl = rect.left, rtp = rect.top, rw = rect.width, rh = rect.height;
         for (let v = 0; v < topo.nVert; v++) {
-          MEDIT.pointPosition(topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); _v.copy(_w).project(camera);
-          if (_v.z > 1 || _v.z < -1) continue;
-          const x = rect.left + (_v.x * 0.5 + 0.5) * rect.width, y = rect.top + (-_v.y * 0.5 + 0.5) * rect.height;
-          inside[v] = (x >= L && x <= Rr && y >= T && y <= B) ? 1 : 0;
+          const r = rp[v] * 3, x = Pp[r], y = Pp[r + 1], z = Pp[r + 2];
+          const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+          const cz = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
+          if (cz > 1 || cz < -1) continue;
+          const sx = rl + ((m[0] * x + m[4] * y + m[8] * z + m[12]) / w * 0.5 + 0.5) * rw, sy = rtp + (-(m[1] * x + m[5] * y + m[9] * z + m[13]) / w * 0.5 + 0.5) * rh;
+          inside[v] = (sx >= L && sx <= Rr && sy >= T && sy <= B) ? 1 : 0;
         }
-        const faces = (t) => { if (t < 0) return false; _n.set(topo.normal[t * 3], topo.normal[t * 3 + 1], topo.normal[t * 3 + 2]).applyMatrix3(_nm); return ortho ? _n.dot(look) > 0 : (_n.x * (_cam.x - _w.x) + _n.y * (_cam.y - _w.y) + _n.z * (_cam.z - _w.z)) > 0; };
-        const at = (v) => { MEDIT.pointPosition(topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); };
+        // (at: the point v in the world, into wx, wy, wz; faces: does triangle t look at the camera from there)
+        let wx = 0, wy = 0, wz = 0;
+        const at = (v) => { const r = rp[v] * 3, x = Pp[r], y = Pp[r + 1], z = Pp[r + 2]; wx = me[0] * x + me[4] * y + me[8] * z + me[12]; wy = me[1] * x + me[5] * y + me[9] * z + me[13]; wz = me[2] * x + me[6] * y + me[10] * z + me[14]; };
+        const faces = (t) => {
+          if (t < 0) return false;
+          const a = N[t * 3], b = N[t * 3 + 1], c = N[t * 3 + 2];
+          const nx = ne[0] * a + ne[3] * b + ne[6] * c, ny = ne[1] * a + ne[4] * b + ne[7] * c, nz = ne[2] * a + ne[5] * b + ne[8] * c;
+          return ortho ? nx * look.x + ny * look.y + nz * look.z > 0 : nx * (_cam.x - wx) + ny * (_cam.y - wy) + nz * (_cam.z - wz) > 0;
+        };
+        const put = (id, x, y, z) => { cE.push(e); cId.push(id); cX.push(x, y, z); };
         if (mode === 'points') {
           const on = cornerFlags(e.R);
           for (let v = 0; v < topo.nVert; v++) {
@@ -62234,17 +62748,17 @@ const _Elements = (() => {
             at(v);
             let seen = false;
             for (let i = topo.vStart[v]; i < topo.vStart[v + 1] && !seen; i++) { const ed = topo.vEdges[i]; seen = faces(topo.edgeT[ed * 2]) || faces(topo.edgeT[ed * 2 + 1]); }
-            if (seen) cand.push([e, v, _w.x, _w.y, _w.z]);
+            if (seen) put(v, wx, wy, wz);
           }
         } else if (mode === 'edges') {
           for (let ed = 0; ed < topo.nEdge; ed++) {
             if (!pg.real[ed]) continue;
             const a = topo.edgeV[ed * 2], b = topo.edgeV[ed * 2 + 1];
             if (!inside[a] || !inside[b]) continue;
-            at(a); const ax = _w.x, ay = _w.y, az = _w.z;
+            at(a); const ax = wx, ay = wy, az = wz;
             if (!(faces(topo.edgeT[ed * 2]) || faces(topo.edgeT[ed * 2 + 1]))) continue;
             at(b);
-            cand.push([e, ed, (ax + _w.x) / 2, (ay + _w.y) / 2, (az + _w.z) / 2]);
+            put(ed, (ax + wx) / 2, (ay + wy) / 2, (az + wz) / 2);
           }
         } else {
           for (let q = 0; q < pg.count; q++) {
@@ -62252,18 +62766,19 @@ const _Elements = (() => {
             for (let i = pg.pStart[q]; ok && i < pg.pStart[q + 1]; i++) { const t = pg.pTris[i]; ok = !!(inside[topo.tri[t * 3]] && inside[topo.tri[t * 3 + 1]] && inside[topo.tri[t * 3 + 2]]); }
             if (!ok) continue;
             const t0 = pg.pTris[pg.pStart[q]];
-            at(topo.tri[t0 * 3]); let cx = _w.x, cy = _w.y, cz = _w.z;
+            at(topo.tri[t0 * 3]); let cx = wx, cy = wy, cz = wz;
             if (!faces(t0)) continue;
-            at(topo.tri[t0 * 3 + 1]); cx += _w.x; cy += _w.y; cz += _w.z;
-            at(topo.tri[t0 * 3 + 2]); cx += _w.x; cy += _w.y; cz += _w.z;
-            cand.push([e, q, cx / 3, cy / 3, cz / 3]);
+            at(topo.tri[t0 * 3 + 1]); cx += wx; cy += wy; cz += wz;
+            at(topo.tri[t0 * 3 + 2]); cx += wx; cy += wy; cz += wz;
+            put(q, cx / 3, cy / 3, cz / 3);
           }
         }
       }
       // nothing in front of it: the first thing a ray from the camera meets on the way is the piece itself
-      const check = cand.length <= OCCLUDE_MAX;
+      const check = cE.length <= OCCLUDE_MAX;
       const touched = new Set();
-      for (const [e, id, x, y, z] of cand) {
+      for (let c = 0; c < cE.length; c++) {
+        const e = cE[c], id = cId[c], x = cX[c * 3], y = cX[c * 3 + 1], z = cX[c * 3 + 2];
         if (check) {
           _v.set(x, y, z).project(camera); _ptr.set(_v.x, _v.y); ray.setFromCamera(_ptr, camera);
           const h = ray.intersectObjects(targets, false)[0];
@@ -62275,7 +62790,7 @@ const _Elements = (() => {
       for (const e of touched) e.dirty = true;
       for (const [id, e] of [...sel]) if (!e.points.size && !e.edges.size && !e.faces.size) drop(id);
     });
-    changed();
+    if (live === 'drag') { syncCard(); schedule(); } else changed();      // (the gizmo waits for the release: placed on a million picked pieces at every pass, it held the drag up)
     return found;
   }
 
@@ -62290,7 +62805,7 @@ const _Elements = (() => {
     if (b.at === b.x1 + ',' + b.y1) return;
     b.at = b.x1 + ',' + b.y1;
     restore(b.before);
-    if (boxMoved(b)) boxPick(b.x0, b.y0, b.x1, b.y1, b.how, true);
+    if (boxMoved(b)) boxPick(b.x0, b.y0, b.x1, b.y1, b.how, 'drag');
     b.wait = performance.now() + Math.min(400, (performance.now() - now) * 2);
   }
   function boxEnd(b, keep) {      // the release (keep), or the drag given up: what was picked before is back
@@ -62298,6 +62813,7 @@ const _Elements = (() => {
     restore(b.before);
     if (!keep || !boxMoved(b)) return false;
     if (needPart()) return true;
+    if (afterRead(() => boxPick(b.x0, b.y0, b.x1, b.y1, b.how))) return true;
     boxPick(b.x0, b.y0, b.x1, b.y1, b.how, true);
     const after = snap();
     if (sig(b.before) !== sig(after)) { picks.push({ before: b.before, after, at: state.history.length }); if (picks.length > 200) picks.shift(); unpicks.length = 0; }
@@ -62368,6 +62884,7 @@ const _Elements = (() => {
   }
 
   function selectAll() {
+    if (afterRead(selectAll)) return;
     record(() => {
       const any = [];                                     // every selected part, whether something of it is picked yet or not
       for (const id of state.selected) { const p = getPart(id); if (p && p.mesh && !p.deleted && !p.isSpline && !p.isPrimitive) { const e = entry(p, true); if (e) any.push([p, e]); } }
@@ -62903,7 +63420,7 @@ const _Elements = (() => {
       const raw = []; for (let i = 0; i < topo.nRaw; i++) if (welded.has(topo.weld[i])) raw.push(i);
       const orig = new Float32Array(raw.length * 3); for (let k = 0; k < raw.length; k++) { orig[k * 3] = arr[raw[k] * 3]; orig[k * 3 + 1] = arr[raw[k] * 3 + 1]; orig[k * 3 + 2] = arr[raw[k] * 3 + 2]; }
       // the same points, edges and polygons, read on the copy (its positions are the ones that move)
-      const R2 = { key: keyFor(ed.geom), topo: Object.assign({}, topo, { positions: arr }), pg: e.R.pg, lines: e.R.lines };
+      const R2 = { key: keyFor(ed.geom), topo: topoWith(topo, { positions: arr }), pg: e.R.pg, lines: e.R.lines, slope: e.R.slope, corner: e.R.corner, cornerSet: e.R.cornerSet };      // (the slopes and corners: the same triangles, and until the release the same normals)
       reads.set(ed.geom, R2);
       const oldR = e.R; e.geom = ed.geom; e.R = R2; e.dirty = true;
       p.mesh.updateWorldMatrix(true, false);
@@ -62956,55 +63473,191 @@ const _Elements = (() => {
     if (!topo || topo.nTri !== nTri) return;
     const polyOf = pg && pg.polyOf && pg.polyOf.length === nTri ? pg.polyOf : null;
     const corner = (t, k) => ix ? ix[t * 3 + k] : t * 3 + k;
-    // the normal of every triangle now (unit, and the length it had: the area, twice)
-    const fn = new Float32Array(nTri * 3), fa = new Float32Array(nTri);
-    for (let t = 0; t < nTri; t++) {
+    // (Only the triangles round the moved points are looked at: worked out for the whole part, two million triangles took a third of a
+    // second at every release of the gizmo. Each is worked out when it is first needed, the same way as before.)
+    // the normal of a triangle now (unit, and the length it had: the area, twice)
+    const fnOf = new Map();
+    const fn = (t) => {
+      let r = fnOf.get(t);
+      if (r) return r;
       const a = corner(t, 0), b = corner(t, 1), c = corner(t, 2);
       const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
       const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
-      fa[t] = l;
-      if (l > 0) { fn[t * 3] = nx / l; fn[t * 3 + 1] = ny / l; fn[t * 3 + 2] = nz / l; }
-    }
-    // the normal of each polygon (its triangles' normals added by area): what a corner is compared with, so that the two triangles of a
+      r = l > 0 ? [nx / l, ny / l, nz / l, l] : [0, 0, 0, 0];
+      fnOf.set(t, r);
+      return r;
+    };
+    // the normal of a polygon (its triangles' normals added by area): what a corner is compared with, so that the two triangles of a
     // quad, which meet at the same corners, are shaded from the very same neighbours and agree
-    let pn = null;
-    if (polyOf) {
-      pn = new Float32Array(pg.count * 3);
-      for (let t = 0; t < nTri; t++) { const q = polyOf[t] * 3; pn[q] += fn[t * 3] * fa[t]; pn[q + 1] += fn[t * 3 + 1] * fa[t]; pn[q + 2] += fn[t * 3 + 2] * fa[t]; }
-      for (let q = 0; q < pg.count; q++) { const l = Math.hypot(pn[q * 3], pn[q * 3 + 1], pn[q * 3 + 2]) || 1; pn[q * 3] /= l; pn[q * 3 + 1] /= l; pn[q * 3 + 2] /= l; }
-    }
+    const pnOf = new Map();
+    const pn = (q) => {
+      let r = pnOf.get(q);
+      if (r) return r;
+      let x = 0, y = 0, z = 0;
+      for (let i = pg.pStart[q]; i < pg.pStart[q + 1]; i++) { const f = fn(pg.pTris[i]); x += f[0] * f[3]; y += f[1] * f[3]; z += f[2] * f[3]; }
+      const l = Math.hypot(x, y, z) || 1;
+      r = [x / l, y / l, z / l];
+      pnOf.set(q, r);
+      return r;
+    };
     const moved = new Uint8Array(nRaw); for (const r of g.raw) moved[r] = 1;
-    // the triangles at each place (CSR over the welded points)
-    const nV = topo.nVert, start = new Uint32Array(nV + 1);
-    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) start[topo.tri[t * 3 + k] + 1]++;
-    for (let v = 0; v < nV; v++) start[v + 1] += start[v];
-    const fill = start.slice(0, nV), around = new Uint32Array(nTri * 3);
-    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) around[fill[topo.tri[t * 3 + k]]++] = t;
+    // the triangles to shade: those with a moved corner, and the rest of their polygons (the half of a quad that does not hold the moved
+    // corner is not left as it was), in their order
+    const hit = [], polyHit = polyOf ? new Set() : null;
+    for (let t = 0; t < nTri; t++) if (moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)]) { hit.push(t); if (polyHit) polyHit.add(polyOf[t]); }
+    let shade = hit;
+    if (polyHit) {
+      const all = new Set(hit);
+      for (const q of polyHit) for (let i = pg.pStart[q]; i < pg.pStart[q + 1]; i++) all.add(pg.pTris[i]);
+      shade = [...all].sort((a, b) => a - b);
+    }
+    // the triangles at each place those touch (over the welded points)
+    const want = new Uint8Array(topo.nVert);
+    for (const t of shade) for (let k = 0; k < 3; k++) want[topo.tri[t * 3 + k]] = 1;
+    const around = new Map();
+    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) {
+      const w = topo.tri[t * 3 + k];
+      if (!want[w]) continue;
+      let L = around.get(w); if (!L) around.set(w, L = []);
+      L.push(t);
+    }
     const cosA = Math.cos(EDIT_SHADE_DEG * Math.PI / 180);
-    // a polygon with a moved corner is shaded whole (the half of a quad that does not hold the moved corner is not left as it was)
-    const polyHit = polyOf ? new Uint8Array(pg.count) : null;
-    if (polyHit) for (let t = 0; t < nTri; t++) if (moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)]) polyHit[polyOf[t]] = 1;
-    const done = new Uint8Array(nRaw);
-    for (let t = 0; t < nTri; t++) {
-      if (!(moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)] || (polyHit && polyHit[polyOf[t]]))) continue;
+    const done = new Set();
+    for (const t of shade) {
       for (let k = 0; k < 3; k++) {
         const v = corner(t, k);
-        if (done[v]) continue;
-        done[v] = 1;
+        if (done.has(v)) continue;
+        done.add(v);
         const w = topo.tri[t * 3 + k];
-        const rx = pn ? pn[polyOf[t] * 3] : fn[t * 3], ry = pn ? pn[polyOf[t] * 3 + 1] : fn[t * 3 + 1], rz = pn ? pn[polyOf[t] * 3 + 2] : fn[t * 3 + 2];
+        const ref = polyOf ? pn(polyOf[t]) : fn(t), rx = ref[0], ry = ref[1], rz = ref[2];
         let sx = 0, sy = 0, sz = 0;
-        for (let i = start[w]; i < start[w + 1]; i++) {
-          const u = around[i];
+        for (const u of around.get(w) || []) {
+          const f = fn(u);
           const uses = corner(u, 0) === v || corner(u, 1) === v || corner(u, 2) === v;        // (a vertex that triangles share is shaded from all of them, as it was)
-          if (!(uses || (polyOf && polyOf[u] === polyOf[t]) || fn[u * 3] * rx + fn[u * 3 + 1] * ry + fn[u * 3 + 2] * rz >= cosA)) continue;
-          sx += fn[u * 3] * fa[u]; sy += fn[u * 3 + 1] * fa[u]; sz += fn[u * 3 + 2] * fa[u];
+          if (!(uses || (polyOf && polyOf[u] === polyOf[t]) || f[0] * rx + f[1] * ry + f[2] * rz >= cosA)) continue;
+          sx += f[0] * f[3]; sy += f[1] * f[3]; sz += f[2] * f[3];
         }
         const l = Math.hypot(sx, sy, sz);
         if (l > 0) { N[v * 3] = sx / l; N[v * 3 + 1] = sy / l; N[v * 3 + 2] = sz / l; }
       }
     }
     na.needsUpdate = true;
+  }
+  // The reading of a shape whose points were moved (g: a part of the drag) on its finished geometry: the drag's reading, with the normals
+  // of the triangles at the moved points, the sharp edges among their edges, the slopes of the blue lines and the dots' normals at their
+  // corners worked out again, and the faces (regions) again when they are first asked for. null: the geometry is not the dragged one.
+  const CREASE_COS = Math.cos(30 * Math.PI / 180);      // (buildTopology's own crease angle)
+  // a copy of a reading's topology with some of it changed (its faces, when they are made only when asked for, are not made by the copy)
+  const topoWith = (T, o) => Object.assign(Object.defineProperties({}, Object.getOwnPropertyDescriptors(T)), o);
+  function movedRead(g, geom) {
+    const R0 = g.e.R, T0 = R0 && R0.topo, pa = geom && geom.attributes && geom.attributes.position;
+    if (!T0 || !pa || pa.isInterleavedBufferAttribute || !(pa.array instanceof Float32Array) || pa.array.length !== T0.nRaw * 3) return null;
+    const ix = geom.index ? geom.index.array : null;
+    if (!!ix !== !!T0.index || (ix ? ix.length : T0.nRaw) !== T0.nTri * 3) return null;
+    const P = pa.array, nTri = T0.nTri, nV = T0.nVert, tri = T0.tri, weld = T0.weld;
+    const corner = (t, k) => ix ? ix[t * 3 + k] : t * 3 + k;
+    const moved = new Uint8Array(nV); for (const r of g.raw) moved[weld[r]] = 1;
+    // the triangles at a moved point get their normals again, and their edges are sharp or not again
+    const normal = T0.normal.slice(), kind = T0.kind.slice(), near = new Uint8Array(nV);
+    let kindChanged = false;
+    for (let t = 0; t < nTri; t++) {
+      if (!(moved[tri[t * 3]] || moved[tri[t * 3 + 1]] || moved[tri[t * 3 + 2]])) continue;
+      const a = corner(t, 0), b = corner(t, 1), c = corner(t, 2);
+      const ax = P[a * 3], ay = P[a * 3 + 1], az = P[a * 3 + 2];
+      const ux = P[b * 3] - ax, uy = P[b * 3 + 1] - ay, uz = P[b * 3 + 2] - az, vx = P[c * 3] - ax, vy = P[c * 3 + 1] - ay, vz = P[c * 3 + 2] - az;
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
+      normal[t * 3] = l > 0 ? nx / l : 0; normal[t * 3 + 1] = l > 0 ? ny / l : 0; normal[t * 3 + 2] = l > 0 ? nz / l : 0;
+      for (let k = 0; k < 3; k++) near[tri[t * 3 + k]] = 1;
+    }
+    for (let t = 0; t < nTri; t++) {
+      if (!(moved[tri[t * 3]] || moved[tri[t * 3 + 1]] || moved[tri[t * 3 + 2]])) continue;
+      for (let k = 0; k < 3; k++) {
+        const e = T0.triE[t * 3 + k];
+        if (T0.edgeN[e] !== 2) continue;
+        const p = T0.edgeT[e * 2] * 3, q = T0.edgeT[e * 2 + 1] * 3;
+        const lp = normal[p] || normal[p + 1] || normal[p + 2], lq = normal[q] || normal[q + 1] || normal[q + 2];
+        const d = normal[p] * normal[q] + normal[p + 1] * normal[q + 1] + normal[p + 2] * normal[q + 2];
+        const kd = (lp && lq && d < CREASE_COS) ? 1 : 0;
+        if (kd !== kind[e]) { kind[e] = kd; kindChanged = true; }
+      }
+    }
+    const topo = topoWith(T0, { positions: P, index: ix, normal, kind });
+    if (kindChanged) {
+      // (the faces, as buildTopology finds them: triangles that hang together across smooth edges; made when first asked for)
+      let region = null, nRegion = 0;
+      const make = () => {
+        if (region) return;
+        region = new Int32Array(nTri).fill(-1);
+        const stack = new Uint32Array(nTri);
+        for (let s0 = 0; s0 < nTri; s0++) {
+          if (region[s0] !== -1) continue;
+          let top = 0; stack[top++] = s0; region[s0] = nRegion;
+          while (top) {
+            const t = stack[--top];
+            for (let k = 0; k < 3; k++) {
+              const e = topo.triE[t * 3 + k];
+              if (kind[e] !== 0) continue;
+              const o = topo.edgeT[e * 2] === t ? topo.edgeT[e * 2 + 1] : topo.edgeT[e * 2];
+              if (o >= 0 && region[o] === -1) { region[o] = nRegion; stack[top++] = o; }
+            }
+          }
+          nRegion++;
+        }
+      };
+      Object.defineProperty(topo, 'region', { get() { make(); return region; }, enumerable: true });
+      Object.defineProperty(topo, 'nRegion', { get() { make(); return nRegion; }, enumerable: true });
+    }
+    // the triangles at each point that a moved triangle touches, in their order (as slopeOf and pointNormals take them)
+    const around = new Map();
+    for (let v = 0; v < nV; v++) if (near[v]) around.set(v, []);
+    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) { const w = tri[t * 3 + k]; if (near[w]) { const L = around.get(w); if (L[L.length - 1] !== t) L.push(t); } }
+    const R = { key: keyFor(geom), topo, pg: R0.pg, lines: R0.lines, corner: R0.corner, cornerSet: R0.cornerSet };
+    // the blue lines' slopes (slopeOf: the normals taken the same way round as the first, and the most turned one), at those points
+    if (R0.slope && R0.slope.length === T0.nRaw * 4) {
+      const per = new Float32Array(nV * 4);
+      for (const [w, L] of around) {
+        let rx = 0, ry = 0, rz = 0, sx = 0, sy = 0, sz = 0;
+        for (const t of L) {
+          const nx = normal[t * 3], ny = normal[t * 3 + 1], nz = normal[t * 3 + 2];
+          if (!nx && !ny && !nz) continue;
+          if (!rx && !ry && !rz) { rx = nx; ry = ny; rz = nz; }
+          const sg = (nx * rx + ny * ry + nz * rz) < 0 ? -1 : 1;
+          sx += sg * nx; sy += sg * ny; sz += sg * nz;
+        }
+        const l = Math.hypot(sx, sy, sz) || 1; sx /= l; sy /= l; sz /= l;
+        let spread = 0;
+        for (const t of L) {
+          const nx = normal[t * 3], ny = normal[t * 3 + 1], nz = normal[t * 3 + 2];
+          if (!nx && !ny && !nz) continue;
+          const a = Math.acos(Math.min(1, Math.abs(nx * sx + ny * sy + nz * sz)));
+          if (a > spread) spread = a;
+        }
+        per[w * 4] = sx; per[w * 4 + 1] = sy; per[w * 4 + 2] = sz; per[w * 4 + 3] = spread;
+      }
+      const slope = R0.slope.slice();
+      for (let i = 0; i < T0.nRaw; i++) { const w = weld[i]; if (near[w]) { slope[i * 4] = per[w * 4]; slope[i * 4 + 1] = per[w * 4 + 1]; slope[i * 4 + 2] = per[w * 4 + 2]; slope[i * 4 + 3] = per[w * 4 + 3]; } }
+      R.slope = slope;
+    }
+    // the dots' normals (pointNormals), when they were made for the shape before
+    const pn0 = pointNormalCache.get(T0.normal);
+    if (pn0) {
+      const pn = pn0.slice();
+      for (const [w, L] of around) {
+        let sx = 0, sy = 0, sz = 0;
+        for (const t of L) { sx += normal[t * 3]; sy += normal[t * 3 + 1]; sz += normal[t * 3 + 2]; }
+        const l = Math.hypot(sx, sy, sz) || 1; sx /= l; sy /= l; sz /= l;
+        let worst = 0;
+        for (const t of L) {
+          const nx = normal[t * 3], ny = normal[t * 3 + 1], nz = normal[t * 3 + 2];
+          if (!nx && !ny && !nz) continue;
+          const a = Math.acos(Math.max(-1, Math.min(1, nx * sx + ny * sy + nz * sz)));
+          if (a > worst) worst = a;
+        }
+        pn[w * 4] = sx; pn[w * 4 + 1] = sy; pn[w * 4 + 2] = sz; pn[w * 4 + 3] = worst;
+      }
+      pointNormalCache.set(normal, pn);
+    }
+    return R;
   }
   function grabEnd() {
     const g0 = grab; grab = null;
@@ -63014,9 +63667,14 @@ const _Elements = (() => {
     for (const g of g0.parts) { renormal(g); n += g.e[mode].size; }
     const verb = (state.gizmoMode === 'rotate') ? 'Turn ' : (state.gizmoMode === 'scale') ? 'Scale ' : 'Move ';
     window.__moAgent.commitGeomEdit(g0.parts.map(g => g.ed), g0.label || (verb + fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode])));
-    // the same pieces on the shape as it is now: read again, and found by the corners they stand on
+    // the same pieces on the shape as it is now. A move changes where the points are, not how the triangles hang together: the reading
+    // is kept, with what the moved points change worked out again round them (movedRead). Read again from nothing, a part of two
+    // million triangles took seconds at every release of the gizmo. (Read again, and the pieces found by their corners, only when the
+    // finished shape is not the one that was dragged.)
     for (const g of g0.parts) {
       const { p, e } = g, oldTopo = g.oldR.topo, oldPg = g.oldR.pg;
+      const kept = movedRead(g, p.mesh.geometry);
+      if (kept) { reads.set(p.mesh.geometry, kept); e.geom = p.mesh.geometry; e.R = kept; e.ew = null; e.dirty = true; continue; }
       const keep = { points: [...e.points], edges: [...e.edges], faces: [...e.faces] };
       reads.delete(p.mesh.geometry);
       sel.delete(p.partId); unshow(e);
@@ -63064,16 +63722,37 @@ const _Elements = (() => {
   }
   // the picked polygons of one part, as a mesh of their own with their outlines (new ones each time: no stale buffers that way)
   // (while the gizmo drags, the same two objects take the new positions: new buffers at every frame flicker and trail behind)
+  // (The fill is the part's own points with a list of the picked triangles: a box over a million polygons used to copy them all into a
+  // new buffer, work out normals the fill never reads and a bounding sphere, at every pass of the drag. Their outlines are drawn while
+  // there are no more than DRAW_MAX of them, as the picked points and edges are; the fill shows them all.)
   function showFaces(p, e, inPlace) {
-    const keep = !!(inPlace && e.fill && e.outline && mode === 'faces' && e.faces.size);
-    if (!keep) unshow(e);
+    const pa = p.mesh.geometry.attributes.position;
+    const keepFill = !!(inPlace && e.fill && e.fill.geometry.attributes.position === pa && mode === 'faces' && e.faces.size);
+    const keep = !!(keepFill && e.outline);
+    if (!keepFill) unshow(e); else if (!keep && e.outline) { try { group && group.remove(e.outline); e.outline.geometry.dispose(); } catch (_) {} e.outline = null; }
     e.dirty = false;
     if (mode !== 'faces' || !e.faces.size) return;
-    const { topo, pg } = e.R, P = topo.positions, ix = topo.index;
-    const tris = trisOfPolys(pg, e.faces), out = new Float32Array(tris.length * 9);
-    let o = 0;
-    for (const t of tris) for (let k = 0; k < 3; k++) { const v = (ix ? ix[t * 3 + k] : t * 3 + k) * 3; out[o++] = P[v]; out[o++] = P[v + 1]; out[o++] = P[v + 2]; }
-    let n = 0; for (const q of e.faces) n += pg.oStart[q + 1] - pg.oStart[q];
+    const { topo, pg } = e.R, ix = topo.index;
+    if (!keepFill) {
+      const tris = trisOfPolys(pg, e.faces), idx = new Uint32Array(tris.length * 3);
+      let oi = 0;
+      for (const t of tris) for (let k = 0; k < 3; k++) idx[oi++] = ix ? ix[t * 3 + k] : t * 3 + k;
+      const g = new THREE.BufferGeometry(), src = p.mesh.geometry;
+      g.setAttribute('position', pa);
+      const nm = src.attributes.normal;      // (the material asks for normals: the part's own, or none of its own to share)
+      if (nm && nm.count === pa.count) g.setAttribute('normal', nm); else g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(pa.count * 3), 3));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      g.index.version = ++_geomVersionSeq;      // (see _stampGeometry: a new buffer must not look like the one drawn before it)
+      if (!src.boundingSphere) src.computeBoundingSphere();
+      if (!src.boundingBox) src.computeBoundingBox();
+      g.boundingSphere = src.boundingSphere.clone(); g.boundingBox = src.boundingBox.clone();
+      e.fill = new THREE.Mesh(g, FILL_MAT);
+      e.fill.userData.shared = nm && nm.count === pa.count ? ['position', 'normal'] : ['position'];
+      e.fill.matrixAutoUpdate = false; e.fill.frustumCulled = false; e.fill.raycast = () => {}; e.fill.userData.partId = p.partId; e.fill.renderOrder = 6;
+      group.add(e.fill);
+    }
+    if (e.faces.size > DRAW_MAX) return;
+    let o = 0, n = 0; for (const q of e.faces) n += pg.oStart[q + 1] - pg.oStart[q];
     // (each line carries the normal of its polygon, so that it is pulled far enough in front of it when it is seen at an angle)
     const lines = new Float32Array(n * 6), lnrm = new Float32Array(n * 6), P3 = [0, 0, 0]; o = 0;
     for (const q of e.faces) {
@@ -63085,19 +63764,17 @@ const _Elements = (() => {
       }
     }
     if (keep) {
-      const fa = e.fill.geometry.attributes.position, la = e.outline.geometry.attributes.position, ln = e.outline.geometry.attributes.normal;
-      if (fa.array.length === out.length && la.array.length === lines.length && ln) { fa.array.set(out); fa.needsUpdate = true; la.array.set(lines); la.needsUpdate = true; ln.array.set(lnrm); ln.needsUpdate = true; return; }
-      unshow(e);
+      const la = e.outline.geometry.attributes.position, ln = e.outline.geometry.attributes.normal;
+      if (la.array.length === lines.length && ln) { la.array.set(lines); la.needsUpdate = true; ln.array.set(lnrm); ln.needsUpdate = true; return; }
+      try { group && group.remove(e.outline); e.outline.geometry.dispose(); } catch (_) {}
+      e.outline = null;
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(out, 3));
-    e.fill = new THREE.Mesh(_stampGeometry(g), FILL_MAT);
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.BufferAttribute(lines, 3));
     lg.setAttribute('normal', new THREE.BufferAttribute(lnrm, 3));
     e.outline = new THREE.LineSegments(_stampGeometry(lg), outlineMat());
-    for (const m of [e.fill, e.outline]) { m.matrixAutoUpdate = false; m.frustumCulled = false; m.raycast = () => {}; m.userData.partId = p.partId; group.add(m); }
-    e.fill.renderOrder = 6; e.outline.renderOrder = 7;
+    e.outline.matrixAutoUpdate = false; e.outline.frustumCulled = false; e.outline.raycast = () => {}; e.outline.userData.partId = p.partId; e.outline.renderOrder = 7;
+    group.add(e.outline);
   }
   function paint() {
     if (!active || !ov) return;
@@ -63141,7 +63818,8 @@ const _Elements = (() => {
       const why = over.length || unread.length ? over.join(',') + '/' + unread.join(',') : '';
       if (why && why !== pointsNote) {
         const n = over.length + unread.length, them = n === 1 ? 'one part' : fmtNum(n) + ' parts';
-        try { toast('Points mode', over.length ? 'The points of ' + them + ' are not shown: more than ' + fmtNum(ALL_POINTS_MAX) + ' points in all. They can still be picked with a click, the box or the brush.' : 'The points of ' + them + ' over ' + fmtNum(BIG) + ' triangles show after a first click on the part.', 'info', 4200); } catch (_) {}
+        const inWork = unread.some(id => reading(getPart(id)));
+        try { toast('Points mode', over.length ? 'The points of ' + them + ' are not shown: more than ' + fmtNum(ALL_POINTS_MAX) + ' points in all. They can still be picked with a click, the box or the brush.' : inWork ? 'Reading ' + them + ': the points show in a moment.' : 'The points of ' + them + ' over ' + fmtNum(BIG) + ' triangles show after a first click on the part.', 'info', 4200); } catch (_) {}
       }
       pointsNote = why;
       // (the same parts with the same shapes in the same places: the dots are where they were. The version of the positions counts too:
@@ -63159,24 +63837,41 @@ const _Elements = (() => {
       if (mode === 'edges' && e.edges.size) pickedEdges.push([p, e]);
       if (mode === 'points' && e.points.size) pickedDots.push({ p, topo, list: e.points });
     }
-    if (fillDots('pick', pickedDots)) render = true;
-    // the picked edges: orange, wide (an edge both of whose faces look away is behind its part and left out)
+    // (the same picks on the same shapes in the same places: the dots stay; a pass of the pointer used to place them all again)
+    const pickKey = pickedDots.map(it => { const m = it.p.mesh, pa = m.geometry.attributes.position; return it.p.partId + ':' + rid(it.topo) + ':' + rid(it.list) + ':' + (it.list.ver | 0) + ':' + it.list.size + ':' + (pa ? pa.version : 0) + ':' + m.matrixWorld.elements.join(','); }).join('|');
+    if (fillDots('pick', pickedDots, pickKey)) render = true;
+    // the picked edges: orange, wide (an edge both of whose faces look away is behind its part and left out). Their ends and faces are
+    // taken into the world once for each set of picks (edgeWorld); a paint only turns them to the camera, and leaves them alone when
+    // neither the picks nor the view have moved. (They were all worked out again at each paint, a pass of the pointer too: a tenth of a
+    // second a frame with 190,000 edges picked.)
     {
-      let n = 0; for (const [, e] of pickedEdges) n += Math.min(e.edges.size, DRAW_MAX);
-      const out = n ? new Float32Array(n * 6) : null;
-      let k = 0;
-      for (const [p, e] of pickedEdges) {
-        const M = p.mesh.matrixWorld, topo = e.R.topo;
-        _nm.getNormalMatrix(M);
-        let c = 0;
-        for (const ed of e.edges) {
-          if (++c > DRAW_MAX) break;
-          MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M);
-          if (!edgeSeen(topo, ed)) continue;
-          putEdge(out, k++, M, topo, ed, FAT.pick.px / 2 + 0.75);
+      const ce = camera.matrixWorld.elements, pe = camera.projectionMatrix.elements;
+      // (to a millionth: the controls move the camera by a few parts in 10^16 at each pass of the pointer)
+      const fig = (x) => Math.round(x * 1e6);
+      let key = mode + '|' + rect.height + '|' + Array.from(ce, fig).join(',') + '|' + Array.from(pe, fig).join(',');
+      for (const [p, e] of pickedEdges) key += '|' + edgeWorld(p, e).key;
+      const fl = fatLayers.pick, shown = !!(fl && fl.mesh.visible && fl.mesh.parent === group);
+      if (key !== pickEdgeKey || (pickEdgeN > 0 && !shown)) {
+        let n = 0; for (const [p, e] of pickedEdges) n += edgeWorld(p, e).n;
+        const out = n ? new Float32Array(n * 6) : null, reach = FAT.pick.px / 2 + 0.75;
+        let k = 0;
+        for (const [p, e] of pickedEdges) {
+          const W = edgeWorld(p, e), A = W.a, B = W.b, N0 = W.n0, N1 = W.n1;
+          for (let i = 0; i < W.n; i++) {
+            const j = i * 3, ax = A[j], ay = A[j + 1], az = A[j + 2];
+            // (does one of its faces look at the camera, from its first end)
+            const vx = ortho ? look.x : _cam.x - ax, vy = ortho ? look.y : _cam.y - ay, vz = ortho ? look.z : _cam.z - az;
+            if (!(N0[j] * vx + N0[j + 1] * vy + N0[j + 2] * vz > 0) && !(N1[j] * vx + N1[j + 1] * vy + N1[j + 2] * vz > 0)) continue;
+            _ea.set(ax, ay, az); _eb.set(B[j], B[j + 1], B[j + 2]);
+            viewAt(C, _ea, _ev);
+            const t = Math.max(tanSeen(_n.set(N0[j], N0[j + 1], N0[j + 2]), _ev), tanSeen(_n.set(N1[j], N1[j + 1], N1[j + 2]), _ev));
+            pullPoint(C, _ea, _ev, t, reach); viewAt(C, _eb, _ev); pullPoint(C, _eb, _ev, t, reach);
+            const o = k++ * 6; out[o] = _ea.x; out[o + 1] = _ea.y; out[o + 2] = _ea.z; out[o + 3] = _eb.x; out[o + 4] = _eb.y; out[o + 5] = _eb.z;
+          }
         }
+        if (fatSet('pick', out, k)) render = true;
+        pickEdgeKey = key; pickEdgeN = k;
       }
-      if (fatSet('pick', out, k)) render = true;
     }
     // what is under the pointer, light over the rest (not while a box is dragged or the brush paints)
     let hotDots = [], hotSegs = null, hotN = 0, hotKey = '', hotBuild = null;
@@ -63410,6 +64105,29 @@ const _Elements = (() => {
     return { ortho: !!camera._isOrtho, bx: e[8] / bl, by: e[9] / bl, bz: e[10] / bl, cx: _cam.x, cy: _cam.y, cz: _cam.z,
       p11: Math.abs(camera.projectionMatrix.elements[5]) || 1, h: Math.max(1, hCss), near: camera.near, far: camera.far };
   }
+  // The picked edges of a part in the world: both ends (a, b) and the unit normals of the faces on either side (n0, n1; nothing for no
+  // face), up to DRAW_MAX of them. Kept on the entry while its picks, its shape and its place stay the same.
+  let pickEdgeKey = '', pickEdgeN = 0;
+  function edgeWorld(p, e) {
+    const M = p.mesh.matrixWorld, topo = e.R.topo, pa = p.mesh.geometry.attributes.position;
+    const key = p.partId + ':' + rid(e.R) + ':' + rid(e.edges) + ':' + (e.edges.ver | 0) + ':' + e.edges.size + ':' + (pa ? pa.version : 0) + ':' + M.elements.join(',');
+    if (e.ew && e.ew.key === key) return e.ew;
+    const n = Math.min(e.edges.size, DRAW_MAX), a = new Float32Array(n * 3), b = new Float32Array(n * 3), n0 = new Float32Array(n * 3), n1 = new Float32Array(n * 3), P3 = [0, 0, 0];
+    _nm.getNormalMatrix(M);
+    let i = 0;
+    for (const ed of e.edges) {
+      if (i >= n) break;
+      const j = i++ * 3;
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); a[j] = _w.x; a[j + 1] = _w.y; a[j + 2] = _w.z;
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + 1], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); b[j] = _w.x; b[j + 1] = _w.y; b[j + 2] = _w.z;
+      for (let s = 0; s < 2; s++) {
+        const f = topo.edgeT[ed * 2 + s], d = s ? n1 : n0;
+        if (f < 0) continue;
+        _n.set(topo.normal[f * 3], topo.normal[f * 3 + 1], topo.normal[f * 3 + 2]).applyMatrix3(_nm).normalize(); d[j] = _n.x; d[j + 1] = _n.y; d[j + 2] = _n.z;
+      }
+    }
+    return (e.ew = { key, n, a, b, n0, n1 });
+  }
   // the way toward the camera from the point w of the world (along the eye ray; for an orthographic camera along its axis)
   const viewAt = (C, w, out) => C.ortho ? out.set(C.bx, C.by, C.bz) : out.set(C.cx - w.x, C.cy - w.y, C.cz - w.z).normalize();
   // w moved toward the camera: the depth steps, and `reach` CSS pixels times tanT (the tangent of the angle at which the steepest face
@@ -63547,20 +64265,7 @@ const _Elements = (() => {
   const pointNormalCache = new WeakMap();
   function pointNormals(topo) {
     let a = pointNormalCache.get(topo.normal);
-    if (a) return a;
-    const nV = topo.nVert, N = topo.normal, s = new Float32Array(nV * 3);
-    for (let t = 0; t < topo.nTri; t++) for (let k = 0; k < 3; k++) { const v = topo.tri[t * 3 + k] * 3; s[v] += N[t * 3]; s[v + 1] += N[t * 3 + 1]; s[v + 2] += N[t * 3 + 2]; }
-    a = new Float32Array(nV * 4);
-    for (let v = 0; v < nV; v++) { const l = Math.hypot(s[v * 3], s[v * 3 + 1], s[v * 3 + 2]) || 1; a[v * 4] = s[v * 3] / l; a[v * 4 + 1] = s[v * 3 + 1] / l; a[v * 4 + 2] = s[v * 3 + 2] / l; }
-    for (let t = 0; t < topo.nTri; t++) {
-      const nx = N[t * 3], ny = N[t * 3 + 1], nz = N[t * 3 + 2];
-      if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
-      for (let k = 0; k < 3; k++) {
-        const v = topo.tri[t * 3 + k] * 4, ang = Math.acos(Math.max(-1, Math.min(1, nx * a[v] + ny * a[v + 1] + nz * a[v + 2])));
-        if (ang > a[v + 3]) a[v + 3] = ang;
-      }
-    }
-    pointNormalCache.set(topo.normal, a);
+    if (!a) pointNormalCache.set(topo.normal, a = MEDIT.vertexNormals(topo));
     return a;
   }
   // items: [{ p, topo, list }] (list: a Set of the points to show, or null for all of them). Returns true when something on screen changed.
@@ -63652,6 +64357,7 @@ const _Elements = (() => {
   function dotsOff() {
     for (const L of Object.values(dotLayers)) { L.sprite.visible = false; L.sprite.count = 0; L.depth.visible = false; L.depth.count = 0; L.key = null; }
     for (const L of Object.values(fatLayers)) { L.mesh.visible = false; L.mesh.geometry.instanceCount = 0; }
+    pickEdgeKey = ''; pickEdgeN = 0;
     if (hotFill) hotFill.visible = false;
   }
 
@@ -63669,34 +64375,7 @@ const _Elements = (() => {
   // For each vertex of the surface: the average normal of the triangles that meet at its point (xyz) and how far the most turned
   // one is from it (w), so the line's shader can pull it further in front where the faces are steep to the view. The normals are
   // taken the same way round (a mesh with mixed winding would cancel itself out), made once per read.
-  function slopeOf(R) {
-    if (R.slope) return R.slope;
-    const t = R.topo, nV = t.nVert, nRaw = t.nRaw, sum = new Float32Array(nV * 3), ref = new Float32Array(nV * 3), spread = new Float32Array(nV);
-    const nrm = t.normal, tri = t.tri;
-    for (let i = 0; i < t.nTri; i++) {
-      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
-      if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
-      for (let k = 0; k < 3; k++) {
-        const w = tri[i * 3 + k] * 3;
-        if (!ref[w] && !ref[w + 1] && !ref[w + 2]) { ref[w] = nx; ref[w + 1] = ny; ref[w + 2] = nz; }
-        const s = (nx * ref[w] + ny * ref[w + 1] + nz * ref[w + 2]) < 0 ? -1 : 1;
-        sum[w] += s * nx; sum[w + 1] += s * ny; sum[w + 2] += s * nz;
-      }
-    }
-    for (let w = 0; w < nV; w++) { const l = Math.hypot(sum[w * 3], sum[w * 3 + 1], sum[w * 3 + 2]) || 1; sum[w * 3] /= l; sum[w * 3 + 1] /= l; sum[w * 3 + 2] /= l; }
-    for (let i = 0; i < t.nTri; i++) {
-      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
-      if (!nx && !ny && !nz) continue;
-      for (let k = 0; k < 3; k++) {
-        const w = tri[i * 3 + k], d = Math.abs(nx * sum[w * 3] + ny * sum[w * 3 + 1] + nz * sum[w * 3 + 2]);
-        const a = Math.acos(Math.min(1, d));
-        if (a > spread[w]) spread[w] = a;
-      }
-    }
-    const out = new Float32Array(nRaw * 4);
-    for (let i = 0; i < nRaw; i++) { const w = t.weld[i]; out[i * 4] = sum[w * 3]; out[i * 4 + 1] = sum[w * 3 + 1]; out[i * 4 + 2] = sum[w * 3 + 2]; out[i * 4 + 3] = spread[w]; }
-    return (R.slope = out);
-  }
+  function slopeOf(R) { return R.slope || (R.slope = MEDIT.lineSlopes(R.topo)); }
   function unwire(id) { const w = wires.get(id); if (!w) return false; try { group && group.remove(w.obj); w.obj.geometry.dispose(); } catch (_) {} wires.delete(id); return true; }
   function showWires() {
     let ch = false;
@@ -63723,6 +64402,7 @@ const _Elements = (() => {
         g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(_wireXYZ(attr, false)), 3));
         g.setIndex(new THREE.BufferAttribute(R.lines, 1));
         g.setAttribute('slope', new THREE.BufferAttribute(slopeOf(R), 4));
+        g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));      // (the shader reads the slope; _stampGeometry would work one out)
         const obj = new THREE.LineSegments(_stampGeometry(g), wireMat());
         obj.matrixAutoUpdate = false; obj.frustumCulled = false; obj.raycast = () => {}; obj.renderOrder = 15; obj.userData.partId = id;
         group.add(obj);
@@ -63984,6 +64664,20 @@ const _Elements = (() => {
 
   // For the self-test and for scripts: the same steps without a pointer. pickAt takes a part, a triangle of it and a place on that
   // triangle (the part's own space), and does what a click there does; boxPick and brush take places on the screen.
+  // None of the tools may throw the user out of Edit mesh: if one leaves it (whatever closed the card on the way) with a part still
+  // selected, it is entered again in the mode it was in. The picked pieces are gone after most of them anyway.
+  const keepIn = (fn) => function (...a) {
+    const was = active, m = mode;
+    const r = fn.apply(this, a);
+    if (was) {
+      const back = () => { if (!active && state.selected && state.selected.size && !state._animMode) { try { setMode(MODES.includes(m) ? m : 'faces'); } catch (_) {} } };
+      if (r && typeof r.then === 'function') r.then(back, () => back()); else setTimeout(back, 0);
+      back();
+    }
+    return r;
+  };
+  dissolvePicked = keepIn(dissolvePicked); del = keepIn(del); flipPicked = keepIn(flipPicked); planarizePicked = keepIn(planarizePicked);
+  straightenPicked = keepIn(straightenPicked); weldPicked = keepIn(weldPicked); fillPicked = keepIn(fillPicked); closeOpen = keepIn(closeOpen); extractPicked = keepIn(extractPicked);
   const api = {
     mode: (m) => { if (m) setMode(m); return current(); },
     // what is drawn in the scene now: dots (sprites), wide lines (their count), fills (meshes) (tests/e2e-edit-marks.mjs)
@@ -64698,3 +65392,11 @@ function _recolourFaceGroup(partId, mi, hex) {
   if (q.has('claude') && !window.__MESHOPT_DEMO) { setMode('feed'); setTimeout(() => { try { B().setEnabled(true, true); } catch (_) {} }, 600); }
   else { let m = 'off'; try { m = localStorage.getItem(KEY) || 'off'; } catch (_) {} if (m !== 'off') setMode(m); }
 })();
+
+// (a refresh: the browser puts a scrolled panel back where it was after the page has loaded, so this runs after that as well)
+{
+  const _again = () => _holdAtTop();
+  _resetToNormal();      // (now, while the sidebars are still faded in by the boot animation: nothing is seen to move)
+  if (document.readyState === 'complete') _again(); else window.addEventListener('load', _again, { once: true });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) _again(); });
+}

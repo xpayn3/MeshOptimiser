@@ -19,7 +19,7 @@
   ];
   // Surfaces: the ramp the whole interface is built from.
   var TONES = {
-    graphite: { label: 'Graphite', '--bg': '#101010', '--bg1': '#141414', '--bg2': '#1c1c1c', '--bg3': '#252525', '--bg4': '#2f2f2f', '--bd': '#2c2c2c', '--bd2': '#444444', '--surface-pop': '#161616', '--bg-checker': '#181818', '--surface-bar': 'rgba(16,16,16,.94)', '--glass-strong': 'rgba(20,20,20,.92)' },
+    graphite: { label: 'Graphite', '--bg': '#141414', '--bg1': '#181818', '--bg2': '#202020', '--bg3': '#292929', '--bg4': '#333333', '--bd': '#303030', '--bd2': '#484848', '--surface-pop': '#1a1a1a', '--bg-checker': '#1c1c1c', '--surface-bar': 'rgba(20,20,20,.94)', '--glass-strong': 'rgba(20,20,20,.92)' },
     midnight: { label: 'Midnight', '--bg': '#0e1116', '--bg1': '#12151b', '--bg2': '#191d25', '--bg3': '#222833', '--bg4': '#2c3441', '--bd': '#283040', '--bd2': '#41506a', '--surface-pop': '#141820', '--bg-checker': '#171b22', '--surface-bar': 'rgba(14,17,22,.94)', '--glass-strong': 'rgba(18,21,27,.92)' },
     warm:     { label: 'Warm',     '--bg': '#121110', '--bg1': '#171514', '--bg2': '#1f1c1a', '--bg3': '#292623', '--bg4': '#35312d', '--bd': '#332f2a', '--bd2': '#4d4740', '--surface-pop': '#181615', '--bg-checker': '#1a1816', '--surface-bar': 'rgba(18,17,16,.94)', '--glass-strong': 'rgba(23,21,20,.92)' },
     black:    { label: 'Black',    '--bg': '#000000', '--bg1': '#060606', '--bg2': '#0e0e0e', '--bg3': '#171717', '--bg4': '#212121', '--bd': '#1f1f1f', '--bd2': '#3a3a3a', '--surface-pop': '#0a0a0a', '--bg-checker': '#0c0c0c', '--surface-bar': 'rgba(0,0,0,.94)', '--glass-strong': 'rgba(6,6,6,.92)' }

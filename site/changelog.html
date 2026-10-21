@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.3." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.4." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.3." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.4." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -50,16 +50,33 @@
     <section class="wrap page-head">
       <p class="kicker">Changelog</p>
       <h1>What changed.</h1>
-      <p class="lead">Every release, with the fixes that went into it. The app’s own change log on GitHub has 150 fixes in it, and the ones that mattered most are here.</p>
+      <p class="lead">Every release, with the fixes that went into it. The app’s own change log on GitHub lists every one; the ones that mattered most are here.</p>
     </section>
     <section class="wrap">
       <ol class="log">
-        <li id="v0.35.3">
+        <li id="v0.35.4">
           <div class="log-head">
-            <strong>v0.35.3</strong><em>Latest</em><span>20 Oct 2026</span><span>240 fixes</span>
+            <strong>v0.35.4</strong><em>Latest</em><span>21 Oct 2026</span><span>3 fixes</span>
           </div>
           <div class="log-body">
-            <p>Smart optimise looks through the model before it changes anything, the colour picker has a right-click menu, and the colours, spacing and buttons of the whole app were gone through again. 240 fixes in all.</p>
+            <p>Edit mesh keeps up with big models: a part of millions of triangles is read in the background, shows its points, and moves and box-picks without holding the view up. 3 fixes.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>A very big part is read in the background as soon as you go into Edit mesh, and the view keeps turning meanwhile. A click or a box you make before it is ready is made as soon as it is.</span></li>
+              <li><b class="is-new">New</b><span>Points mode shows up to two million points, so a part of millions of triangles shows its points a few seconds after you go into the mode.</span></li>
+              <li><b class="is-new">New</b><span>Moving picked pieces on a part of two million triangles takes half a second instead of five, and a box over it follows the mouse again.</span></li>
+              <li><b class="is-new">New</b><span>Many picked edges or points no longer slow the pointer and the view down.</span></li>
+              <li><b class="is-new">New</b><span>Merge by group names the merged part after its group.</span></li>
+              <li><b class="is-fix">Fix</b><span>Dissolving a point on an edge line that has another line ending at it did nothing.</span></li>
+              <li><b class="is-fix">Fix</b><span>The CAD view painted merged and painted parts grey, and the Edit mesh tools could drop you out of Edit mesh.</span></li>
+            </ul>
+          </div>
+        </li>
+        <li id="v0.35.3">
+          <div class="log-head">
+            <strong>v0.35.3</strong><span>20 Oct 2026</span><span>7 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>Smart optimise looks through the model before it changes anything, the colour picker has a right-click menu, and the colours, spacing and buttons of the whole app were gone through again. 7 fixes.</p>
             <ul>
               <li><b class="is-new">New</b><span>Smart optimise scans first. A list says what it found (empty parts, exact copies, hidden parts, fasteners, small parts, holes), and Highlight and Isolate show you those parts before anything is changed.</span></li>
               <li><b class="is-new">New</b><span>The colour picker has a right-click menu: copy and paste the colour, and read it as HEX, RGB, HSV or HSL.</span></li>
@@ -74,10 +91,10 @@
         </li>
         <li id="v0.35.2">
           <div class="log-head">
-            <strong>v0.35.2</strong><span>20 Oct 2026</span><span>233 fixes</span>
+            <strong>v0.35.2</strong><span>20 Oct 2026</span><span>7 fixes</span>
           </div>
           <div class="log-body">
-            <p>Parts can be copied from one scene tab or one window into another, the app opens in a window of its own, and Animate edits several clips at once. 233 fixes in all.</p>
+            <p>Parts can be copied from one scene tab or one window into another, the app opens in a window of its own, and Animate edits several clips at once. 7 fixes.</p>
             <ul>
               <li><b class="is-new">New</b><span>Copy parts from one scene into another, in a tab or in another window, with their colours, materials and pictures. A pill on top of the view says what came across.</span></li>
               <li><b class="is-new">New</b><span>Menu › New window opens the app again in a window of its own, and the app menu has a Website link.</span></li>
@@ -92,10 +109,10 @@
         </li>
         <li id="v0.35.1">
           <div class="log-head">
-            <strong>v0.35.1</strong><span>19 Oct 2026</span><span>226 fixes</span>
+            <strong>v0.35.1</strong><span>19 Oct 2026</span><span>12 fixes</span>
           </div>
           <div class="log-body">
-            <p>Big STEP files are meshed on all cores, the command cards line up, and drags stay smooth on a big model. 226 fixes in all.</p>
+            <p>Big STEP files are meshed on all cores, the command cards line up, and drags stay smooth on a big model. 12 fixes.</p>
             <ul>
               <li><b class="is-new">New</b><span>Big STEP files are meshed on all cores. A 357 MB engine opens in 81 seconds instead of 103, and a 45 MB gearbox meshes in under five.</span></li>
               <li><b class="is-new">New</b><span>A tool’s card shows the Wireframe on the part in work only, so each step of a slider is easy to see.</span></li>
@@ -110,7 +127,7 @@
         </li>
         <li id="v0.35.0">
           <div class="log-head">
-            <strong>v0.35.0<b class="rel-code">Vipava</b></strong><span>19 Oct 2026</span><span>214 fixes</span>
+            <strong>v0.35.0<b class="rel-code">Vipava</b></strong><span>19 Oct 2026</span><span>95 fixes</span>
           </div>
           <div class="log-body">
             <p>One part can wear several colours. STEP files open with clean, even strips on fillets, and Photo mode draws the model for pictures. 214 fixes, from textures and UVs to models from Blender.</p>
@@ -833,7 +850,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.35.3</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.35.4</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

@@ -16,6 +16,8 @@
 //   { op: 'repair',   src: { position, uv?, normal?, index?, groups? }, opts } → what repairMesh returns (meshrepair.js)
 //   { op: 'ngons',    positions, index, angle, poly }       → the outlines of the polygons (wirelines.js)
 //   { op: 'quads',    positions, index }                    → the outlines of the four-sided pairs of triangles (meshedit.js)
+//   { op: 'editRead', positions, index, key, angle, poly }  → Edit mesh's reading of a part (meshedit.js): topo (without positions and
+//                                                            index), pg, lines, corner, slope, vn; key: 'quads', 'ids' (poly) or 'tri'
 //   { op: 'untriangulate', positions, index, groups, angle, normals, threeUrl }
 //                                                            → rebuilt triangles per material group (untriangulate.js)
 //     (quads: true pairs triangles into quads instead, pairIntoQuads: faceDeg, shapeDeg, uvs, cadFace; the triangles stay)
@@ -34,7 +36,7 @@ import { reduceIndex } from './simplify-core.js?v=6';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { repairMesh, analyseNormals } from './meshrepair.js?v=8';
 import { findRepeats } from './repeats.js?v=1';
-import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedit.js?v=5';
+import { buildTopology, pairQuads, buildPolygons, outlineLines, outlinePoints, lineSlopes, vertexNormals } from './meshedit.js?v=6';
 import { untriangulate, evenTriangles, pairIntoQuads } from './untriangulate.js?v=12';
 import { unsubdivide } from './unsubdivide.js?v=1';
 import { voxelRemesh } from './voxel.js?v=4';
@@ -208,6 +210,19 @@ self.onmessage = async (e) => {
         transfer.push(idx.buffer);
       }
       self.postMessage({ id: m.id, ok: true, parts, err }, transfer);
+      return;
+    }
+    if (m.op === 'editRead') {
+      const topo = buildTopology(m.positions, m.index || null);
+      let polyOf = null, count = 0;
+      if (m.key === 'ids') { const a = analysePolygons(m.positions, m.index || null, m.angle || 1, m.poly || null); if (a) { polyOf = a.poly; count = a.polys; } }
+      else if (m.key === 'quads') { const q = pairQuads(topo); polyOf = q.polyOf; count = q.count; }
+      const pg = buildPolygons(topo, polyOf, count);
+      const out = { lines: outlineLines(topo, pg), corner: outlinePoints(topo, pg), slope: lineSlopes(topo), vn: vertexNormals(topo) };
+      const t = { ...topo }; delete t.positions; delete t.index;
+      const bufs = new Set();
+      for (const o of [t, pg, out]) for (const k in o) { const v = o[k]; if (v && ArrayBuffer.isView(v)) bufs.add(v.buffer); }
+      self.postMessage({ id: m.id, ok: true, topo: t, pg, ...out }, [...bufs]);
       return;
     }
     if (m.op === 'quads') {

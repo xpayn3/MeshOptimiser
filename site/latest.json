@@ -1,31 +1,31 @@
 {
  "schema": 1,
  "stable": {
-  "version": "0.35.3",
-  "date": "2026-10-20",
-  "headline": "Smart optimise scans first, a right-click menu in the colour picker, a cleaner look",
+  "version": "0.35.4",
+  "date": "2026-10-21",
+  "headline": "Edit mesh keeps up with big models",
   "notes": [
-   "Smart optimise scans the model first and lists what it found, with Highlight and Isolate.",
-   "A right-click menu in the colour picker: copy, paste and the colour spaces.",
-   "Click a material to pick it, double-click to open it, Delete takes it off.",
-   "A saved scene reopens with the same parts selected.",
-   "A new black, flat buttons and one check box throughout.",
-   "The Quick wand is on Q; W switches the gizmo between World and Local."
+   "A very big part is read in the background as soon as you go into Edit mesh.",
+   "Points mode shows up to two million points.",
+   "Moving picked pieces on a part of millions of triangles takes half a second, not five.",
+   "The box picks quickly on a big part, and many picked pieces no longer slow the view.",
+   "Merge by group names the merged part after its group.",
+   "Fixes for Dissolve, colours in the CAD view and staying in Edit mesh."
   ],
   "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
   "archive": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.3/meshoptimiser-app-0.35.3.zip",
-   "sha256": "97a211ed48b2f28124fd314acf1eef04a23574949dc9985a8c064b35e7829a20",
-   "size": 11984198
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.4/meshoptimiser-app-0.35.4.zip",
+   "sha256": "48b1370cc185722b715e68884269f3e1d843098a75f16d123fdd82795a8c3d9b",
+   "size": 11991932
   },
   "requirements_sha256": "e3af5e22260095931b56d0d0d5c9215cd98b7540739be7eda417276748a7a322",
   "requirements_changed": false,
   "launcher": 4,
   "min_from": "",
   "installer": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.3/MeshOptimiser-v0.35.3.zip",
-   "sha256": "9dc6e07c081ecc73110c88dadea6999135bc8fbfb8c7bf60690b3439ecabbc24",
-   "size": 12027164
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.4/MeshOptimiser-v0.35.4.zip",
+   "sha256": "613892e8a0d314bcf8973ff347ec35e78372839d0f5c2ad188aaef06e05a1d8d",
+   "size": 12035161
   }
  }
 }
