@@ -41,9 +41,9 @@ const SHOWCASE = [
   { title: 'Make it yours', note: 'The app', names: ['Keyboard remapper', 'A look of your own', 'Numbers you drag', 'Cards over the model', 'Scene tabs', 'Floating Materials and Library'] },
   { title: 'Work with Claude', note: 'Ask for it', names: ['Just ask', 'You decide', 'Try it first', 'One request, a whole job', 'A whole folder', 'Pictures for a client'] },
 ];
-const CSS_V = 518;
+const CSS_V = 521;
 const RP_V = 2;           // report.js
-const JS_V = 144;
+const JS_V = 145;
 
 // The pages of an app's site, in the order of its navigation. `file` is
 // written into site.path; `nav` is false for a page the header leaves out.
@@ -113,7 +113,17 @@ function siteFor(app, docs) {
   // ---- pieces shared by the pages ----
   const head = (page, title, description) => {
     const url = home + (page.file === 'index.html' ? '' : page.file.replace(/\.html$/, ''));   // (docs/<slug>.html → docs/<slug>)
+    // the home page says what the site is called (Google shows it as the site name above the result) and what the app is
     const structured = page.key !== 'home' ? '' : `
+  <script type="application/ld+json">
+${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: app.title,
+    alternateName: app.title.replace(/([a-z])([A-Z])/, '$1 $2'),
+    url: home,
+  }, null, 2)}
+  </script>
   <script type="application/ld+json">
 ${JSON.stringify({
     '@context': 'https://schema.org',
@@ -139,7 +149,8 @@ ${JSON.stringify({
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#131314" />
   <meta name="color-scheme" content="dark" />
-  <meta name="robots" content="noai, noimageai" />
+  <meta name="robots" content="noai, noimageai" />${page.key === 'home' && site.googleVerify ? `
+  <meta name="google-site-verification" content="${esc(site.googleVerify)}" />` : ''}
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(clamp(description, 160))}" />
   <link rel="icon" type="image/svg+xml" href="${asset(app.icon)}" />
@@ -1237,7 +1248,7 @@ ${st.tiles.map(([label, claim, rest, line, colour], i) => `          <article cl
 `;
   };
 
-  pages.home = (page) => head(page, `${app.title} — ${app.subtitle}`, site.shareText || site.lead) + header(page) + `
+  pages.home = (page) => head(page, site.titleTag || `${app.title} — ${app.subtitle}`, site.description || site.shareText || site.lead) + header(page) + `
     <section class="wrap hero">
       <p class="kicker">${[version && 'v' + version, app.stage, licence, platform.replace(/\s*·\s*/g, ' and ')].filter(Boolean).map(esc).join('<b>·</b>')}</p>
       <h1>${esc(app.subtitle)}</h1>

@@ -610,6 +610,8 @@ window.labApps = [
       titleTag: 'MeshOptimiser — Make a CAD assembly light enough for the web. Free.',
       description: 'Turn a heavy STEP assembly into a small GLB on your own computer. Free and open source, the model never leaves your machine, and you see what you throw away.',
       lead: 'The free mesh editor that runs in your browser, built for big CAD assemblies. Everything stays on your computer.',
+      // Google Search Console: the code of its HTML-tag check (only the content="…" part), so the home page can prove the site is Luka's
+      googleVerify: '',
       shareText: 'Turn a heavy CAD assembly into a light GLB for the web. Free, and it runs on your computer.',
       // four claims under the opening: [claim, a line about it]
       claims: [
