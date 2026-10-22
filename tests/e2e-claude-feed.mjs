@@ -10,6 +10,10 @@ import fs from 'fs';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
+// the second model, opened over the first; it has to be under app/ (the server shows nothing else). It was inbox/coral.glb, a customer's model
+// that is not on this computer: the server answered 404 with its HTML page, and that page went into the loader ("Unexpected token '<'").
+const SECOND = process.env.SECOND_MODEL || 'inbox/shapes_test.glb';
+const isSecond = (file) => String(file || '').toLowerCase().includes(path.basename(SECOND, path.extname(SECOND)).toLowerCase());
 const PORT = 9347, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-feed-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
@@ -72,8 +76,11 @@ try {
   check('the screenshot is shown as a picture', dump.imgs === 1, dump);
   check('the order is the order of the calls', dump.items.length === 5 && /Model opened/.test(dump.items[0]) && /heaviest/.test(dump.items[1]) && /scene summary/i.test(dump.items[2]) && /screenshot/i.test(dump.items[3]), dump.items);
   check('the viewport canvas is still laid out under the feed (screenshots keep their size)', await evalJS("(() => { const r = document.getElementById('viewport').getBoundingClientRect(); return r.width > 400 && r.height > 300; })()"));
-  await evalJS("document.getElementById('cf-view').click()"); await sleep(300);
-  check('Show viewport: split mode, the feed is a column', await evalJS("document.body.classList.contains('claude-split') && document.getElementById('claude-feed').getBoundingClientRect().width < 600"));
+  await evalJS("document.getElementById('cf-view').click()");
+  // (the feed narrows with a .55 s transition: at a fixed 300 ms it was still wider than 600 px when the machine was busy, so wait for it, up to 3 s)
+  const splitOk = "document.body.classList.contains('claude-split') && document.getElementById('claude-feed').getBoundingClientRect().width < 600";
+  for (let i = 0; i < 30 && !(await evalJS(splitOk)); i++) await sleep(100);
+  check('Show viewport: split mode, the feed is a column', await evalJS(splitOk), await evalJS("[document.body.classList.contains('claude-split'), Math.round(document.getElementById('claude-feed').getBoundingClientRect().width)]"));
   await sleep(1800);
   check('split: the app chrome is gone (top bar, sidebars, status bar, viewport tools)', await evalJS("['tb','sidebar-left','sidebar-right','sb','vp-overlay'].every(i => getComputedStyle(document.getElementById(i)).display === 'none')"));
   check('split: the viewport card fills the rest of the window', await evalJS("(() => { const r = document.getElementById('viewport').getBoundingClientRect(), f = document.getElementById('claude-feed').getBoundingClientRect(); return r.left > f.right && r.left - f.right < 24 && innerWidth - r.right < 24 && r.top < 24 && innerHeight - r.bottom < 24; })()"));
@@ -108,10 +115,11 @@ try {
   check('the loading card goes away when the task ends', await evalJS("document.querySelector('#claude-feed .cf-load').hidden"));
   // opening another model replaces the one in the viewport (no scene tab laid over it) and starts a new "Model opened" card
   const framesBefore = await evalJS("document.querySelectorAll('iframe.mo-tab-frame').length");
-  await evalJS(`(async () => { const r = await fetch('inbox/coral.glb'); const b = await r.blob(); const f = new File([b], 'coral.glb'); const dt = new DataTransfer(); dt.items.add(f); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  const secondOk = await evalJS(`(async () => { const r = await fetch(${JSON.stringify(SECOND)}); if (!r.ok) return r.status; const b = await r.blob(); const f = new File([b], ${JSON.stringify(path.basename(SECOND))}); const dt = new DataTransfer(); dt.items.add(f); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  if (secondOk !== true) console.log('   the second model', SECOND, 'is not served (HTTP ' + secondOk + '): put one under app/ or set SECOND_MODEL');
   let swapped = null;
-  for (let i = 0; i < 40; i++) { await sleep(500); swapped = await evalJS("(async () => { const j = JSON.parse((await window.__moBridgeTools.scene_summary())[0].text); return { file: j.file, parts: j.parts, tabs: window.__moTabs.tabs.filter(t => !t.closed).length, frames: document.querySelectorAll('iframe.mo-tab-frame').length, cards: document.querySelectorAll('#claude-feed .cf-model').length }; })()"); if (/coral/i.test(swapped.file || '') && swapped.cards >= 2) break; }
-  check('opening another model replaces it in place: same scene, no new tab, a second Model opened card', swapped && /coral/i.test(swapped.file || '') && swapped.tabs === 1 && swapped.frames === framesBefore && swapped.cards >= 2, swapped);
+  for (let i = 0; i < 40; i++) { await sleep(500); swapped = await evalJS("(async () => { const j = JSON.parse((await window.__moBridgeTools.scene_summary())[0].text); return { file: j.file, parts: j.parts, tabs: window.__moTabs.tabs.filter(t => !t.closed).length, frames: document.querySelectorAll('iframe.mo-tab-frame').length, cards: document.querySelectorAll('#claude-feed .cf-model').length }; })()"); if (isSecond(swapped.file) && swapped.cards >= 2) break; }
+  check('opening another model replaces it in place: same scene, no new tab, a second Model opened card', swapped && isSecond(swapped.file) && swapped.tabs === 1 && swapped.frames === framesBefore && swapped.cards >= 2, swapped);
   // a scene tab is the viewport card, not the whole app over the window
   await evalJS("window.__moBridgeTools.scene_tabs({ action: 'new' })"); await sleep(5000);
   const fr = await evalJS("(() => { const f = document.querySelector('iframe.mo-tab-frame:not([style*=\"display: none\"])') || document.querySelector('iframe.mo-tab-frame'); if (!f) return null; const r = f.getBoundingClientRect(), fe = document.getElementById('claude-feed').getBoundingClientRect(); let cls = false; try { cls = f.contentDocument.body.classList.contains('claude-mode'); } catch (_) {} return { z: getComputedStyle(f).zIndex, left: Math.round(r.left), feedRight: Math.round(fe.right), top: Math.round(r.top), cls, tb: (() => { try { return getComputedStyle(f.contentDocument.getElementById('tb')).display; } catch (_) { return 'x'; } })() }; })()");

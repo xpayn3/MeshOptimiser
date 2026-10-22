@@ -4,7 +4,8 @@
 // running CSS animation, no style or layout work. The app is opened empty, then with the Gearbox assembly, with a part selected,
 // with every sidebar section open, and with each window and popup open in turn; in each state it is left alone for a few seconds
 // and everything that still ran is counted (WebGL draw calls per canvas, 2D canvas calls, animation-frame callbacks and timers by
-// source, running animations, Chrome's own style-recalc and layout counts). Needs the app served on APP_PORT (default 4242),
+// source, running animations, Chrome's own style-recalc and layout counts). WebGPU frames count with the draw calls: a canvas taking a
+// new texture, and queue submits. Needs the app served on APP_PORT (default 4242),
 // Chrome and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
@@ -57,6 +58,15 @@ const HOOK = `(() => {
     }
     return ctx;
   };
+  // WebGPU: a frame on a canvas takes a new texture from its context; anything else drawn (a render target) is a queue submit
+  if (window.GPUCanvasContext) {
+    const gct = GPUCanvasContext.prototype.getCurrentTexture;
+    GPUCanvasContext.prototype.getCurrentTexture = function (...x) { bump(P.gl, canvasName(this.canvas) + ' (webgpu frame)'); return gct.apply(this, x); };
+  }
+  if (window.GPUQueue) {
+    const sub = GPUQueue.prototype.submit;
+    GPUQueue.prototype.submit = function (...x) { bump(P.gl, 'webgpu queue submit'); return sub.apply(this, x); };
+  }
   const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (cb) => raf((t) => { bump(P.raf, src(cb)); return cb(t); });
   const st = window.setTimeout.bind(window), si = window.setInterval.bind(window);

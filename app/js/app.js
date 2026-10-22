@@ -1,15 +1,17 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=33';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=34';
 import { installHoleFillCard } from './holefill-card.js?v=1';
+import { installProfileCard } from './profile-card.js?v=7';
+import { installRoundCard } from './round-card.js?v=3';
 import { installDecimateCard } from './decimate-card.js?v=2';
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
-import { fillRoundGrooves, outlineRevolve, revolveLoops, sweepBelt, sweepLoops } from './revolve.js?v=8';
+import { fillRoundGrooves, outlineRevolve, sweepBelt } from './revolve.js?v=8';
 import { voxelRemesh } from './voxel.js?v=4';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=13';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=18';
 import { carryUvs } from './uvcarry.js?v=2';
-import { createPhoto } from './photo.js?v=6';
+import { createPhoto } from './photo.js?v=9';
 import * as MEDIT from './meshedit.js?v=6';
 import { dissolvePoints } from './dissolve.js?v=3';
 import * as MT from './meshtools.js?v=5';
@@ -21,6 +23,8 @@ import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from '
 import { findRepeats } from './repeats.js?v=1';
 import { checkMesh } from './meshcheck.js?v=3';
 import * as FM from './facemat.js?v=2';
+import { setExportTextureFormats } from './texformat.js?v=1';
+import * as TS from './texsets.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // OBJ export uses our own streaming writer (_exportObjStreaming) to avoid
@@ -28,7 +32,8 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { PLYExporter } from 'three/addons/exporters/PLYExporter.js';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
-// (USDZExporter, FBXLoader and 3MFLoader are loaded when a file of that kind is exported / opened: most sessions never need them)
+// (USDZExporter, FBXLoader, 3MFLoader, USDLoader and ColladaLoader are loaded when a file of that kind is exported / opened: most
+// sessions never need them)
 import { GLTFLoader }  from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader }   from 'three/addons/loaders/OBJLoader.js';
 import { STLLoader }   from 'three/addons/loaders/STLLoader.js';
@@ -205,6 +210,7 @@ if (typeof window !== 'undefined') {
 const RENDER_DECAY_FRAMES = 2;
 function requestRender(decay = RENDER_DECAY_FRAMES) {
   state.needsRender = true;
+  state._renderAsks = (state._renderAsks || 0) + 1;      // (Photo mode starts its average again when anyone else asks for a frame)
   if (decay > state.activeFrames) state.activeFrames = decay;
 }
 // O(1) part lookup. Always rebuild via _reindexParts() after parts changes.
@@ -1556,11 +1562,20 @@ function _typingTarget(e) {
 const _exNeg = new THREE.Vector3();
 function _refreshPartBBox(p) {
   if (p && p.isSpline) { _refreshSplineBBox(p); return; }          // (the stand-in mesh has nothing of its own)
-  const g = p && p.mesh && p.mesh.geometry;
-  if (!g) return;
-  if (!g.boundingBox) g.computeBoundingBox();
-  p.mesh.updateWorldMatrix(true, false);
-  const b = g.boundingBox.clone().applyMatrix4(p.mesh.matrixWorld);
+  let b;
+  if (p && p.isCloner && p.mesh) {
+    // A cloner's "mesh" is a group with no geometry of its own: its box is the whole array, copies and all. (It used to keep the box of
+    // its source from when it was made, so after a move the near plane cut away the copies nearer the camera.)
+    p.mesh.updateWorldMatrix(true, true);
+    b = new THREE.Box3().setFromObject(p.mesh);
+    if (b.isEmpty()) return;
+  } else {
+    const g = p && p.mesh && p.mesh.geometry;
+    if (!g) return;
+    if (!g.boundingBox) g.computeBoundingBox();
+    p.mesh.updateWorldMatrix(true, false);
+    b = g.boundingBox.clone().applyMatrix4(p.mesh.matrixWorld);
+  }
   // While the view is exploded the part is drawn pushed apart, but p.bbox is the box of the ASSEMBLED model (everything that culls, frames or
   // measures adds the explode offset, p._exOff, on top). Measured from where the part is drawn, a tool that rewrote the geometry (Decimate,
   // a repair, a transform) left the box offset twice: the part was culled, framed and measured in the wrong place.
@@ -1617,7 +1632,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=72', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=79', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -2426,6 +2441,11 @@ const _MESH_LOADERS = {
   obj:  loadObjFile,
   '3mf': load3mfFile,
   stl:  loadStlFile,
+  usd:  loadUsdFile,
+  usda: loadUsdFile,
+  usdc: loadUsdFile,
+  usdz: loadUsdFile,
+  dae:  loadDaeFile,
 };
 function _loaderForName(name) {
   const m = /\.([^.]+)$/.exec(name || '');
@@ -2466,7 +2486,7 @@ const _ImportSettings = (() => {
   const _num = (id, lo, hi, dflt) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : dflt; };
   const _setNum = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(+(+v).toFixed(4)); };
   function _presetFor(sag, angle) { for (const k in _PRESETS) if (Math.abs(_PRESETS[k][0] - sag) < 1e-9 && Math.abs(_PRESETS[k][1] - angle) < 1e-9) return k; return 'custom'; }
-  const DEFAULTS_MESH = { append: false, fit: true, keepUv: true };
+  const DEFAULTS_MESH = { append: false, fit: true, keepUv: true, texSets: true };
 
   function _ext(name) { const m = /\.([^.]+)$/.exec(name || ''); return m ? m[1].toLowerCase() : ''; }
   function _skipModal(ext) {
@@ -2532,6 +2552,7 @@ const _ImportSettings = (() => {
     document.getElementById('imp-append').checked = !!opts.append;
     document.getElementById('imp-fit').checked    = !!opts.fit;
     document.getElementById('imp-keep-uv').checked = opts.keepUv !== false;
+    { const ts = document.getElementById('imp-tex-sets'); if (ts) ts.checked = opts.texSets !== false; }
     document.getElementById('imp-skip-next').checked = false;
     _syncSeg();
   }
@@ -2600,6 +2621,7 @@ const _ImportSettings = (() => {
       fit:    document.getElementById('imp-fit').checked,
     };
     if (!isStep) out.keepUv = document.getElementById('imp-keep-uv').checked;
+    if (!isStep) out.texSets = document.getElementById('imp-tex-sets')?.checked !== false;
     if (isStep) {
       out.quality   = document.getElementById('imp-step-quality').value;
       out.sag       = _num('imp-step-sag', 0.001, 100, 0.5);
@@ -2686,7 +2708,7 @@ const _ImportSettings = (() => {
   // Reset all per-format "don't ask" flags (Settings › Storage › Import options).
   function resetSkips() {
     try {
-      for (const ext of ['step','stp','iges','igs','brep','brp','fbx','obj','3mf','stl']) {
+      for (const ext of ['step','stp','iges','igs','brep','brp','fbx','obj','3mf','stl','usd','usda','usdc','usdz','dae']) {
         localStorage.removeItem('import_skip_' + ext);
       }
     } catch (_) {}
@@ -2716,7 +2738,7 @@ async function _handleSelectedFile(file) {
   const isStep = /\.(step|stp|iges|igs|brep|brp)$/i.test(file.name);
   const meshLoader = _loaderForName(file.name);
   if (!isStep && !meshLoader) {
-    toast('Unsupported file type', 'Supported: .step, .stp, .iges, .igs, .brep, .brp, .glb, .gltf, .fbx, .obj, .3mf, .stl', 'warn');
+    toast('Unsupported file type', 'Supported: .step, .stp, .iges, .igs, .brep, .brp, .glb, .gltf, .fbx, .obj, .3mf, .stl, .usd, .usda, .usdc, .usdz, .dae', 'warn');
     return;
   }
   // The picker callers (_importWithPicker) pre-set state._importMode to true
@@ -2772,6 +2794,7 @@ async function _handleSelectedFile(file) {
   // Stash fit-to-view choice on a parallel flag the post-load hooks check.
   state._importFitOnLoad = !!opts.fit;
   state._importKeepUv = opts.keepUv !== false;      // (texture coordinates stay unless the dialog's switch was turned off)
+  state._importTexSets = opts.texSets !== false;    // (the maps beside an FBX or OBJ, found by name: _applyTextureSets)
 
   // If the welcome was open and we hid it for the modal, restore it briefly
   // and switch it to its loading pane so the user sees progress in-place
@@ -3136,12 +3159,14 @@ async function _openWithPicker(startIn) {
       id: 'mo-open',
       ...(startIn ? { startIn } : {}),
       types: [{
-        description: '3D model (STEP / IGES / glTF / FBX / OBJ / 3MF / STL)',
+        description: '3D model (STEP / IGES / glTF / FBX / OBJ / 3MF / STL / USD / Collada)',
         accept: {
           'model/step':         ['.step', '.stp', '.iges', '.igs', '.brep', '.brp'],
           'model/gltf-binary':  ['.glb'],
           'model/gltf+json':    ['.gltf'],
-          'application/octet-stream': ['.fbx', '.3mf', '.stl'],
+          'application/octet-stream': ['.fbx', '.3mf', '.stl', '.usd', '.usda', '.usdc'],
+          'model/vnd.usdz+zip': ['.usdz'],
+          'model/vnd.collada+xml': ['.dae'],
           'model/obj':          ['.obj'],
         },
       }],
@@ -3177,12 +3202,14 @@ async function _importWithPicker() {
   try {
     const [handle] = await window.showOpenFilePicker({
       types: [{
-        description: '3D model (STEP / IGES / glTF / FBX / OBJ / 3MF / STL)',
+        description: '3D model (STEP / IGES / glTF / FBX / OBJ / 3MF / STL / USD / Collada)',
         accept: {
           'model/step':         ['.step', '.stp', '.iges', '.igs', '.brep', '.brp'],
           'model/gltf-binary':  ['.glb'],
           'model/gltf+json':    ['.gltf'],
-          'application/octet-stream': ['.fbx', '.3mf', '.stl'],
+          'application/octet-stream': ['.fbx', '.3mf', '.stl', '.usd', '.usda', '.usdc'],
+          'model/vnd.usdz+zip': ['.usdz'],
+          'model/vnd.collada+xml': ['.dae'],
           'model/obj':          ['.obj'],
         },
       }],
@@ -3439,8 +3466,7 @@ const _Prefs = (() => {
     orbitLimit: false,       // the camera may not go below the horizon (the grid): no looking up at a model from underneath
     camPan: 1,               // how far a pan drag moves the view
     hoverLink: true,         // the list and the view point at each other: hover a row and the part pulses, hover a part and its row lights
-    roundSegments: 0,        // Round part: the Segments slider as it was last left (0 = the part's own number)
-    roundSmooth: 30,         // Round part: the Smooth up to slider as it was last left, in degrees
+    roundSegments: 0,        // Round part card: Segments around as it was last left (0 = the part's own number)
     voxelCells: 160,         // Voxel remesh: Detail, cells along the part's longest side, as the slider was last left
     voxelAdapt: 0.25,        // Voxel remesh: Adaptivity, how far the reduction may move the surface, in cells (0 = none)
     voxelSmooth: 30,         // Voxel remesh: Smooth up to, in degrees
@@ -4349,6 +4375,7 @@ const _Settings = (() => {
     }, 60);
   }
   function show(pane) {
+    try { window.__moCamPop?.close(); } catch (_) {}          // (the camera popup gives the Camera pane back first)
     _wire(); _assemble(); _fillPrefs(); _fillAppearance(); _fillAbout();
     try { window.MOUpdater?.refresh?.(); } catch (_) {}
     const q = $s('settings-search'); if (q) { q.value = ''; _search(''); }
@@ -4358,7 +4385,10 @@ const _Settings = (() => {
   // (a field of the window must not keep the keyboard once it is closed: the app's shortcuts do nothing while one has it)
   function hide() { const m = $s('settings-modal'); m?.classList.remove('show'); if (m && m.contains(document.activeElement)) document.activeElement.blur(); }
   window.__openSettings = (pane) => show(pane);
-  return { show, hide, openReport: _openReport, index: _index };
+  // The body of the Camera pane, filled as the window would fill it, for the camera popup to show (it is lent, not copied: every control
+  // keeps its id, its listener and the setting it writes).
+  function cameraPane() { _wire(); _assemble(); _fillPrefs(); return $s('set-pane-camera'); }
+  return { show, hide, openReport: _openReport, index: _index, cameraPane };
 })();
 
 const _Welcome = (() => {
@@ -5213,7 +5243,7 @@ const _Actions = (() => {
     { id:'normalsHighlight', group:'Edit',    get label() { return window.__moNormals && window.__moNormals.isHighlighting() ? 'Stop highlighting back faces' : 'Highlight back faces'; }, words:'show hide toggle flipped reversed normals inside out faces red', run: () => { try { window.__moNormals.highlight(); } catch (_) {} } },
     { id:'remesh',        group:'Edit',       label:'Remesh…', words:'remesh… (untriangulate or triangulate)', run: () => _CmdCards.open('remesh') },
     { id:'untriangulate', group:'Edit',       label:'Untriangulate',              kbd:'U', run: () => { try { window.__showRemesh && window.__showRemesh('ut'); } catch (_) {} } },
-    { id:'fillGrooves',   group:'Edit',       label:'Fill round grooves', words:'round part remove ridges fill grooves threads defeature smooth turned lathe revolve spool bushing pulley rebuild', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves(); } catch (_) {} } },
+    { id:'fillGrooves',   group:'Edit',       label:'Round part: remove ridges', words:'round part remove ridges fill grooves threads defeature smooth turned lathe revolve spool bushing pulley rebuild profile section edit points', run: () => { try { window.__moAgent && window.__moAgent.roundCard && window.__moAgent.roundCard({ mode: 'exact' }); } catch (_) {} } },
     { id:'closeCracks', group:'Edit', label:'Close cracks', words:'close cracks gaps stitch seams t-junctions weld open edges watertight repair cad', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('closeCracks'); } catch (_) {} } },
     { id:'removeSlivers', group:'Edit', label:'Remove slivers', words:'remove slivers needles thin triangles caps clean degenerate repair cad', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('removeSlivers'); } catch (_) {} } },
     { id:'roundFaces', group:'Edit', label:'Simplify round faces', words:'simplify round faces fewer segments facets cylinders fillets bores coarser cad step decimate', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('roundFaces'); } catch (_) {} } },
@@ -5228,8 +5258,9 @@ const _Actions = (() => {
     { id:'subtractParts', group:'Edit', label:'Subtract parts', words:'subtract parts boolean difference cut minus manifold', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('subtract'); } catch (_) {} } },
     { id:'intersectParts', group:'Edit', label:'Intersect parts', words:'intersect parts boolean common overlap manifold', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('intersect'); } catch (_) {} } },
     { id:'voxelRemesh',   group:'Edit',       label:'Voxel remesh', words:'voxel remesh dynamesh rebuild retopology uniform even watertight closed solid merge bodies fill hollows close gaps wrap stand-in proxy', run: () => { try { window.__moAgent && window.__moAgent.voxelRemesh && window.__moAgent.voxelRemesh(); } catch (_) {} } },
-    { id:'beltRibs',      group:'Edit',       label:'Belt: remove ribs', words:'belt remove ribs ridges grooves poly-v serpentine drive belt band strap seal sweep spline profile path defeature', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves({ mode: 'belt' }); } catch (_) {} } },
-    { id:'fillGroovesOutline', group:'Edit', label:'Fill solid round', words:'round part make solid fill grooves outline fins ribs fan clutch gear spin envelope proxy stand-in revolve defeature gaps', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves({ mode: 'outline' }); } catch (_) {} } },
+    { id:'beltRibs',      group:'Edit',       label:'Belt: remove ribs', words:'belt remove ribs ridges grooves poly-v serpentine drive belt band strap seal sweep spline profile path defeature', run: () => { try { window.__moAgent && window.__moAgent.roundCard && window.__moAgent.roundCard({ mode: 'belt' }); } catch (_) {} } },
+    { id:'cleanProfile',  group:'Edit',       label:'Profile: clean outline', words:'profile extrusion extruded section cross-section window frame pvc aluminium chambers hollow cells holes notches teeth slots ridges fill solid outline simplify defeature drilled machining mitre mitred bent curved arch whole scene all profiles edit points', run: () => { try { window.__moAgent && window.__moAgent.cleanProfile && window.__moAgent.cleanProfile(); } catch (_) {} } },
+    { id:'fillGroovesOutline', group:'Edit', label:'Round part: make solid', words:'round part make solid fill solid round fill grooves outline fins ribs fan clutch gear spin envelope proxy stand-in revolve defeature gaps profile section', run: () => { try { window.__moAgent && window.__moAgent.roundCard && window.__moAgent.roundCard({ mode: 'outline' }); } catch (_) {} } },
     { id:'triangulate',   group:'Edit',       label:'Triangulate',                kbd:'Shift+U', run: () => { try { window.__showRemesh && window.__showRemesh('tr'); } catch (_) {} } },
     { id:'smartopt',     group:'Edit',       icon:'broom-sparkles', label:'Smart optimise…',            words:'smart optimise optimize clean up reduce everything one press recipes', run: () => _CmdCards.open('smart') },
     { id:'reduceTris',   group:'Edit',       label:'Reduce triangles…',          words:'reduce triangles decimate budget fewer polygons lighter smart fit report', run: () => _CmdCards.open('reduce') },
@@ -5560,7 +5591,7 @@ const _CmdK = (() => {
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
-  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
+  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
   const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
     'flagSliver', 'isolateSmall', 'deleteSmall', 'smallParts', 'splitAll', 'split', 'fillHoles', 'removeBlends', 'roundFaces', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
@@ -6711,7 +6742,7 @@ window.addEventListener('keydown', e => {
   const hasFiles = e => !!e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
   const showDrop = on => {
     if (!dropHint) return;
-    if (on) { const t = $('vp-drop-sub'); if (t) t.textContent = state.parts.some(p => !p.deleted) ? 'Add it to this scene, or open it in a new tab' : 'STEP, GLB, glTF, FBX, OBJ, 3MF or STL'; }
+    if (on) { const t = $('vp-drop-sub'); if (t) t.textContent = state.parts.some(p => !p.deleted) ? 'Add it to this scene, or open it in a new tab' : 'STEP, GLB, glTF, FBX, OBJ, 3MF, STL, USD or Collada'; }
     dropHint.hidden = !on;
   };
   vp?.addEventListener('dragenter', e => { e.preventDefault(); if (hasFiles(e)) { dragDepth++; showDrop(true); } });
@@ -6952,10 +6983,17 @@ class DualCamera extends THREE.PerspectiveCamera {
   setOrtho(on, halfH) {
     const changed = this._isOrtho !== !!on;
     this._isOrtho = !!on;
-    // A sprite of fixed screen size (sizeAttenuation false: the group dots, the point picker's dots) picks its perspective or
-    // orthographic formula when its shader is built, and the renderer's cache does not see this flag change on the same camera:
-    // the dots grew and shrank with zoom in Top / Front / Side. Their materials are built again when the kind changes.
-    if (changed) { try { scene.traverse(o => { const m = o.isSprite && o.material; if (m && m.isSpriteNodeMaterial && m.sizeAttenuation === false) m.needsUpdate = true; }); } catch (_) {} }
+    // A shader picks its perspective or orthographic formula when it is built (a sprite of fixed screen size, the group dots and the
+    // point picker's dots, its size; since three r186 every lit material its view direction), and the renderer's cache does not see
+    // this flag change on the same camera: the dots grew and shrank with zoom in Top / Front / Side, and a part first drawn in Top kept
+    // flat highlights back in the perspective view. The kind is in every program's key (_orthoProgramKey below), and every material is
+    // looked at again when the kind changes: the first switch builds the other kind's shaders, later ones find them in the cache.
+    if (changed) {
+      try {
+        const seen = new Set();
+        scene.traverse(o => { const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []); for (const m of ms) if (m && !seen.has(m)) { seen.add(m); m.needsUpdate = true; } });
+      } catch (_) {}
+    }
     this.isPerspectiveCamera = !on;
     this.isOrthographicCamera = !!on;
     this.type = on ? 'OrthographicCamera' : 'PerspectiveCamera';
@@ -6976,6 +7014,18 @@ class DualCamera extends THREE.PerspectiveCamera {
     return this;
   }
 }
+
+// The camera kind (DualCamera) in the program key of every material, plain and node (NodeMaterial has its own customProgramCacheKey).
+// Read when the renderer builds or checks a draw, so the shader of each kind is kept apart (see DualCamera.setOrtho).
+(function _orthoProgramKey() {
+  for (const proto of [THREE.Material.prototype, THREE.NodeMaterial && THREE.NodeMaterial.prototype]) {
+    // (its own mark, not an inherited one: NodeMaterial inherits Material's, and was skipped as if done)
+    if (!proto || Object.prototype.hasOwnProperty.call(proto, '_orthoKeyed') || typeof proto.customProgramCacheKey !== 'function') continue;
+    const base = proto.customProgramCacheKey;
+    proto.customProgramCacheKey = function () { return base.call(this) + (camera && camera._isOrtho ? '|ortho' : ''); };
+    proto._orthoKeyed = true;
+  }
+})();
 
 function initScene() {
   scene = new THREE.Scene();
@@ -8912,8 +8962,8 @@ async function _loadCustomHdri(file) {
       const { EXRLoader } = await import('three/addons/loaders/EXRLoader.js');
       tex = await new EXRLoader().setDataType(THREE.HalfFloatType).loadAsync(url);
     } else if (/\.hdr$/i.test(file.name)) {
-      const { RGBELoader } = await import('three/addons/loaders/RGBELoader.js');
-      tex = await new RGBELoader().setDataType(THREE.HalfFloatType).loadAsync(url);
+      const { HDRLoader } = await import('three/addons/loaders/HDRLoader.js');
+      tex = await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(url);
     } else {
       tex = await new THREE.TextureLoader().loadAsync(url);
     }
@@ -9371,9 +9421,13 @@ function tick() {
       if (state._flagInst && state._flagInst.length) { try { _flagInstSync(); } catch (_) {} }
       try { _fitNearToView(); } catch (_) {}
       try { _guardNormalMapUvs(); } catch (_) {}
+      try { _shadowNewParts(); } catch (_) {}
       try { if (window.__moEditDepth) window.__moEditDepth(); } catch (_) {}      // (Edit mesh's dots ask at their middle what is in front of them)
       let renderErr = null;
-      try { if (!_Photo.render()) renderer.render(scene, camera); }
+      // (a canvas of no pixels, the view of a scene tab that is hidden, is not drawn: three r186 gave that frame a depth buffer 0 wide,
+      // which WebGPU refuses with a validation error; onResize asks for a frame when the tab shows again)
+      const _cv = renderer.domElement;
+      try { if (_cv && (_cv.width < 1 || _cv.height < 1)) {} else if (!_Photo.render()) renderer.render(scene, camera); }
       catch (e) { renderErr = e; }
       if (renderErr) {
         // Throttled diagnostics. Previously this catch was a silent no-op
@@ -9621,6 +9675,9 @@ function _repairPartGeometries(reupload) {
 function _fixGeometryDispose(r) {
   const geos = r && r._geometries;
   if (!geos || typeof geos.initGeometry !== 'function' || !geos.attributes || !geos.wireframes || !geos.info) return;
+  // (three r186 frees a disposed geometry's buffers itself, by its attributes, and forgets it; it also keeps its listeners in
+  // _geometryDisposeListeners, which this copy would leave out: there, three's own is kept)
+  if (geos._geometryDisposeListeners instanceof Map) return;
   geos.initGeometry = function (renderObject) {
     const geometry = renderObject.geometry;
     this.get(geometry).initialized = true;
@@ -11141,9 +11198,9 @@ async function _gpuCapture(cam, w, h) {
   const prev = renderer.getRenderTarget();
   try {
     renderer.setRenderTarget(hdr);
-    await renderer.renderAsync(scene, cam);
+    renderer.render(scene, cam);      // (render(), not renderAsync(): deprecated since three r181; the renderer was initialised at start)
     renderer.setRenderTarget(ldr);
-    await quad.renderAsync(renderer);
+    quad.render(renderer);
     const px = await renderer.readRenderTargetPixelsAsync(ldr, 0, 0, W, h);
     if (!px || px.length < W * h * 4) throw new Error('short read-back: ' + (px ? px.length : 0) + ' bytes');
     const out = new Uint8ClampedArray(w * h * 4), row = w * 4, srcRow = W * 4;
@@ -11245,8 +11302,7 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
       // updateStyle=false keeps the CSS box the same so layout doesn't shift.
       renderer.setPixelRatio?.(1);
       renderer.setSize(outW, outH, false);
-      if (opts.photo && _Photo.render()) { /* Photo mode drew the picture: occlusion, glow, vignette */ }
-      else if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
+      if (opts.photo && _Photo.still()) { /* Photo mode drew the picture: occlusion, glow, vignette, averaged */ }
       else renderer.render(scene, camera);
       ctx.drawImage(cv, 0, 0, outW, outH);
     } finally {
@@ -11260,8 +11316,7 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
       // One more render at the original size so the visible viewport
       // returns to normal before the next animation tick.
       try {
-        if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
-        else renderer.render(scene, camera);
+        renderer.render(scene, camera);
       } catch (_) {}
     }
   }
@@ -13929,8 +13984,7 @@ async function _captureRecentThumb(filename, recentId, epoch) {
       cam.updateProjectionMatrix();
       hideHelpers(true);
       try {
-        if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, cam);
-        else renderer.render(scene, cam);
+        renderer.render(scene, cam);
       } finally { hideHelpers(false); requestRender?.(); }
       const side = Math.min(w, h);
       const sx = (w - side) >> 1, sy = (h - side) >> 1;
@@ -16561,6 +16615,26 @@ function _shadowRefit() {
   _shadowFloor();
   try { _Photo.refresh(); } catch (_) {}
 }
+// A part made while the shadows are on (Duplicate, Paste, a split, the library, Cloner, a model imported into the scene) is a new mesh
+// with its shadows off: _applyShadows gives them only when it runs, so a copy made in Photo mode stood on the floor with no shadow and
+// took none. Before each frame, when the parts have changed in number, every part's mesh not yet given them is (read from the list of
+// parts, not the scene: a fresh copy hangs from the move gizmo's pivot, outside partsRoot, until it is let go), and the sun's shadow is
+// fitted round the model again (a copy put beside it can lie outside the old one).
+let _shadowPartsSeen = -1;
+function _shadowNewParts() {
+  if (window.__moNoShadowNewParts) return;      // (a switch for tests that compare with and without it)
+  if (!state.shadowsEnabled || !state._shadowsApplied) return;
+  if (state.parts.length === _shadowPartsSeen) return;
+  _shadowPartsSeen = state.parts.length;
+  let n = 0;
+  const give = (o) => {
+    if (!o || !o.isMesh || o.userData.selGlow || (o.castShadow && o.receiveShadow)) return;
+    o.castShadow = true; o.receiveShadow = true; n++;
+    for (const m of [].concat(o.material || [])) if (m) m.needsUpdate = true;
+  };
+  for (const p of state.parts) { if (p.deleted) continue; give(p.mesh); give(p.instancedMesh); }
+  if (n) _shadowRefit();
+}
 function _applyShadows() {
   if (!renderer || !state._lights?.dir) return;
   const on = !!state.shadowsEnabled;
@@ -16708,11 +16782,48 @@ function _guardNormalMapUvs() {
 // unless an HDRI is already chosen), the sun's shadows, a floor that catches the shadow of the model, the grid and origin marker
 // (hidden), and the draw itself (photo.js: occlusion, glow, fringe, vignette, grain, 4x multisampling). Not saved with the scene
 // or the settings: it starts off.
+// While nothing changes, photo.js averages frames (smooth edges, quiet occlusion, a soft-edged sun shadow); the frames after the first
+// are asked for here, and anything else that asks for a frame (requestRender, counted in state._renderAsks) starts the average again.
 const _Photo = (() => {
   // The focus of the depth of field: a point picked in the view (Alt+click, or the Pick button), else the point the camera turns round.
   let focusPoint = null, focusName = '', focusArmed = false;
-  const lib = createPhoto({ THREE, getRenderer: () => renderer, getScene: () => scene, getCamera: () => camera, getFocus: () => focusPoint || controls?.target || null });
-  let on = false, busy = false, kept = null, floor = null, reach = 0, stageOn = true;
+  const lib = createPhoto({ THREE, getRenderer: () => renderer, getScene: () => scene, getCamera: () => camera, getFocus: () => focusPoint || controls?.target || null, onSample: sunSample });
+  let on = false, busy = false, kept = null, floor = null, reach = 0, stageOn = true, asksSeen = -1;
+  // Frame i of an average sees the sun from a point a little off its direction (spread over a disc 2 degrees across, as a sun of real
+  // size would be): the shadows of all the frames together have a soft edge. The sun is put back right after the frame.
+  function sunSample(i) {
+    const d = state._lights?.dir;
+    if (!d || !d.castShadow || !d.target) return null;
+    const keep = d.position.clone();
+    const v = keep.clone().sub(d.target.position), dist = v.length();
+    if (dist < 1e-9) return null;
+    v.divideScalar(dist);
+    const a = new THREE.Vector3(Math.abs(v.z) < 0.9 ? 0 : 1, 0, Math.abs(v.z) < 0.9 ? 1 : 0).cross(v).normalize(), b = v.clone().cross(a);
+    const ang = i * 2.39996323, r = Math.sqrt((i * 0.618034) % 1) * dist * Math.tan(THREE.MathUtils.degToRad(1));
+    d.position.addScaledVector(a, Math.cos(ang) * r).addScaledVector(b, Math.sin(ang) * r);
+    d.updateMatrixWorld();
+    return () => { d.position.copy(keep); d.updateMatrixWorld(); };
+  }
+  // One frame: the next of the average while nothing else asked for a frame since the last one, else the first of a new average; the
+  // next frame is asked for while the average wants more.
+  function frame() {
+    if (!on) return false;
+    if ((state._renderAsks || 0) !== asksSeen) lib.restart();
+    const ok = lib.render(reach || (measure() && reach) || 1);
+    if (ok && lib.refining) requestRender();
+    asksSeen = state._renderAsks || 0;
+    return ok;
+  }
+  // The whole average at once, for a saved picture (the last frame drawn is the finished picture on the canvas).
+  function still() {
+    if (!on) return false;
+    if (!reach) measure();
+    lib.restart();
+    if (!lib.render(reach || 1)) return false;
+    for (let n = 0; lib.refining && n < 256; n++) lib.render(reach || 1);
+    asksSeen = state._renderAsks || 0;
+    return true;
+  }
   const LOFT = 'photo_studio_loft_hall_1k.hdr';
   function measure() {
     const box = new THREE.Box3();
@@ -16758,6 +16869,8 @@ const _Photo = (() => {
       if (!lib.enable()) throw new Error('the picture could not be set up');
       kept = {
         bgMode: state.bgMode, shadows: !!state.shadowsEnabled, showBg: state.hdriShowBg,
+        // the sun and what it looks at: the shadows that Photo mode turns on fit the sun round the model (_shadowRefit)
+        sun: state._lights?.dir ? { p: state._lights.dir.position.clone(), t: state._lights.dir.target.position.clone() } : null,
         origin: state._originMarker ? state._originMarker.visible : null,
         // the environment that was chosen, to put back (a bundled photo, or one of the presets; a file the user loaded cannot be)
         photo: document.querySelector('.hdri-photo.active')?.dataset.hdriFile || null, preset: state._customHdri ? null : state.hdriPreset,
@@ -16798,6 +16911,12 @@ const _Photo = (() => {
     { const sh = $('toggle-shadows'); if (sh) { sh.disabled = false; sh.removeAttribute('title'); } }
     if (k) {
       if (!k.shadows) { state.shadowsEnabled = false; const sh = $('toggle-shadows'); if (sh) sh.checked = false; _applyShadows(); }
+      // (the sun back where it was: the view after Photo mode was lit from the place the shadows had moved it to)
+      if (!k.shadows && k.sun && state._lights?.dir) {
+        const d = state._lights.dir;
+        d.position.copy(k.sun.p); d.target.position.copy(k.sun.t);
+        d.updateMatrixWorld?.(); d.target.updateMatrixWorld?.();
+      }
       state.hdriShowBg = k.showBg; { const sb = $('hdri-show-bg'); if (sb) sb.checked = k.showBg !== false; }
       if (k.bgMode !== state.bgMode) {
         const sel = $('bg-mode'); if (sel) sel.value = k.bgMode;
@@ -16828,8 +16947,7 @@ const _Photo = (() => {
     const resized = Math.abs(prev - want) > 0.01;
     try {
       if (resized) { renderer.setPixelRatio(want); onResize._w = -1; onResize(); }
-      if (!reach) measure();
-      if (!lib.render(reach)) throw new Error('nothing to draw');
+      if (!still()) throw new Error('nothing to draw');
       const blob = await new Promise((res) => cv.toBlob(res, 'image/png'));
       if (!blob) throw new Error('the canvas gave no picture');
       downloadBlob(blob, 'MeshOptimiser-photo.png');
@@ -16853,6 +16971,8 @@ const _Photo = (() => {
     $('toggle-photo')?.addEventListener('change', (e) => { if (e.target.checked) enterWithFeedback(); else leave(); });
     $('photo-quality')?.addEventListener('change', (e) => { lib.setQuality(e.target.value); requestRender(); });
     if ($('photo-quality')) $('photo-quality').value = lib.quality;
+    $('photo-look')?.addEventListener('change', (e) => { lib.setLook(e.target.value); requestRender(); });
+    if ($('photo-look')) $('photo-look').value = lib.look;
     for (const k of ['ao', 'glow', 'fringe', 'vignette', 'grain', 'dof']) {
       const sw = $('photo-fx-' + k);
       if (sw) { sw.checked = lib.isOn(k); sw.addEventListener('change', () => { lib.setOn(k, sw.checked); $('photo-row-' + k)?.classList.toggle('is-off', !sw.checked); requestRender(); }); }
@@ -16964,7 +17084,10 @@ const _Photo = (() => {
   return {
     get on() { return on; },
     get kept() { return on ? kept : null; },      // (the look from before Photo mode: what a saved scene stores, as Photo mode is not saved)
-    render: () => (on ? lib.render(reach || (measure() && reach) || 1) : false),
+    render: frame,
+    still,
+    get frames() { return lib.frames; },
+    get refining() { return lib.refining; },
     refresh: () => { if (on) placeFloor(); },
     enter, leave, save, wire,
     // Switched on for one picture by Claude's screenshot / render_image (photo_mode): true when this call turned it on, so that the caller
@@ -16978,6 +17101,7 @@ const _Photo = (() => {
     },
   };
 })();
+window.__moPhoto = _Photo;      // (for tests/e2e-photo-average.mjs: how far the average of a still view has got)
 
 function _applyGridCell() {
   if (!gridHelper || !scene) return;
@@ -17442,6 +17566,55 @@ function _wireViewPill() {
     close();
     if (view === 'persp') _setPerspectiveView();
     else _setStandardView(view);
+  });
+
+  // A right-click on the pill opens every camera setting beside it: projection, field of view, clip planes, what the view orbits
+  // around, the speeds. They are the Settings › Camera pane itself, lent to the popup while it is open and put back where it was when it
+  // closes (Esc, a click elsewhere, the pill's own menu, or Settings opening), so a setting changed here is the one in Settings.
+  const pop = document.createElement('div');
+  pop.id = 'vp-cam-pop'; pop.className = 'vp-cam-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Camera');
+  pop.innerHTML = '<div class="vp-cam-pop-h"><span>Camera</span><button type="button" class="lc-icon-btn" data-cam-pop="settings" title="Open in Settings"><i data-lucide="settings"></i></button></div>';
+  menu.after(pop);
+  try { _lucide(); } catch (_) {}
+  let lent = null;                                        // { body, parent, next }: the pane and where it goes back to
+  const popClose = () => {
+    if (!pop.classList.contains('show')) return;
+    pop.classList.remove('show');
+    if (lent) { try { lent.parent.insertBefore(lent.body, lent.next && lent.next.parentNode === lent.parent ? lent.next : null); } catch (_) {} lent = null; }
+    if (pop.contains(document.activeElement)) document.activeElement.blur();
+  };
+  const popOpen = () => {
+    const body = _Settings.cameraPane && _Settings.cameraPane();
+    if (!body || !body.parentNode) return;
+    lent = { body, parent: body.parentNode, next: body.nextSibling };
+    // (the popup is the short form: the lens and how the view orbits; the speeds and the orbit options stay in Settings only)
+    let off = false;
+    for (const el of body.querySelectorAll('#set-camera-prefs > *')) {
+      if (el.classList.contains('set-group-title')) off = /^(Speed|Orbit)$/.test(el.textContent.trim());
+      el.classList.toggle('cam-pop-off', off);
+    }
+    pop.appendChild(body);
+    pop.classList.add('show');
+  };
+  window.__moCamPop = { open: popOpen, close: popClose, isOpen: () => pop.classList.contains('show') };
+  pill.addEventListener('contextmenu', e => {
+    e.preventDefault(); e.stopPropagation();
+    close();
+    if (pop.classList.contains('show')) popClose(); else popOpen();
+  });
+  pill.addEventListener('click', () => popClose());
+  pop.addEventListener('click', e => {
+    if (e.target.closest('[data-cam-pop="settings"]')) { popClose(); _Settings.show('camera'); }
+  });
+  pop.addEventListener('contextmenu', e => e.stopPropagation());       // (a right-click inside is not one on the view)
+  // (a dropdown list of the popup's own fields hangs outside it: a click in one is not a click elsewhere)
+  document.addEventListener('mousedown', e => {
+    if (!pop.classList.contains('show')) return;
+    if (pill.contains(e.target) || pop.contains(e.target) || (e.target.closest && e.target.closest('.cs-pop'))) return;
+    popClose();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && pop.classList.contains('show') && !document.querySelector('.cs-pop.show')) { popClose(); e.stopPropagation(); }
   });
 }
 
@@ -19795,6 +19968,16 @@ function _applySelectionColorsImpl() {
 // per-instance attributes and `slot` maps a group id to its place in them.
 // (A sprite per group was a draw call per group. On an assembly with 2,700
 // groups that was four fifths of the frame — 54 ms instead of 18.)
+// The scale of a sprite of fixed size on the screen (sizeAttenuation false), whatever the camera. three r172 drew it at scale × its depth
+// for a perspective camera and at scale × 4 / P11 for an orthographic one, and the sizes in this file are worked out for that; three
+// r186 dropped the orthographic factor (the dots shrank to a speck in Top, Front and Side), so it is put back here, read live from
+// the camera's matrix (zooming an orthographic view changes P11).
+function _fixedSpriteScale(scaleNode) {
+  const T = THREE.TSL;
+  const persp = T.cameraProjectionMatrix.mul(T.vec4(0.0, 0.0, 1.0, 0.0)).w.abs();      // (1 perspective, 0 orthographic)
+  const p11 = T.cameraProjectionMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).y.abs();
+  return T.mul(scaleNode, T.mix(T.float(4.0).div(T.max(p11, 1e-9)), T.float(1.0), persp));
+}
 const _groupDots = { sprite: null, cap: 0, pos: null, col: null, slot: new Map() };
 const _GROUP_DOT_COLOR_DEFAULT  = new THREE.Color(0x111111);
 const _GROUP_DOT_COLOR_SELECTED = new THREE.Color(0xffd23a);
@@ -19813,7 +19996,7 @@ function _groupDotsEnsure(n) {
   mat.colorNode = tsl.vec4(tsl.instancedDynamicBufferAttribute(D.col), edge);
   // The size goes in the material, not in sprite.scale: the sprite's own
   // matrix also transforms the instance positions.
-  mat.scaleNode = tsl.float(0.0028);   // ~2 px on a 1080-tall viewport
+  mat.scaleNode = _fixedSpriteScale(tsl.float(0.0028));   // ~2 px on a 1080-tall viewport
   const sprite = new THREE.Sprite(mat);
   sprite.renderOrder = 9999;
   sprite.frustumCulled = false;
@@ -24141,7 +24324,10 @@ function _isolateSet(idSet) {
     }
     if (before !== on) _items.push({ partId: p.partId, before, after: on });
   }
-  if (_items.length) {
+  // (an isolate is always one step, also when no part changed (the parts left out were already hidden, or it was isolated so
+  // already): Ctrl+Z after it must undo it and nothing else. Without one it undid the step before, the eye that had hidden a part,
+  // and left the view marked isolated.)
+  {
     try { pushUndo({ type: 'vis', items: _items, prevIsolated: _prevIsolated, nextIsolated: true }); } catch (_) {}
   }
   rebuildTree();
@@ -24334,7 +24520,7 @@ function showAllParts() {
   }
   state._isolated = false;
   try { _updateVpHint(); } catch (_) {}
-  if (_items.length) {
+  if (_items.length || _prevIsolated) {      // (the same: leaving isolation is a step even when every part was already shown)
     try { pushUndo({ type: 'vis', items: _items, prevIsolated: _prevIsolated, nextIsolated: false }); } catch (_) {}
   }
   rebuildTree();
@@ -27963,12 +28149,13 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
       if (typeof first === 'string' && first.indexOf('Creating normalized normal attribute') !== -1) return;
       return _origWarn.apply(this, args);
     };
-    let result;
+    let result, texUndo = null;
     try {
       // (the recovery copy, written in the background: the writer gives the page its turn every 8 ms, so the copy is many short
       // tasks and a drag begun meanwhile is answered; a save to a file is written in one go)
+      texUndo = setExportTextureFormats(root);      // (each picture in its own format, not all as PNG: see texformat.js)
       result = await new Promise((res, rej) => exp.parse(exportNodes, res, rej, { binary: true, embedImages: true, ...(toBlob && quiet ? { yieldMs: 8 } : {}) }));
-    } finally { console.warn = _origWarn; }
+    } finally { console.warn = _origWarn; if (texUndo) texUndo(); }
     if (breathe) await breathe();
     if (brepPack) { try { result = _Brep.embedGlb(result, brepPack); } catch (e) { console.warn('[scene-save] CAD edges not written:', e); } }
     if (breathe && brepPack) await breathe();
@@ -29960,11 +30147,13 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
         if (typeof first === 'string' && first.indexOf('Creating normalized normal attribute') !== -1) return;
         return _origWarn.apply(this, args);
       };
-      let result;
+      let result, texUndo = null;
       try {
+        texUndo = setExportTextureFormats(root);      // (each picture in its own format, not all as PNG: see texformat.js)
         result = await new Promise((res, rej) => exp.parse(root, res, rej, { binary: isBin, embedImages: true, animations }));
       } finally {
         console.warn = _origWarn;
+        if (texUndo) texUndo();
       }
       if (isBin) {
         if (brepPack) { try { result = _Brep.embedGlb(result, brepPack); } catch (e) { console.warn('[export] CAD edges not written:', e); } }
@@ -30211,7 +30400,9 @@ function wireUI() {
       seen.add(g.uuid);
       bytes += pos.count * perVertex(g) + t * 3 * (pos.count > 65535 ? 4 : 2);
     }
-    bytes += (merge ? 1 : nodes) * 160 + seen.size * 120;   // nodes and mesh entries in the JSON
+    // nodes and mesh entries in the JSON: a node is some 300 bytes (its name and a full matrix, which carries the file's metres and
+    // axis turn, written to 17 digits; measured on a 60-part GLB, where the JSON was two thirds of the file)
+    bytes += (merge ? 1 : nodes) * 300 + seen.size * 120;
     return { tris: Math.round(tris), bytes, parts: nodes };
   }
   function _updateExportTarget() {
@@ -30434,8 +30625,7 @@ function wireUI() {
       c.mesh = new THREE.Mesh(_stampGeometry(geom), material);
       c.mesh.rotation.x = 0.32; c.mesh.rotation.y = 0.55;
       c.scene.add(c.mesh);
-      try { await c.renderer.renderAsync(c.scene, c.cam); }
-      catch (e) { c.renderer.render(c.scene, c.cam); }
+      c.renderer.render(c.scene, c.cam);
       await _nextFrame();
       const url = c.canvas.toDataURL('image/png');
       if (url && url.length > 200) {
@@ -31427,7 +31617,7 @@ function wireUI() {
     requestRender();
   });
   // the sliders of the right sidebar are dragged number fields with a fill, like the Photo mode ones
-  for (const [id, o] of [['hdri-int', { min: 0, max: 4, step: 0.05, dec: 2 }], ['fog-int', { min: 0.1, max: 3, step: 0.05, dec: 2 }], ['cam-fov', { min: 10, max: 100, step: 1 }],
+  for (const [id, o] of [['hdri-int', { min: 0, max: 4, step: 0.05, dec: 2 }], ['fog-int', { min: 0.1, max: 3, step: 0.05, dec: 2 }], ['cam-fov', { min: 10, max: 200, step: 1 }],
     ['light-exposure', { min: 0.1, max: 3, step: 0.05, dec: 2 }], ['light-ambient', { min: 0, max: 2, step: 0.05, dec: 2 }], ['light-sun', { min: 0, max: 3, step: 0.05, dec: 2 }],
     ['light-azi', { min: 0, max: 360, step: 1 }], ['light-ele', { min: 0, max: 90, step: 1 }]]) { try { _fillField(id, o); } catch (e) { console.warn('[field]', id, e); } }
   $('hdri-int')?.addEventListener('input', e => {
@@ -31558,10 +31748,13 @@ function wireUI() {
     const fovRow = $('cam-fov-row'); if (fovRow) fovRow.style.opacity = (state.cameraProjection === 'persp') ? '1' : '.42';
     requestRender();
   });
+  // The field is the lens: its focal length in mm on a full-frame camera (36 x 24 mm), so a bigger number zooms in, as on a camera. The
+  // camera takes the vertical angle that lens gives over the frame's 24 mm height (29 mm is the 45 degrees the view starts with).
   $('cam-fov')?.addEventListener('input', e => {
-    const v = parseInt(e.target.value, 10) || 45;
+    const mm = Math.min(200, Math.max(10, parseFloat(e.target.value) || 29));
+    const v = 2 * Math.atan(12 / mm) * 180 / Math.PI;
     state.cameraFov = v;
-    const lbl = $('cam-fov-val'); if (lbl) lbl.textContent = v;
+    const lbl = $('cam-fov-val'); if (lbl) lbl.textContent = Math.round(mm);
     if (camera?.isPerspectiveCamera) { camera.fov = v; camera.updateProjectionMatrix(); requestRender(); }
   });
   $('cam-clip')?.addEventListener('change', e => {
@@ -36839,11 +37032,11 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   try { _joinPrimitives(sceneRoot); } catch (e) { console.warn('[load] could not join the primitives of a mesh:', e); }      // (a GLB read through Assimp; loadGlbFile has joined its own already)
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
   // Texture coordinates run one way in the scene: V from the top, as glTF has them, which is what three's GLB and USDZ writers expect
-  // (the USDZ writer turns V for its file; the OBJ, FBX and PLY writers do too: the OBJ writer, _fbxUvData, the PLY branch of _doExportImpl). OBJ, FBX and 3MF count V from the
+  // (the USDZ writer turns V for its file; the OBJ, FBX and PLY writers do too: the OBJ writer, _fbxUvData, the PLY branch of _doExportImpl). OBJ, FBX, 3MF, USD and Collada count V from the
   // bottom, so their coordinates are turned here and their textures read the same way round (flipY false), which draws exactly as
   // before. Without it a scene held both directions and nothing said which: an OBJ or FBX written from a glTF model, or a GLB
   // from an OBJ one, had every map upside down.
-  if ((format === 'obj' || format === 'fbx' || format === '3mf') && !(sceneRoot.userData && sceneRoot.userData.__moUvTop)) {
+  if ((format === 'obj' || format === 'fbx' || format === '3mf' || format === 'usd' || format === 'dae') && !(sceneRoot.userData && sceneRoot.userData.__moUvTop)) {
     const seenG = new Set(), seenT = new Set();
     for (const m of meshList) {
       const g = m.geometry;
@@ -37297,13 +37490,13 @@ async function _gltfExternalFiles(file) {
   return _gltfFinish(file, json, uris, found);
 }
 // A folder dropped on the app: the model in it is opened, and a .gltf finds its own files in the same folder.
-const _FOLDER_MODEL_ORDER = ['gltf', 'glb', 'step', 'stp', 'iges', 'igs', 'brep', 'brp', 'fbx', 'obj', '3mf', 'stl'];
+const _FOLDER_MODEL_ORDER = ['gltf', 'glb', 'step', 'stp', 'iges', 'igs', 'brep', 'brp', 'fbx', 'usdz', 'usd', 'usdc', 'usda', 'dae', 'obj', '3mf', 'stl'];
 async function _openDroppedFolder(ents) {
   let rels;
   try { rels = await _readDropEntries(ents); } catch (e) { console.warn('[drop] folder:', e); toast('Could not read that folder', '', 'error'); return; }
   const rank = (p) => { const i = _FOLDER_MODEL_ORDER.indexOf((p.split('.').pop() || '').toLowerCase()); return i < 0 ? 99 : i; };
   const pick = rels.filter(([p]) => rank(p) < 99).sort((x, y) => rank(x[0]) - rank(y[0]) || x[0].split('/').length - y[0].split('/').length)[0];
-  if (!pick) { toast('No model in that folder', 'Supported: STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF, STL', 'warn', 5000); return; }
+  if (!pick) { toast('No model in that folder', 'Supported: STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF, STL, USD, Collada', 'warn', 5000); return; }
   const file = pick[1];
   try { file.__moSiblings = rels.map(r => r[1]); } catch (_) {}      // (an OBJ finds its .mtl among them)
   if (/\.gltf$/i.test(file.name)) {
@@ -37456,6 +37649,7 @@ async function loadFbxFile(file) {
     const flattened = _flattenSkinnedMeshes(root);
     if (flattened) Log.info(`Flattened ${flattened} SkinnedMesh${flattened === 1 ? '' : 'es'} to static geometry (rigging dropped)`, { tag: 'fbx' });
     if (!root.userData.__moUvTop) root.userData.__moConv = _fbxConvention(root);      // (read through Assimp: left as Assimp gives it)
+    try { await _applyTextureSets(root, file); } catch (e) { console.warn('[fbx] the maps beside it:', e); }
     await _ingestSceneRoot(root, file, buffer.byteLength, 'fbx');
   });
 }
@@ -37534,6 +37728,161 @@ function _objApplyMtl(root, text, file) {
     return n;
   });
 }
+// The maps beside an FBX or OBJ, found by their names (texsets.js): a model from a library (Fab, Megascans) names no picture, its maps
+// sit next to it as <name>_4K_BaseColor.jpg and so on. Each material without them gets the set that fits its name (the only set, when
+// there is one) as a standard material: colour, normal, roughness (Gloss turned over when there is none), AO, metalness, opacity, and
+// Bump only without a normal map. Slots the file or its .mtl filled are left as they are. Needs the files that came with the model
+// (a dropped folder, or the files dropped together): a file opened alone brings nothing beside it. Says in a toast what was used.
+const _TEX_KIND_WORD = { map: 'colour', normal: 'normal', normalDX: 'normal (DirectX)', roughness: 'roughness', gloss: 'roughness (from gloss)', ao: 'AO', metalness: 'metalness', opacity: 'opacity', bump: 'bump' };
+// A model opened alone (Open, the Recent list, one file dropped) brings nothing beside it: the browser gives the app the file, not its
+// folder. When it has texture coordinates and no picture of its own, the folder is asked for, once, in a dialog like the glTF one: the
+// folder picker starts where the model is (its file handle), so it is one click; dropping the folder on the dialog works too. Only a
+// file the user opened has a handle: a file from a test, the inbox or Claude is never stopped by the question.
+function _texFolderWorthAsking(root, file) {
+  if (!file || !file.__moHandle) return false;
+  let uv = false, tex = false;
+  root.traverse((o) => { if (!o.isMesh) return; if (o.geometry && o.geometry.attributes && o.geometry.attributes.uv) uv = true; for (const m of [].concat(o.material || [])) if (_hasTexture(m)) tex = true; });
+  return uv && !tex;
+}
+async function _filesInFolder(dir, depth = 2) {
+  const out = [];
+  for await (const [, h] of dir.entries()) {
+    if (h.kind === 'file') { if (TS.IMAGE_EXT.test(h.name)) out.push(await h.getFile()); }
+    else if (depth > 1) out.push(...await _filesInFolder(h, depth - 1));      // (a "textures" folder beside the model)
+  }
+  return out;
+}
+window.__moTexFolderAsks = 0;      // (tests/e2e-texsets.mjs)
+function _askTextureFolder(file) {
+  window.__moTexFolderAsks++;
+  return new Promise((resolve) => {
+    const bg = document.createElement('div');
+    bg.className = 'dlg-bg show';
+    bg.dataset.moAsk = 'textures';
+    bg.innerHTML =
+      '<div class="dlg-card" style="position:relative;transition:outline-color .12s;outline:2px dashed transparent;outline-offset:6px">' +
+        '<button class="dlg-close" aria-label="Close">\u2715</button>' +
+        '<div class="dlg-head"><div class="dlg-icon"><i data-lucide="folder-open"></i></div><div class="dlg-text">' +
+          '<div class="dlg-title">Find its textures?</div><div class="dlg-msg"></div></div></div>' +
+        '<div class="dlg-foot"><button class="dlg-btn dlg-btn-cancel" data-c="no">Not now</button>' +
+          '<button class="dlg-btn dlg-btn-ok" data-c="pick">Choose its folder…</button></div>' +
+      '</div>';
+    bg.querySelector('.dlg-msg').textContent = file.name + ' has texture coordinates but names no picture. If its maps are beside it (_BaseColor, ' +
+      '_Normal, _Roughness), choose its folder or drop it here, and they go on its materials by name.';
+    document.body.appendChild(bg);
+    try { _lucide(); } catch (_) {}
+    const card = bg.querySelector('.dlg-card');
+    const done = (v) => { document.removeEventListener('keydown', onKey, true); bg.remove(); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } };
+    document.addEventListener('keydown', onKey, true);
+    bg.addEventListener('click', (e) => { if (e.target === bg) done(null); });
+    bg.querySelector('.dlg-close').addEventListener('click', () => done(null));
+    bg.querySelector('[data-c="no"]').addEventListener('click', () => done(null));
+    const hot = (on) => { card.style.outlineColor = on ? 'var(--ac)' : 'transparent'; };
+    bg.addEventListener('dragenter', (e) => { e.preventDefault(); hot(true); });
+    bg.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {} hot(true); });
+    bg.addEventListener('dragleave', (e) => { if (e.target === bg) hot(false); });
+    bg.addEventListener('drop', async (e) => {
+      e.preventDefault(); e.stopPropagation(); hot(false);
+      const ents = _dropEntriesOf(e.dataTransfer);
+      const loose = [...((e.dataTransfer && e.dataTransfer.files) || [])];
+      try { done((ents.length ? (await _readDropEntries(ents)).map(r => r[1]) : loose)); } catch (err) { console.warn('[textures] drop:', err); done(null); }
+    });
+    bg.querySelector('[data-c="pick"]').addEventListener('click', async () => {
+      try {
+        if (!window.showDirectoryPicker) { done(null); return; }
+        let dir;
+        try { dir = await window.showDirectoryPicker({ id: 'mo-tex', mode: 'read', startIn: file.__moHandle }); }
+        catch (e) { if (e && e.name === 'AbortError') return; dir = await window.showDirectoryPicker({ id: 'mo-tex', mode: 'read' }); }
+        done(await _filesInFolder(dir));
+      } catch (e) { if (e && e.name === 'AbortError') return; console.warn('[textures] folder:', e); done(null); }
+    });
+    setTimeout(() => bg.querySelector('[data-c="pick"]')?.focus(), 30);
+  });
+}
+async function _applyTextureSets(root, file) {
+  if (state._importTexSets === false) return 0;      // (the import dialog's "Find textures by name" switch)
+  let pics = ((file && file.__moSiblings) || []).filter(f => f && TS.IMAGE_EXT.test(f.name || ''));
+  if (!pics.length && _texFolderWorthAsking(root, file)) {
+    const got = await _askTextureFolder(file);
+    pics = (got || []).filter(f => f && TS.IMAGE_EXT.test(f.name || ''));
+    if (got && !pics.length) { try { toast('No pictures in that folder', 'Nothing was put on ' + file.name + '.', 'warn', 5000); } catch (_) {} }
+  }
+  if (!pics.length) return 0;
+  const { sets, unused } = TS.groupTextureFiles(pics);
+  if (!sets.length) return 0;
+  const stem = String(file.name || '').replace(/\.[^.]+$/, '');
+  const cache = new Map();
+  const load = (f, srgb, invert) => {
+    const key = f.name + '|' + srgb + '|' + invert;
+    if (!cache.has(key)) cache.set(key, new Promise((res, rej) => {
+      const url = URL.createObjectURL(f), img = new Image();
+      img.onload = async () => {
+        let src = img;
+        if (invert) {                                   // (Gloss is roughness turned over)
+          const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+          const x = c.getContext('2d'); x.filter = 'invert(1)'; x.drawImage(img, 0, 0); src = c; URL.revokeObjectURL(url);
+          // (kept as a picture that does not change, as a loaded file is, so its small copy made ahead stays good: see _texPicKey)
+          try { if (typeof createImageBitmap === 'function') src = await createImageBitmap(c); } catch (_) {}
+        }
+        const t = new THREE.Texture(src);
+        t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.flipY = false;                                // (V runs from the top in the scene: _ingestSceneRoot turns the file's UVs)
+        t.name = invert ? f.name.replace(/\.[^.]+$/, '') + ' (as roughness)' : f.name;
+        if (!invert) { t.userData.fileName = f.name; t.userData.dataUrl = url; }
+        t.needsUpdate = true;
+        _texSmallAhead(t);                              // (the material ball and the editor's slots: see _texSmall)
+        res(t);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error(f.name + ' could not be read')); };
+      img.src = url;
+    }));
+    return cache.get(key);
+  };
+  const swaps = new Map(), used = new Map(), jobs = [], failed = [];
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const out = [].concat(o.material).map((m) => {
+      if (!m || !m.isMaterial) return m;
+      if (swaps.has(m)) return swaps.get(m);
+      const mapName = m.map ? (m.map.userData && m.map.userData.fileName) || m.map.name || '' : '';
+      const set = TS.pickSet(sets, { materialName: m.name, meshName: o.name, mapName, fileStem: stem });
+      const filled = {};
+      for (const k of ['map', 'normalMap', 'roughnessMap', 'aoMap', 'metalnessMap', 'alphaMap', 'bumpMap']) if (m[k]) filled[k] = true;
+      const plan = set ? TS.planSlots(set, filled) : {};
+      if (!Object.keys(plan).length) { swaps.set(m, m); return m; }
+      const st = typeof m.metalness === 'number' ? m : _standardFromLegacy(m);
+      swaps.set(m, st);
+      if (!used.has(set)) used.set(set, { kinds: new Set(), mats: 0 });
+      const u = used.get(set); u.mats++;
+      if (plan.map) st.color.setRGB(1, 1, 1);           // (the colour multiplies the picture: an FBX's grey would darken it)
+      if (plan.roughnessMap) st.roughness = 1;
+      if (plan.metalnessMap) st.metalness = 1;
+      if (plan.normalMap && plan.normalMap.flipGreen) st.normalScale.set(1, -1);
+      if (plan.alphaMap) st.alphaTest = Math.max(st.alphaTest || 0, 0.5);
+      for (const [slot, p] of Object.entries(plan)) {
+        u.kinds.add(p.kind);
+        jobs.push(load(set.files[p.kind], slot === 'map', !!p.invert).then((t) => { st[slot] = t; st.needsUpdate = true; },
+          (e) => { failed.push(set.files[p.kind].name); u.kinds.delete(p.kind); if (slot === 'roughnessMap') st.roughness = 0.55; if (slot === 'metalnessMap') st.metalness = 0; console.warn('[textures]', e); }));
+      }
+      st.needsUpdate = true;
+      return st;
+    });
+    o.material = Array.isArray(o.material) ? out : out[0];
+  });
+  if (!used.size) return 0;
+  await Promise.all(jobs);
+  const word = (n) => String(n).replace(/\.[^.]+$/, '').split(/[\s_.\-]+/).pop();
+  const lines = [...used].map(([set, u]) => set.prefix + ': ' + [...u.kinds].map(k => _TEX_KIND_WORD[k]).join(', ') + ' on ' + u.mats + ' material' + (u.mats === 1 ? '' : 's') + '.');
+  const left = [];
+  for (const [set, u] of used) for (const k of Object.keys(set.files)) if (!u.kinds.has(k)) left.push(k === 'gloss' ? 'gloss' : _TEX_KIND_WORD[k]);
+  for (const n of unused) left.push(word(n));
+  if (left.length) lines.push('Not used: ' + [...new Set(left)].join(', ') + '.');
+  if (failed.length) lines.push('Could not read ' + failed.join(', ') + '.');
+  try { toast('Textures found beside the model', lines.join(' '), failed.length ? 'warn' : 'info', 7000); } catch (_) {}
+  return [...used.values()].reduce((a, u) => a + u.mats, 0);
+}
 async function loadObjFile(file) {
   return _runLoad(file, 'OBJ', async () => {
     const text = await file.text();
@@ -37541,6 +37890,7 @@ async function loadObjFile(file) {
     setLoader(true, 'Parsing OBJ scene…', `${(text.length/1048576).toFixed(1)} MB`);
     const root = new OBJLoader().parse(text);
     try { await _objApplyMtl(root, text, file); } catch (e) { console.warn('[obj] could not read the .mtl:', e); }
+    try { await _applyTextureSets(root, file); } catch (e) { console.warn('[obj] the maps beside it:', e); }
     root.userData.__moConv = _objConvention(text);
     await _ingestSceneRoot(root, file, text.length, 'obj');
   });
@@ -37554,6 +37904,46 @@ async function load3mfFile(file) {
     const { ThreeMFLoader } = await import('three/addons/loaders/3MFLoader.js');
     const root = new ThreeMFLoader().parse(buffer);
     await _ingestSceneRoot(root, file, buffer.byteLength, '3mf');
+  });
+}
+
+// USD (.usd, .usda, .usdc, .usdz: text, the binary "crate", or a zip of either with its textures) and Collada (.dae), read by
+// three's USDLoader and ColladaLoader (three r186). Both stand the file Y up in metres on its root (a quarter turn for a Z-up file, a
+// scale of its unit); that is taken off again and the file's own up axis and unit go to _toSceneConvention, as for every other format.
+// (A USD file that does not say its metersPerUnit is read as metres, as three's loader and Blender read it; the USD default is
+// centimetres.)
+function _rootConvention(root) {
+  const zUp = Math.abs(root.rotation.x + Math.PI / 2) < 1e-6;
+  const mPerUnit = root.scale.x > 0 && Number.isFinite(root.scale.x) ? root.scale.x : 1;
+  root.rotation.set(0, 0, 0); root.scale.set(1, 1, 1); root.updateMatrix();
+  return { yUp: !zUp, mmPerUnit: mPerUnit * 1000 };
+}
+async function loadUsdFile(file) {
+  return _runLoad(file, 'USD', async () => {
+    const buffer = await _fileBytes(file);
+    setLoaderProgress(35);
+    setLoader(true, 'Parsing USD scene…', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
+    const { USDLoader } = await import('three/addons/loaders/USDLoader.js');
+    // (onLoad comes when the textures of a .usdz are decoded too)
+    const root = await new Promise((res, rej) => { try { new USDLoader().parse(buffer, '', res, rej); } catch (e) { rej(e); } });
+    if (!root || !root.isObject3D) throw new Error('no scene in this USD file');
+    root.name = root.name || file.name.replace(/\.[^.]+$/, '');
+    root.userData.__moConv = _rootConvention(root);
+    await _ingestSceneRoot(root, file, buffer.byteLength, 'usd');
+  });
+}
+async function loadDaeFile(file) {
+  return _runLoad(file, 'Collada', async () => {
+    const text = await file.text();
+    setLoaderProgress(35);
+    setLoader(true, 'Parsing Collada scene…', `${(text.length/1048576).toFixed(1)} MB`);
+    const { ColladaLoader } = await import('three/addons/loaders/ColladaLoader.js');
+    const res = new ColladaLoader().parse(text, '');
+    const root = res && res.scene;
+    if (!root || !root.isObject3D) throw new Error('not a Collada file');
+    root.name = root.name || file.name.replace(/\.[^.]+$/, '');
+    root.userData.__moConv = _rootConvention(root);
+    await _ingestSceneRoot(root, file, text.length, 'dae');
   });
 }
 
@@ -38425,8 +38815,9 @@ function _alignAxes() { return state.sceneUpAxis === 'y' ? { a: 'x', b: 'z', up:
 // part itself (the model then stands too low on the floor). A part that is square to the axes is exact by its box and costs nothing,
 // and a part whose box lies inside what is measured already is skipped, so the limit is high.
 const _ALIGN_EXACT_VERTS = 6e7;
-function _liveModelBox(pre, live) {
-  const list = _exportDrawList(false);
+function _liveModelBox(pre, live, only) {
+  // (`only`: a set of part ids, the box of those parts alone: Align to floor on a selection)
+  const list = only ? _exportDrawList(false).filter(it => it.part && only.has(it.part.partId)) : _exportDrawList(false);
   let verts = 0;
   for (const it of list) verts += it.geom.attributes.position.count;
   const exact = verts <= _ALIGN_EXACT_VERTS;
@@ -38581,6 +38972,56 @@ function alignModelToFloor(opts = {}) {
   _alignAfter();
   return true;
 }
+// With parts selected, Align to floor acts on them and leaves the rest of the model where it is: the turn set on the card (since the
+// model's own) turns them, and the chosen point of their box goes to zero. With nothing selected it is the whole model, as before. The
+// parts move as the gizmo moves them (an instance becomes a mesh of its own), and the move is one undo step.
+function _alignSelIds() {
+  const ids = new Set();
+  for (const id of state.selected || []) { const p = getPart(id); if (p && !p.deleted) ids.add(id); }
+  return ids;
+}
+// The turn set on the card since the last Align: the selection is turned by that much.
+function _alignSelTurn() { return _alignPend.Q.clone().multiply(_align.Q.clone().invert()).normalize(); }
+// Where the selection would go: the move M (turn, then the chosen point to zero), and the box it would have there.
+function _alignSelMove(ids) {
+  const R = new THREE.Matrix4().makeRotationFromQuaternion(_alignSelTurn());
+  const box = _liveModelBox(R, true, ids);
+  if (box.isEmpty()) return null;
+  const a = _alignAnchor(box, _alignPrefs());
+  return { M: new THREE.Matrix4().makeTranslation(-a.x, -a.y, -a.z).multiply(R), box: box.translate(a.clone().negate()) };
+}
+const _alignIsIdentity = (M) => M.elements.every((v, i) => Math.abs(v - (i % 5 === 0 ? 1 : 0)) / (i >= 12 && i < 15 ? Math.max(1, state.modelDiag || 1) : 1) < 1e-7);
+function alignSelectionToFloor() {
+  const ex = state.explode;
+  if (ex && (ex.x || ex.y || ex.z)) { toast('Align to floor', 'Put the exploded view back first: the selection is aligned at rest', 'info', 3500); return false; }
+  _detachGizmo();
+  const ids = _alignSelIds();
+  // (an instance has no node of its own to move: it becomes a mesh of its own, as for the gizmo)
+  for (const id of ids) { const p = getPart(id); if (p && !p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} } }
+  const parts = [...ids].map(getPart).filter(p => p && p.mesh);
+  if (!parts.length) { toast('Nothing to align', '', 'warn'); return false; }
+  const mv = _alignSelMove(ids);
+  if (!mv) { toast('Nothing to align', '', 'warn'); return false; }
+  if (_alignIsIdentity(mv.M)) { toast('Already in place', '', 'info'); _alignPend.Q.copy(_align.Q); _alignRefreshInfo(); return false; }
+  // (a part inside another selected one is placed after it, so it is not moved twice)
+  const depth = (o) => { let d = 0; for (let q = o.parent; q; q = q.parent) d++; return d; };
+  parts.sort((x, y) => depth(x.mesh) - depth(y.mesh));
+  const items = parts.map(p => {
+    p.mesh.updateWorldMatrix(true, false);
+    const before = p.mesh.matrixWorld.clone();
+    return { partId: p.partId, before: before.toArray(), after: before.clone().premultiply(mv.M).toArray() };
+  });
+  _applyTransformOp(items, 'after');
+  pushUndo({ type: 'transformGroup', label: 'Align selection to floor', items });
+  _alignPend.Q.copy(_align.Q);                       // (the turn on the card has been used up by the selection)
+  try { refreshFlagged(); } catch (_) {}
+  applySelectionColors();
+  updateGizmo();
+  try { refreshPropertiesPanel(); } catch (_) {}
+  _alignRefreshInfo();
+  requestRender();
+  return true;
+}
 // Turn by the step angle about one of the scene's axes, on top of the turn so far.
 function _alignTurn(axis, sign) {
   const step = Math.max(0.01, Math.min(180, parseFloat(_alignPrefs().step) || 90));
@@ -38592,6 +39033,8 @@ function _alignTurn(axis, sign) {
 // Work out where the model would stand if Align to floor were pressed now, and draw that. Nothing moves.
 function _alignPreview() {
   if (!state.parts.some(p => !p.deleted)) { _alignView.draw(null, false); return; }
+  { const ids = _alignSelIds();
+    if (ids.size) { const mv = _alignSelMove(ids); _alignView.draw(mv ? mv.box : null, !!mv && !_alignIsIdentity(mv.M)); return; } }
   const R = new THREE.Matrix4().makeRotationFromQuaternion(_alignPend.Q);
   const box = _liveModelBox(R.clone().multiply(_align.D.clone().invert()));       // as loaded → turned (not yet placed)
   if (box.isEmpty()) { _alignView.draw(null, false); return; }
@@ -38605,6 +39048,15 @@ function _alignPreview() {
 function _alignRefreshInfo() {
   const el = document.getElementById('align-info');
   if (!el || !document.getElementById('align-view')?.offsetParent) return;   // (only while the card is shown; the line itself is not laid out while it is empty)
+  try {
+    const n = _alignSelIds().size, what = n ? (n === 1 ? 'Selection (1 part)' : 'Selection (' + n + ' parts)') : 'Whole model';
+    const h = document.querySelector('.section-cmd[data-cmd="align"] .section-h');
+    let em = h && h.querySelector('.align-what');
+    if (h && !em) { em = document.createElement('em'); em.className = 'align-what'; h.firstElementChild.appendChild(em); }
+    if (em) em.textContent = what;
+    const b = document.getElementById('btn-align-floor');
+    if (b) b.title = n ? 'Stand the selected parts on the floor; the rest of the model stays where it is' : 'Stand the model on the floor, centred over 0,0,0';
+  } catch (_) {}
   try { _alignPreview(); } catch (e) { console.warn('[align] drawing failed:', e); }
   el.textContent = '';      // (the drawing says where the model stands; there is no line of numbers under the buttons)
 }
@@ -38784,7 +39236,10 @@ const _alignView = (() => {
     if (!hasModel()) { toast('Nothing to align', '', 'warn'); return; }
     _alignTurn(b.dataset.turn[0], b.dataset.turn[1] === '-' ? -1 : 1);
   });
-  document.getElementById('btn-align-floor')?.addEventListener('click', () => { if (alignModelToFloor({ Q: _alignPend.Q })) toast('Aligned to the floor', '', 'success'); });
+  document.getElementById('btn-align-floor')?.addEventListener('click', () => {
+    if (_alignSelIds().size) { if (alignSelectionToFloor()) toast('Selection aligned to the floor', '', 'success'); return; }
+    if (alignModelToFloor({ Q: _alignPend.Q })) toast('Aligned to the floor', '', 'success');
+  });
   document.getElementById('btn-align-reset')?.addEventListener('click', () => {
     // Reset puts the whole card back: the model as it was loaded, no turn waiting, and the choices as they start (Mid, Mid, Floor)
     _alignPend.Q.identity();
@@ -40062,7 +40517,101 @@ function _collectLiveMaterials() {
 // emissive off the live Material, so each cell still shows at a glance what
 // the material looks like.
 const _matPreviewCache = new WeakMap();
+const _texThumbCache = new WeakMap();          // a texture -> a small picture of it, for the texture slots of the material editor
+// A texture -> a small copy of its picture (at most 256 px), kept until the texture changes (its version), and shared by the material
+// ball and the editor's texture slots: a 4K picture is scaled down once, not at every paint of each (the ball's alone took 150 ms).
+const _texSmallCache = new WeakMap();
+const _TEX_SMALL = 256;
+// What a kept copy was made from: the picture, and for a canvas (Gloss turned into roughness, a painted texture) the texture's version
+// too. A picture file does not change once loaded, and its version goes up for other reasons (an OBJ's or FBX's textures are marked
+// again when they are turned the right way up), which used to throw away every copy made ahead.
+const _texPicKey = (tex) => { const img = tex.image; return { img, v: (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement) || (typeof OffscreenCanvas !== 'undefined' && img instanceof OffscreenCanvas) ? tex.version : 0 }; };
+const _texPicSame = (hit, tex) => { if (!hit) return false; const k = _texPicKey(tex); return hit.img === k.img && hit.v === k.v; };
+function _texSmallSize(img) {
+  const w = img.naturalWidth || img.videoWidth || img.width || 0, h = img.naturalHeight || img.videoHeight || img.height || 0;
+  if (!(w > 0 && h > 0)) return null;
+  const k = Math.min(1, _TEX_SMALL / Math.max(w, h));
+  return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) };
+}
+function _texSmall(tex) {
+  const img = tex && tex.image;
+  if (!img || img.data) return null;
+  const hit = _texSmallCache.get(tex); if (_texPicSame(hit, tex)) return hit.c;
+  if (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement && !(img.complete && img.naturalWidth > 0)) return null;
+  const sz = _texSmallSize(img); if (!sz) return null;
+  try {
+    const c = document.createElement('canvas'); c.width = sz.w; c.height = sz.h;
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, sz.w, sz.h);
+    _texSmallCache.set(tex, Object.assign(_texPicKey(tex), { c }));
+    return c;
+  } catch (_) { return null; }
+}
+// The same copy made ahead, as a texture arrives, without holding the page: createImageBitmap scales the picture where the browser can
+// (off the main thread in Chromium), so the first look at a material with 4K maps finds its pictures ready.
+async function _texSmallAhead(tex) {
+  try {
+    const img = tex && tex.image;
+    if (!img || img.data || typeof createImageBitmap !== 'function') return;
+    const sz = _texSmallSize(img); if (!sz) return;
+    const key = _texPicKey(tex);
+    const bm = await createImageBitmap(img, { resizeWidth: sz.w, resizeHeight: sz.h, resizeQuality: 'high' });
+    const c = document.createElement('canvas'); c.width = sz.w; c.height = sz.h;
+    c.getContext('2d').drawImage(bm, 0, 0); if (bm.close) bm.close();
+    if (_texPicSame(key, tex)) _texSmallCache.set(tex, Object.assign(key, { c }));
+  } catch (_) {}
+}
 const _matThumb = (() => {
+  // The picture of a material's colour texture, when there is one to read: an <img> that has loaded, an ImageBitmap, a canvas. A texture
+  // still loading, or one that lives only on the graphics card (compressed), has none: the ball is then the colour, and not kept (see
+  // _renderMaterialPreview), so it is drawn again with the picture.
+  function mapImage(mat) {
+    const img = mat && mat.map && mat.map.image;
+    if (!img) return null;
+    if (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement) return img.complete && img.naturalWidth > 0 ? img : null;
+    if ((typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap) || (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement)
+      || (typeof OffscreenCanvas !== 'undefined' && img instanceof OffscreenCanvas)) return img.width > 0 ? img : null;
+    return null;
+  }
+  // The texture on the ball, pixel by pixel (some 5,000 at 96 px): each point's normal gives its place on the sphere and so in the picture
+  // (u round, v from the top, as a glTF and this app hold it; the texture's repeat and offset count), times the colour, times the light.
+  function _paintMap(g, mat, cx, cy, r, SIZE) {
+    const img = mapImage(mat);
+    if (!img) return false;
+    try {
+      const TW = 256, TH = 128;
+      const tc = document.createElement('canvas'); tc.width = TW; tc.height = TH;
+      const tg = tc.getContext('2d', { willReadFrequently: true });
+      tg.drawImage(_texSmall(mat.map) || img, 0, 0, TW, TH);
+      const tex = tg.getImageData(0, 0, TW, TH).data;
+      const out = g.getImageData(0, 0, SIZE, SIZE), px = out.data;
+      const rep = mat.map.repeat || { x: 1, y: 1 }, off = mat.map.offset || { x: 0, y: 0 };
+      const col = mat.color || { r: 1, g: 1, b: 1 };
+      const tint = [col.r, col.g, col.b].map(c => Math.pow(Math.max(0, c), 1 / 2.2));       // (the colour as it shows: the picture is in sRGB)
+      const L = [-0.42, -0.55, 0.72], Ln = Math.hypot(L[0], L[1], L[2]);
+      const wrap = (t) => t - Math.floor(t);
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          const nx = (x + 0.5 - cx) / r, ny = (y + 0.5 - cy) / r, d = nx * nx + ny * ny;
+          if (d > 1) continue;
+          const nz = Math.sqrt(1 - d);
+          const u = wrap((0.5 + Math.atan2(nx, nz) / (2 * Math.PI)) * rep.x + off.x);
+          const v = wrap((0.5 + Math.asin(ny) / Math.PI) * rep.y + off.y);
+          const ti = ((Math.min(TH - 1, (v * TH) | 0)) * TW + Math.min(TW - 1, (u * TW) | 0)) * 4;
+          const lit = 0.38 + 0.78 * Math.max(0, (nx * L[0] + ny * L[1] + nz * L[2]) / Ln);
+          const edge = 1 - 0.18 * Math.pow(1 - nz, 2);                                     // (a little darker at the rim, as the gradient was)
+          const k = lit * edge, o = (y * SIZE + x) * 4;
+          // (a pixel half inside the circle is blended with what is under it, so the rim stays smooth)
+          const a = Math.min(1, (1 - Math.sqrt(d)) * r + 0.5);
+          for (let c = 0; c < 3; c++) px[o + c] = Math.round(px[o + c] * (1 - a) + Math.min(255, tex[ti + c] * tint[c] * k) * a);
+          px[o + 3] = Math.round(px[o + 3] * (1 - a) + 255 * a);
+        }
+      }
+      g.putImageData(out, 0, 0);
+      return true;
+    } catch (_) {
+      return false;                                        // (a picture the page may not read: the colour, as before)
+    }
+  }
   // `size` (an even number of device pixels, optional): the picture drawn at the size it is shown at, so the ball's edges fall on whole
   // pixels. The ball stands in the middle of the picture, with a whole-pixel radius; its ground shadow is drawn under it.
   function render(mat, size) {
@@ -40106,8 +40655,12 @@ const _matThumb = (() => {
       grad.addColorStop(hlSize, lighten(baseHex, 0.10));
       grad.addColorStop(0.7,    baseHex);
       grad.addColorStop(1,      darken(baseHex, 0.28 + 0.12 * metal));
-      g.fillStyle = grad;
-      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      // With a colour texture the ball wears it, wrapped as on a sphere (front of the ball the middle of the picture), tinted by the
+      // colour and lit from the same top left; without one (or while its picture is not loaded) it is the colour's gradient.
+      if (!_paintMap(g, mat, cx, cy, r, SIZE)) {
+        g.fillStyle = grad;
+        g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      }
 
       // Sharp specular highlight for low-roughness / metallic materials.
       if (hl > 0.15) {
@@ -40140,7 +40693,7 @@ const _matThumb = (() => {
     }
   }
 
-  return { render };
+  return { render, mapPending: (mat) => !!(mat && mat.map) && !mapImage(mat) };
 })();
 
 // The picture of a material is drawn (a small render) the first time it is needed. The list used to draw all of them as it was built; now
@@ -40175,7 +40728,7 @@ function _renderMaterialPreview(mat) {
   const cached = _matPreviewCache.get(mat);
   if (cached) return cached;
   const url = _matThumb.render(mat);
-  if (url) _matPreviewCache.set(mat, url);
+  if (url && !_matThumb.mapPending(mat)) _matPreviewCache.set(mat, url);          // (a texture still loading: drawn again next time)
   return url;
 }
 
@@ -41044,14 +41597,7 @@ function _openMaterialEditor(info) {
     const before = _matEditorState._matSnapshot;
     const after  = _snapshotMat(_matEditorState.mat);
     if (!after) return;
-    let dirty = false;
-    for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
-      const a = before[k], b = after[k];
-      if (Array.isArray(a) || Array.isArray(b)) {
-        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length || a.some((v, i) => v !== b[i])) { dirty = true; break; }
-      } else if (a !== b) { dirty = true; break; }
-    }
-    if (dirty) {
+    if (_matSnapDiffers(before, after)) {
       try { pushUndo({ type: 'materialEdit', matRef: _matEditorState.mat, before, after }); } catch (_) {}
     }
     // (editor still open: what is shown now is the baseline of the next edit)
@@ -41098,6 +41644,9 @@ function _openMaterialEditor(info) {
         _propMatPick = null; try { _syncPropMatHighlight(); } catch (_) {}      // (the material of the bar is lit while its editor is open)
       },
     });
+    // (a closed editor stays in the page and create() hands it back as it was: its body is the material it last showed, until the pointer
+    // came over it and the stale check drew it again. It is filled for this one here.)
+    if (existing) popup.body.innerHTML = bodyHtml;
     _matEditorState = { popup, mat: null, info: null, _previewBall: null, _matSnapshot: null };
     try { _lucide(); } catch (_) {}      // (the header's icon is a placeholder until this draws it)
   }
@@ -41451,17 +42000,33 @@ function _openMaterialEditor(info) {
         tex.userData = tex.userData || {};
         tex.userData.fileName = file.name;
         tex.userData.dataUrl = url;
+        _texSmallAhead(tex);
         resolve(tex);
       };
       img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
       img.src = url;
     });
   }
+  // Every slot (and its popover) shows a small picture of its texture, drawn once and kept until the texture changes (its version goes
+  // up, as painting on it does). The slots used to show the texture itself: a 4K picture's own address as the background of a 20 px
+  // square (decoded whole and scaled down at every paint), and a canvas (Gloss turned into roughness, a painted texture) encoded whole as
+  // a PNG each time: 14 MB and most of a second for one 4K slot. 96 px is the popover's 48 px thumbnail at 2x. A texture with no picture
+  // yet (still loading) or only on the graphics card (compressed) shows none.
   function _texThumbUrl(tex) {
-    return tex?.image?.src
-        || (tex?.image instanceof HTMLCanvasElement ? tex.image.toDataURL('image/png') : null)
-        || tex?.userData?.dataUrl
-        || '';
+    if (!tex || !tex.image) return '';
+    const hit = _texThumbCache.get(tex); if (_texPicSame(hit, tex)) return hit.url;
+    try {
+      const img = tex.image, w = img.naturalWidth || img.videoWidth || img.width || 0, h = img.naturalHeight || img.videoHeight || img.height || 0;
+      if (!(w > 0 && h > 0) || img.data) return '';
+      if (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement && !img.complete) return '';
+      const k = Math.min(1, 96 / Math.max(w, h)), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+      const x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
+      x.drawImage(_texSmall(tex) || img, 0, 0, c.width, c.height);
+      const url = c.toDataURL('image/png');
+      _texThumbCache.set(tex, Object.assign(_texPicKey(tex), { url }));
+      return url;
+    } catch (_) { return ''; }
   }
   // The marker of a texture slot is a square like a colour's swatch; with a texture set it shows the picture.
   function _paintTexMarker(ind, propName) {
@@ -41476,18 +42041,12 @@ function _openMaterialEditor(info) {
   function _refreshAttach(propName) {
     _paintTexMarker(popup.body.querySelector(`.mat-row-tex[data-tex-prop="${propName}"]`), propName);
   }
-  // A texture loaded here holds a blob: URL for its image (_loadTexture), and
-  // with it the file's bytes. Once the texture has been replaced or cleared
-  // the URL is let go. Undo does not bring a texture back (_snapshotMat keeps
-  // no maps); a duplicate of the material does share it, and its thumbnail
-  // still reads the URL, so the URL stays while any material has the texture.
-  function _releaseTexUrl(tex, propName) {
-    const u = tex && tex.userData && tex.userData.dataUrl;
-    if (typeof u !== 'string' || !u.startsWith('blob:')) return;
-    let inUse = false;
-    try { inUse = _collectLiveMaterials().some(i => i.mat && i.mat[propName] === tex); } catch (_) { inUse = true; }
-    if (!inUse) { try { URL.revokeObjectURL(u); } catch (_) {} }
-  }
+  // A texture loaded here holds a blob: URL for its image (_loadTexture), and with it the file's bytes. A texture that is replaced or
+  // cleared keeps it: the undo history holds the texture and can put it back (its thumbnail and an export read the URL). It used to be
+  // let go, which was safe only while a texture could not be undone. (dispose() only frees the copy on the graphics card; the texture is
+  // sent there again if it comes back.)
+  // Loading, dropping and clearing a texture are each a step of the history: the editor records what changed as soon as it is done.
+  const _texStep = () => { try { _matEditorState && _matEditorState.flush && _matEditorState.flush(true); } catch (_) {} };
   let _texPop = document.getElementById('_mat-tex-pop');
   if (!_texPop) {
     _texPop = document.createElement('div');
@@ -41500,6 +42059,32 @@ function _openMaterialEditor(info) {
       if (e.target.closest?.('.mat-row-tex')) return;
       _texPop.classList.remove('show');
     });
+  }
+  // A picture file into a slot: what Load… does, and what a drop on the slot does.
+  async function _setTexFromFile(f, propName, cs) {
+    try {
+      const newTex = await _loadTexture(f, cs);
+      const oldTex = mat[propName];
+      try { oldTex?.dispose?.(); } catch (_) {}
+      mat[propName] = newTex;
+      // A colour map is multiplied by the material's colour: under a dark one (the Rubber preset is #222428) white lettering comes out
+      // almost black. The colour goes to white while the map is on, and comes back if the map is taken off (and nobody changed it since).
+      if (propName === 'map' && mat.color && mat.color.getHex() !== 0xffffff) {
+        mat.userData = mat.userData || {};
+        mat.userData._colourBeforeMap = mat.color.getHex();
+        mat.color.setHex(0xffffff);
+        try { toast?.('Colour set to white', 'A colour map is multiplied by the colour, so a dark one hides it', 'info', 3500); } catch (_) {}
+      }
+      mat.needsUpdate = true;
+      _refreshAttach(propName);
+      _texPop.classList.remove('show');
+      requestRender();
+      _refreshAll();
+      _texStep();
+    } catch (e) {
+      console.warn('[mat-tex] load failed:', e);
+      toast?.('Texture load failed', f.name, 'error', 4000);
+    }
   }
   function _openTexPop(anchor, propName, cs) {
     const slot = _texSlotByProp[propName];
@@ -41545,29 +42130,7 @@ function _openMaterialEditor(info) {
       inp.addEventListener('change', async () => {
         const f = inp.files?.[0];
         if (!f) return;
-        try {
-          const newTex = await _loadTexture(f, cs);
-          const oldTex = mat[propName];
-          try { oldTex?.dispose?.(); } catch (_) {}
-          mat[propName] = newTex;
-          _releaseTexUrl(oldTex, propName);
-          // A colour map is multiplied by the material's colour: under a dark one (the Rubber preset is #222428) white lettering comes out
-          // almost black. The colour goes to white while the map is on, and comes back if the map is taken off (and nobody changed it since).
-          if (propName === 'map' && mat.color && mat.color.getHex() !== 0xffffff) {
-            mat.userData = mat.userData || {};
-            mat.userData._colourBeforeMap = mat.color.getHex();
-            mat.color.setHex(0xffffff);
-            try { toast?.('Colour set to white', 'A colour map is multiplied by the colour, so a dark one hides it', 'info', 3500); } catch (_) {}
-          }
-          mat.needsUpdate = true;
-          _refreshAttach(propName);
-          _texPop.classList.remove('show');
-          requestRender();
-          _refreshAll();
-        } catch (e) {
-          console.warn('[mat-tex] load failed:', e);
-          toast?.('Texture load failed', f.name, 'error', 4000);
-        }
+        await _setTexFromFile(f, propName, cs);
       });
       document.body.appendChild(inp); inp.click();
       setTimeout(() => inp.remove(), 0);
@@ -41576,7 +42139,6 @@ function _openMaterialEditor(info) {
       const oldTex = mat[propName];
       try { oldTex?.dispose?.(); } catch (_) {}
       mat[propName] = null;
-      _releaseTexUrl(oldTex, propName);
       if (propName === 'map' && mat.userData && mat.userData._colourBeforeMap != null) {
         if (mat.color && mat.color.getHex() === 0xffffff) mat.color.setHex(mat.userData._colourBeforeMap);
         delete mat.userData._colourBeforeMap;
@@ -41586,6 +42148,7 @@ function _openMaterialEditor(info) {
       _texPop.classList.remove('show');
       requestRender();
       _refreshAll();
+      _texStep();
     });
   }
   popup.body.querySelectorAll('.mat-row-tex').forEach(btn => { try { _paintTexMarker(btn, btn.dataset.texProp); } catch (_) {} });
@@ -41593,6 +42156,20 @@ function _openMaterialEditor(info) {
     const propName = btn.dataset.texProp;
     if (!propName) return;
     const cs = _texSlotByProp[propName]?.cs || 'linear';
+    // A picture dragged from the file explorer onto the slot loads into it, as Load… does. (Stopped here, so the viewport underneath does
+    // not open it as a model, and the browser does not open it in the tab.)
+    const isFiles = (e) => !!e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+    btn.addEventListener('dragenter', (e) => { if (!isFiles(e)) return; e.preventDefault(); e.stopPropagation(); btn.classList.add('tex-drop-over'); });
+    btn.addEventListener('dragover', (e) => { if (!isFiles(e)) return; e.preventDefault(); e.stopPropagation(); try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {} btn.classList.add('tex-drop-over'); });
+    btn.addEventListener('dragleave', () => btn.classList.remove('tex-drop-over'));
+    btn.addEventListener('drop', (e) => {
+      btn.classList.remove('tex-drop-over');
+      if (!isFiles(e)) return;
+      e.preventDefault(); e.stopPropagation();
+      const f = [...e.dataTransfer.files].find(x => /^image\//.test(x.type) || /\.(png|jpe?g|webp|avif|gif|bmp)$/i.test(x.name));
+      if (!f) { toast?.('Not a picture', 'A texture slot takes a PNG, JPEG, WebP or AVIF file', 'info', 3500); return; }
+      _setTexFromFile(f, propName, cs);
+    });
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (_texPop.classList.contains('show') && _texPop._anchorProp === propName) {
@@ -42071,8 +42648,11 @@ function _wireMaterialActions() {
   // Hold the "+" (or right-click it) for the presets. The press that opened the list is not also a click.
   {
     let holdT = 0, held = false;
-    const openList = () => {
-      held = true;
+    // fromHold: the list came up under a press of the + that is still down, so the click that ends it must not add a material too. Opened
+    // any other way (the arrow, a right-click, the command palette) it leaves the next click on the + alone: that one used to be
+    // swallowed, so New material from the palette, or Enter on the button, did nothing once after the list had been open.
+    const openList = (fromHold = false) => {
+      held = fromHold;
       _renderPresetMenu();
       // (the dock animates with a transform, which breaks fixed positioning inside it: the list lives on <body>)
       if (menu.parentElement !== document.body) document.body.appendChild(menu);
@@ -42108,7 +42688,7 @@ function _wireMaterialActions() {
       if (e.button !== 0) return;
       held = false; clearTimeout(holdT);
       document.removeEventListener('mouseup', pickOnRelease, true);
-      holdT = setTimeout(() => { openList(); document.addEventListener('mouseup', pickOnRelease, true); }, HOLD_MENU_MS);
+      holdT = setTimeout(() => { openList(true); document.addEventListener('mouseup', pickOnRelease, true); }, HOLD_MENU_MS);
     });
     for (const ev of ['mouseup', 'mouseleave']) addBtn.addEventListener(ev, () => clearTimeout(holdT));
     addBtn.addEventListener('contextmenu', (e) => { e.preventDefault(); clearTimeout(holdT); openList(); });
@@ -54050,47 +54630,45 @@ _UndoOps.register('uiSlider', {
   }, true);
 }
 
-// Snapshot a THREE.Material's edit-relevant scalar / boolean / Color
-// properties. Sticks to fields the Material editor exposes — textures
-// are preserved by ref (not serialised), keeping the snapshot cheap.
+// Snapshot of everything a material can be changed in, so that an undo puts back any change, wherever it was made: every number and
+// switch of its own (roughness, depthWrite, specularIntensity, ...), every colour (as a hex), every 2D vector (normalScale,
+// clearcoatNormalScale) and range (iridescenceThicknessRange), and every texture slot, by reference (a texture is not copied: the
+// snapshot holds the very texture, so it stays alive for an undo). It used to keep a short list of fields and no textures at all, so a
+// texture loaded, dropped or cleared in the editor, and fields such as the specular colour, could not be undone.
+// Values are plain (a colour is a hex, a vector an array, a texture its reference), so two snapshots compare with === field by field.
+const _MAT_SNAP_SKIP = new Set(['id', 'uuid', 'type', 'version', 'needsUpdate', 'userData', 'defines', 'onBuild', 'onBeforeRender', 'onBeforeCompile']);
 function _snapshotMat(mat) {
   if (!mat) return null;
   const s = {};
   s.name = mat.name || '';
-  if (mat.color)      s.color      = mat.color.getHex();
-  if (mat.emissive)   s.emissive   = mat.emissive.getHex();
-  if (mat.sheenColor) s.sheenColor = mat.sheenColor.getHex();
-  const keys = [
-    'metalness','roughness','opacity','alphaTest','transparent',
-    'flatShading','wireframe','vertexColors','side',
-    'emissiveIntensity','envMapIntensity','aoMapIntensity','lightMapIntensity',
-    'bumpScale','displacementScale','displacementBias',
-    'clearcoat','clearcoatRoughness','sheen','sheenRoughness',
-    'ior','transmission','thickness','iridescence','iridescenceIOR',
-  ];
-  for (const k of keys) {
+  for (const k of Object.keys(mat)) {
+    if (k[0] === '_' || _MAT_SNAP_SKIP.has(k) || /^is[A-Z]/.test(k)) continue;
     const v = mat[k];
-    if (v === undefined) continue;
     if (typeof v === 'number' || typeof v === 'boolean') s[k] = v;
+    else if (v && v.isColor) s[k] = v.getHex();
+    else if (v && v.isVector2) s[k] = [v.x, v.y];
+    else if (v && v.isTexture) s[k] = v;
+    else if (v === null && /map$/i.test(k)) s[k] = null;                 // (an empty texture slot: a texture set later goes back to none)
+    else if (Array.isArray(v) && v.every(x => typeof x === 'number')) s[k] = v.slice();
   }
-  if (mat.normalScale && mat.normalScale.isVector2) {
-    s.normalScale = [mat.normalScale.x, mat.normalScale.y];
-  }
+  // (the colour a colour map put aside when it turned the colour white: it comes back with the map taken off)
+  if (mat.userData && mat.userData._colourBeforeMap != null) s._colourBeforeMap = mat.userData._colourBeforeMap;
   return s;
 }
 function _applyMatSnapshot(mat, snap) {
   if (!mat || !snap) return;
   if (typeof snap.name === 'string') mat.name = snap.name;
-  if (snap.color      != null && mat.color)      mat.color.setHex(snap.color);
-  if (snap.emissive   != null && mat.emissive)   mat.emissive.setHex(snap.emissive);
-  if (snap.sheenColor != null && mat.sheenColor) mat.sheenColor.setHex(snap.sheenColor);
   for (const k of Object.keys(snap)) {
-    if (k === 'color' || k === 'emissive' || k === 'sheenColor' || k === 'normalScale') continue;
-    if (mat[k] !== undefined && (typeof snap[k] === 'number' || typeof snap[k] === 'boolean')) mat[k] = snap[k];
+    if (k === 'name' || k[0] === '_' || !(k in mat)) continue;
+    const v = snap[k], cur = mat[k];
+    if (cur && cur.isColor) { if (typeof v === 'number') cur.setHex(v); }
+    else if (cur && cur.isVector2) { if (Array.isArray(v)) cur.set(v[0], v[1]); }
+    else if (Array.isArray(v)) mat[k] = v.slice();
+    else if (v === null || (v && v.isTexture)) { if (cur !== v) { mat[k] = v; if (v) v.needsUpdate = true; } }
+    else if (typeof v === 'number' || typeof v === 'boolean') mat[k] = v;
   }
-  if (Array.isArray(snap.normalScale) && mat.normalScale && mat.normalScale.isVector2) {
-    mat.normalScale.set(snap.normalScale[0], snap.normalScale[1]);
-  }
+  mat.userData = mat.userData || {};
+  if (snap._colourBeforeMap != null) mat.userData._colourBeforeMap = snap._colourBeforeMap; else delete mat.userData._colourBeforeMap;
   // (a "transparent" flag at full opacity with nothing to be see-through by is a leftover: it would be written to a file as BLEND)
   if (mat.transparent && mat.opacity >= 1 && !mat.alphaMap && !mat.map && !(mat.alphaTest > 0)) mat.transparent = false;
   mat.needsUpdate = true;
@@ -54181,6 +54759,8 @@ wireUI = function() {
 // =================================================================
 // Properties panel — show group info when an entire group is selected
 // =================================================================
+{ const _origRefreshProps_align = refreshPropertiesPanel;
+  refreshPropertiesPanel = function () { const r = _origRefreshProps_align.apply(this, arguments); try { _alignRefreshInfo(); } catch (_) {} return r; }; }      // (the Align to floor card: whole model or selection)
 const _origRefreshProps_groups = refreshPropertiesPanel;
 refreshPropertiesPanel = function() {
   if (state.selected.size > 0 && state.userGroups.length > 0) {
@@ -56785,7 +57365,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   const _decSnap = (p) => {
     try { _Brep.seen(p.mesh); } catch (_) {}         // (the geometry it gets next takes the CAD edges of this one)
     return {
-      geom: p.mesh.geometry, hash: p.hash, triCount: p.triCount, vertCount: p.vertCount, dev: p.simpDev || 0,
+      geom: p.mesh.geometry, hash: p.hash, triCount: p.triCount, vertCount: p.vertCount, dev: p.simpDev || 0, shadeAngle: p.shadeAngle,
       bbox: p.bbox ? p.bbox.clone() : null,
       sizeMetrics: p.sizeMetrics ? { ...p.sizeMetrics } : null,
     };
@@ -56802,6 +57382,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       p.vertCount = st.vertCount;
       if (st.bbox) p.bbox = st.bbox.clone();
       if (st.sizeMetrics) p.sizeMetrics = { ...st.sizeMetrics };
+      if ('shadeAngle' in st) p.shadeAngle = st.shadeAngle;      // (a tool that shaded the part at its own angle sets the part's Shading angle)
       p._fp = null; p._fpKey = null;
       try { _cadEdgesPartSwapped(p); } catch (_) {}
     }
@@ -57228,11 +57809,11 @@ setTimeout(() => _dndDecorateTree(), 0);
     const say = (a, b, k, ms) => { if (!o.quiet) toast(a, b, k, ms); };
     const title = o.mode === 'outline' ? 'Fill solid round' : o.mode === 'belt' ? 'Belt: remove ribs' : 'Fill round grooves';
     if (!targets.length) { say(title, 'Select a round part first', 'info', 2500); return { parts: 0, results: [] }; }
-    const undoItems = [], results = [], spins = [], sv = new THREE.Vector3();
+    const undoItems = [], results = [], sv = new THREE.Vector3();
     // The card's two sliders are remembered (this browser): run again by hand, the parts are built with what was set last time.
     // Claude's tool gives its own numbers, or gets the part's own segments and 30°.
     const segs = o.segments > 2 ? Math.round(o.segments) : (!o.quiet && _Prefs.get('roundSegments') > 2 ? Math.round(_Prefs.get('roundSegments')) : undefined);
-    const deg = o.smoothDeg >= 0 ? o.smoothDeg : (!o.quiet && _Prefs.get('roundSmooth') >= 0 ? _Prefs.get('roundSmooth') : 30);
+    const deg = o.smoothDeg >= 0 ? o.smoothDeg : 30;
     for (const p of targets) {
       const geom = p.mesh.geometry, pa = geom.attributes && geom.attributes.position;
       if (!pa) continue;
@@ -57259,12 +57840,10 @@ setTimeout(() => _dndDecorateTree(), 0);
       p.triCount = r.index.length / 3; p.vertCount = r.positions.length / 3;
       _refreshPartBBox(p); p._fp = null; p._fpKey = null;
       undoItems.push({ partId: p.partId, before, after: _decSnap(p) });
-      spins.push({ partId: p.partId, prof: r.profileAfter, c: r.center, a: r.axis, phase: r.phase, eps: r.eps, N: r.segments, own: r.ownSegments, sweep: r.sweep || null, mat, uvSrc });
     }
     if (undoItems.length) {
       const op = { type: 'decimate', label: o.mode === 'outline' ? 'Fill solid round' : o.mode === 'belt' ? 'Remove ribs' : 'Remove ridges', items: undoItems };
       pushUndo(op);
-      if (!o.quiet) _RoundSpin.offer(op, spins, title, deg);
       try { recomputeStats(); } catch (_) {}
       try { rebuildTree(); } catch (_) {}
       try { refreshPropertiesPanel(); } catch (_) {}
@@ -57296,122 +57875,6 @@ setTimeout(() => _dndDecorateTree(), 0);
     out.computeBoundingBox(); out.computeBoundingSphere();
     return out;
   }
-  // The Segments slider. After either command the Round part card shows how many segments go round the axis. The profile of each
-  // part is kept, so moving the slider only spins it again (nothing is searched twice), and the parts change inside the same undo
-  // step: Ctrl+Z still takes the whole command back at once. Once undo or redo has moved past that step the slider stops.
-  const _RoundSpin = (() => {
-    let cur = null, scrub = null, smooth = null, tidy = 0;
-    const $i = (id) => document.getElementById(id);
-    const alive = () => cur && state.history[state.history.length - 1] === cur.op;
-    const tris = () => cur.spins.reduce((s, x) => { const p = getPart(x.partId); return s + (p && !p.deleted ? p.triCount | 0 : 0); }, 0);
-    const say = (t) => { const el = $i('rnd-info'); if (el) el.textContent = t; };
-    const report = () => cur.belt ? say(fmtNum(tris()) + ' triangles' + (cur.spins.length > 1 ? ' in ' + cur.spins.length + ' parts' : '') + ' · the path has ' + cur.spins[0].sweep.path.length + ' corners. Ctrl+Z takes the whole step back.') : say(fmtNum(tris()) + ' triangles' + (cur.spins.length > 1 ? ' in ' + cur.spins.length + ' parts' : '') + ' · segments meet at ' + (360 / cur.N).toFixed(1) + '°, so they are ' + (360 / cur.N > cur.deg ? 'lit flat' : 'shaded smooth') + (cur.N0 ? ' · the part had ' + cur.N0 + ' segments' : '') + '. Ctrl+Z takes the whole step back.');
-    // N: segments round the axis; force: build again even at the same N (the Smooth angle changed)
-    function apply(N, fromSlider, force) {
-      if (!cur) return;
-      if (!alive()) { say('This step is no longer the last one (undo or redo moved past it), so the slider does nothing now.'); return; }
-      N = Math.max(6, Math.min(128, Math.round(N)));
-      if (!fromSlider && scrub) scrub.setValue(N);
-      if (N === cur.N && !force) return;
-      const freed = [];
-      for (const s of cur.spins) {
-        const p = getPart(s.partId);
-        if (!p || p.deleted || !p.mesh) continue;
-        let g = s.sweep ? sweepLoops(s.prof, s.sweep, cur.deg) : revolveLoops(s.prof, s.c, s.a, N, s.phase, s.eps, cur.deg);
-        if (s.uvSrc) g = withUvs(g, s.uvSrc.P, s.uvSrc.I, s.uvSrc.sets);
-        const out = _roundGeom(g, s.mat, p.mesh.geometry);
-        // Its edges are found now, before anything draws it: otherwise the selection shows a box and no glow, and the outline
-        // lines are missing, until a worker has them (the "square for a moment" while the slider moves).
-        try { _getEdgesGeom(out); } catch (_) {}
-        const old = p.mesh.geometry, oldHash = p.hash, hash = 'fg_' + (state._decSeq = (state._decSeq | 0) + 1);
-        state.geomByHash.set(hash, out);
-        p.mesh.geometry = _stampGeometry(out); p.hash = hash;
-        p.triCount = g.index.length / 3; p.vertCount = g.positions.length / 3;
-        _refreshPartBBox(p); p._fp = null; p._fpKey = null;
-        const it = cur.op.items.find(i => i.partId === s.partId);
-        if (it) it.after = _decSnap(p);
-        try { _cadEdgesPartSwapped(p); } catch (_) {}                // its lines are of the old shape
-        // the geometry this replaces was made by the command or the slider, and now nothing holds it
-        if (oldHash && state.geomByHash.get(oldHash) === old) state.geomByHash.delete(oldHash);
-        freed.push(old);
-      }
-      cur.N = N;
-      report();
-      // Everything drawn from the part's shape is drawn again before the next frame: the outline lines and the wireframe (both are
-      // otherwise redrawn on a timer, so a frame or two shows none), and the selection's outline and glow (otherwise the old shape
-      // is drawn over the new one, out of step and flickering where the two cross).
-      try { if (_cadEdgesActive) _cadEdgesSync(); } catch (_) {}
-      try { if (state.viewMode === 'wire') _wireSync(); } catch (_) {}
-      try { applySelectionColors(); } catch (_) {}
-      requestRender();
-      (async () => {
-        await _nextFrame(); await _nextFrame();
-        for (const g of freed) { try { _disposeEdgesFor(g, false); } catch (_) {} try { g.boundsTree && g.disposeBoundsTree?.(); } catch (_) {} try { _safeDispose(g); } catch (_) {} }
-      })();
-      // the rest of the page catches up when the slider rests
-      clearTimeout(tidy);
-      tidy = setTimeout(() => {
-        try { recomputeStats(); } catch (_) {}
-        try { refreshPropertiesPanel(); } catch (_) {}
-        try { _buildBVHsForAllGeoms(); } catch (_) {}
-        try { applySelectionColors(); } catch (_) {}               // (again: the edges of the new shape may have been pending)
-        if (state.viewMode === 'wire') { try { _wireSoon(); } catch (_) {} }
-        requestRender();
-      }, 250);
-    }
-    // While the card is open the view is Wireframe, with the lines on the parts in work only, so each step of the slider shows;
-    // closing the card (Done, Enter, Esc) puts the view back the way it was, unless it was changed by hand meanwhile.
-    let viewBefore = null, wired = false;
-    function wire() {
-      const sec = document.querySelector('.section-cmd[data-cmd="roundpart"]');
-      if (!sec || wired) return;
-      wired = true;
-      sec.addEventListener('cmd-close', () => {
-        try { _wireLimit(null); } catch (_) {}
-        if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} }
-        viewBefore = null;
-      });
-      $i('rnd-ok')?.addEventListener('click', () => _CmdCards.close('roundpart'));
-    }
-    function offer(op, spins, title, deg0 = 30) {
-      if (!spins.length) return;
-      wire();
-      const N0 = spins[0].N;
-      cur = { op, spins, N: N0, N0: spins[0].own || null, deg: deg0, belt: !!spins[0].sweep };
-      { const row = $i('rnd-seg-scrub'); if (row && row.parentElement) row.parentElement.hidden = cur.belt; }
-      if (state.viewMode !== 'wire') { viewBefore = viewBefore || state.viewMode; try { setViewMode('wire'); requestRender(); } catch (_) {} }
-      try { _wireLimit(spins.map(s => s.partId)); } catch (_) {}
-      const t = $i('rnd-title'); if (t) t.textContent = title;
-      if (!scrub) scrub = initScrubber({
-        el: 'rnd-seg-scrub', label: 'Segments around', maxSteps: 122,
-        stepToVal: (st) => st + 6, valToStep: (v) => Math.max(0, Math.min(122, Math.round(v) - 6)),
-        format: (v) => ({ value: String(Math.round(v)), unit: '' }), initialValue: N0,
-        promptTitle: 'Segments around', promptUnit: '',
-        onChange: (v) => { if (cur && cur.belt) return; apply(v, true); if (cur) _Prefs.set('roundSegments', cur.N); },
-      });
-      else scrub.setValue(N0);
-      if (!smooth) smooth = initScrubber({
-        el: 'rnd-smooth-scrub', label: 'Smooth up to', maxSteps: 90,
-        stepToVal: (st) => st, valToStep: (v) => Math.max(0, Math.min(90, Math.round(v))),
-        format: (v) => ({ value: String(Math.round(v)), unit: '°' }), initialValue: deg0,
-        promptTitle: 'Smooth up to', promptUnit: '°',
-        onChange: (v) => { setDeg(v, true); if (cur) _Prefs.set('roundSmooth', cur.deg); },
-      });
-      else smooth.setValue(deg0);
-      report();
-      _CmdCards.open('roundpart');
-    }
-    function setDeg(v, fromSlider) {
-      if (!cur) return;
-      v = Math.max(0, Math.min(90, Math.round(v)));
-      if (!fromSlider && smooth) smooth.setValue(v);
-      if (v === cur.deg) return;
-      cur.deg = v;
-      apply(cur.N, true, true);
-    }
-    return { offer, apply: (n) => apply(n), smooth: (d) => setDeg(d), get current() { return cur ? cur.N : null; } };
-  })();
-  window.__moAgent = Object.assign(window.__moAgent || {}, { roundSegments: (n) => { _RoundSpin.apply(n); return _RoundSpin.current; }, roundSmooth: (d) => _RoundSpin.smooth(d) });
 
   // ── Mesh tools: mend, reshape, booleans ──────────────────────────────────
   // One runner for the tools of meshops.js. A tool on one part (Close cracks, Remove slivers, Patch holes, Remesh evenly, Smooth
@@ -57647,6 +58110,74 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
     return { run, set: (k, v) => set(k, v), get busy() { return busy; } };
   })();
+
+  // ── Profile: clean outline ──────────────────────────────────────────────
+  // The card is in profile-card.js (the work on the cross-section in profile.js). It is handed what it uses from here: the objects as
+  // they are, the functions as forwarders. window.__moAgent.cleanProfile(o) opens it (o: see open() there).
+  installProfileCard({
+    state, _Prefs, _CmdCards,
+    initScrubber: (...a) => initScrubber(...a),
+    toast: (...a) => toast(...a),
+    getPart: (...a) => getPart(...a),
+    fmtNum: (...a) => fmtNum(...a),
+    requestRender: (...a) => requestRender(...a),
+    pushUndo: (...a) => pushUndo(...a),
+    _roundGeom: (...a) => _roundGeom(...a),
+    _stampGeometry: (...a) => _stampGeometry(...a),
+    _refreshPartBBox: (...a) => _refreshPartBBox(...a),
+    _decSnap: (...a) => _decSnap(...a),
+    _getEdgesGeom: (...a) => _getEdgesGeom(...a),
+    _cadEdgesPartSwapped: (...a) => _cadEdgesPartSwapped(...a),
+    _uvSetsOf: (...a) => _uvSetsOf(...a),
+    _disposeEdgesFor: (...a) => _disposeEdgesFor(...a),
+    _safeDispose: (...a) => _safeDispose(...a),
+    _nextFrame: (...a) => _nextFrame(...a),
+    // after the parts changed: everything drawn from their shape, the numbers, the tree and the panel
+    settle: () => {
+      try { if (_cadEdgesActive) _cadEdgesSync(); } catch (_) {}
+      try { if (state.viewMode === 'wire') _wireSync(); } catch (_) {}
+      try { recomputeStats(); } catch (_) {}
+      try { rebuildTree(); } catch (_) {}
+      try { refreshPropertiesPanel(); } catch (_) {}
+      try { applySelectionColors(); } catch (_) {}
+      try { _buildBVHsForAllGeoms(); } catch (_) {}
+      requestRender();
+    },
+  });
+  // The Round part card (round-card.js): the Profile card's twin for turned parts and belts, the same objects handed to it.
+  // window.__moAgent.roundCard(o) opens it; window.__moAgent.fillGrooves stays the quiet way in for Claude and scripts.
+  installRoundCard({
+    state, _Prefs, _CmdCards,
+    setViewMode: (...a) => setViewMode(...a),
+    _wireLimit: (...a) => _wireLimit(...a),
+    initScrubber: (...a) => initScrubber(...a),
+    toast: (...a) => toast(...a),
+    getPart: (...a) => getPart(...a),
+    fmtNum: (...a) => fmtNum(...a),
+    requestRender: (...a) => requestRender(...a),
+    pushUndo: (...a) => pushUndo(...a),
+    _roundGeom: (...a) => _roundGeom(...a),
+    _stampGeometry: (...a) => _stampGeometry(...a),
+    _refreshPartBBox: (...a) => _refreshPartBBox(...a),
+    _decSnap: (...a) => _decSnap(...a),
+    _getEdgesGeom: (...a) => _getEdgesGeom(...a),
+    _cadEdgesPartSwapped: (...a) => _cadEdgesPartSwapped(...a),
+    _uvSetsOf: (...a) => _uvSetsOf(...a),
+    _disposeEdgesFor: (...a) => _disposeEdgesFor(...a),
+    _safeDispose: (...a) => _safeDispose(...a),
+    _nextFrame: (...a) => _nextFrame(...a),
+    // after the parts changed: everything drawn from their shape, the numbers, the tree and the panel
+    settle: () => {
+      try { if (_cadEdgesActive) _cadEdgesSync(); } catch (_) {}
+      try { if (state.viewMode === 'wire') _wireSync(); } catch (_) {}
+      try { recomputeStats(); } catch (_) {}
+      try { rebuildTree(); } catch (_) {}
+      try { refreshPropertiesPanel(); } catch (_) {}
+      try { applySelectionColors(); } catch (_) {}
+      try { _buildBVHsForAllGeoms(); } catch (_) {}
+      requestRender();
+    },
+  });
 
   // ── Voxel remesh ─────────────────────────────────────────────────────────
   // voxel.js rebuilds each part on a voxel grid: one closed, even surface, its sharp edges kept to the size of a voxel, bodies that
@@ -59683,7 +60214,10 @@ setTimeout(() => _dndDecorateTree(), 0);
         let same = !!(bt && bt._indirectBuffer && g0.attributes.position.count === fin.attributes.position.count && !!i0 === !!i1);
         if (same && i0) { const a = i0.array, b = i1.array; if (a.length !== b.length) same = false; else for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { same = false; break; } }
         if (same) {
-          const t = bt.constructor.deserialize({ roots: bt._roots.map(r => r.slice()), index: null, indirectBuffer: bt._indirectBuffer }, fin, { setIndex: false });
+          // (the format version said, from the library itself: without it the current tree was taken for the old format and "fixed up",
+          // which scrambled it, and refit() ran out of stack)
+          const version = bt.constructor.serialize(bt, { cloneBuffers: false }).version;
+          const t = bt.constructor.deserialize({ version, roots: bt._roots.map(r => r.slice()), index: null, indirectBuffer: bt._indirectBuffer }, fin, { setIndex: false });
           t.refit(); fin.boundsTree = t;
         }
       } catch (err) { console.warn('[edit] picking tree not refitted:', err && err.message || err); fin.boundsTree = undefined; }
@@ -64210,7 +64744,7 @@ const _Elements = (() => {
     const alpha = T.smoothstep(T.float(1).sub(fw), T.float(1), r).oneMinus().mul(seen).mul(vis);
     // (THREE.Color: the hex in sRGB, turned into the linear values the shader works in, as a material's colour is; raw numbers came out lighter)
     mat.colorNode = T.vec4(T.mix(T.color(new THREE.Color(S.core)), T.color(new THREE.Color(S.ring)), ring), alpha);
-    mat.scaleNode = uScale;
+    mat.scaleNode = _fixedSpriteScale(uScale);
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = S.order; sprite.frustumCulled = false; sprite.count = 0; sprite.visible = false; sprite.raycast = () => {};
     // The same dots once more, drawing no colour: this pass writes depth only, with the whole disc lifted for the steepest face as the
@@ -64224,7 +64758,7 @@ const _Elements = (() => {
     const liftAll = T.mix(uRadO, d.mul(uRadP), persp).mul(T.tan(T.min(aAbs.add(spread), Math.atan(DOT_TAN_MAX))));
     dm.positionNode = wp.add(view.mul(pull.add(liftAll)));
     dm.opacityNode = alpha;
-    dm.scaleNode = uScale;
+    dm.scaleNode = _fixedSpriteScale(uScale);
     const depth = new THREE.Sprite(dm);
     depth.renderOrder = DOT_DEPTH_ORDER; depth.frustumCulled = false; depth.count = 0; depth.visible = false; depth.raycast = () => {}; depth.userData.depthPass = true;
     L = dotLayers[name] = { sprite, depth, pos, nrm, cap, n: 0, uScale, uRadP, uRadO };

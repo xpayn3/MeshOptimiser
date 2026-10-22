@@ -1,7 +1,9 @@
 // node tests/e2e-shadows.mjs
 //
-// Scene > Shadows: the switch is there and turns the shadows on; the sun casts shadows on the parts; the floor gets a soft shadow of the model
-// seen from above, on the right side of it (not mirrored). Needs the app served on http://localhost:4242, Chrome and Node 22+.
+// Scene > Shadows: the switch is there and turns the shadows on; the sun casts shadows on the parts. The floor of the grid gets no
+// shadow picture: it has been off on purpose since v0.35.0 (_FLOOR_SHADOW in app.js; the shadows fall on the model's own parts). If it is
+// switched back on, the floor checks below run: a soft shadow of the model seen from above, on the right side of it (not mirrored).
+// Needs the app served on http://localhost:4242, Chrome and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -72,7 +74,12 @@ try {
   check('the switch turns the shadows on', await evalJS('window.state.shadowsEnabled === true'));
   check('the sun casts', await evalJS('window.state._lights.dir.castShadow === true'));
   check('the parts cast and receive', await evalJS("(() => { const p = window.state.parts[0]; return p.mesh.castShadow === true && p.mesh.receiveShadow === true; })()"));
-  check('the floor has its shadow picture and shows it', await evalJS('!!(window.state._shadowFloor && window.state._shadowFloor.visible && window.state._shadowFloor.material.map)'));
+  const floorOn = await evalJS('!!(window.state._shadowFloor && window.state._shadowFloor.visible && window.state._shadowFloor.material.map)');
+  if (!floorOn) {
+    check('the floor of the grid gets no shadow picture (off on purpose: the shadows fall on the parts)', await evalJS('!window.state._shadowFloor || !window.state._shadowFloor.visible'));
+    check('no shader error', !(await evalJS("(window.__consoleLog || []).length")), await evalJS("(window.__consoleLog || []).slice(0, 2)"));
+  } else {
+  check('the floor has its shadow picture and shows it', floorOn);
   const mass = await evalJS(`(() => { const f = window.state._shadowFloor, c = f.material.map.image, N = c.width, d = c.getContext('2d').getImageData(0, 0, N, N).data; let sa = 0, sx = 0, sy = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const a = d[(y * N + x) * 4 + 3]; sa += a; sx += a * x; sy += a * y; }
     const u = sx / sa / N, v = 1 - sy / sa / N, P = f.userData.corners, w = [0, 1, 2].map(k => P[0][k] + u * (P[1][k] - P[0][k]) + v * (P[3][k] - P[0][k]));
     const ctr = f.userData.centre, sun = f.userData.sunHoriz; const dx = [0, 1, 2].map(k => w[k] - ctr[k]);
@@ -83,9 +90,10 @@ try {
   check('it falls away from the sun (its middle is on the far side of the model from the sun)', mass.along < 0, mass);
   check('no shader error', !(await evalJS("(window.__consoleLog || []).length")), await evalJS("(window.__consoleLog || []).slice(0, 2)"));
   if (process.env.SHOT) { await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70 }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70 }); await sleep(2500); const sh = await send('Page.captureScreenshot', { format: 'png' }); (await import('fs')).writeFileSync(process.env.SHOT, Buffer.from(sh.data, 'base64')); }
+  }
   // off again
   await evalJS("document.getElementById('toggle-shadows').click(); true"); await sleep(600);
-  check('and off again hides the floor shadow', await evalJS('window.state.shadowsEnabled === false && !window.state._shadowFloor.visible'));
+  check('and off again: the sun casts no shadow and no floor shadow shows', await evalJS('window.state.shadowsEnabled === false && window.state._lights.dir.castShadow === false && (!window.state._shadowFloor || !window.state._shadowFloor.visible)'));
 } catch (e) { fail++; console.log('HARNESS ERROR:', e.message); }
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('page exceptions:', errors.length); errors.slice(0, 12).forEach(e => console.log('  ' + e));

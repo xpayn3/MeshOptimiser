@@ -1,0 +1,275 @@
+// The Round part card: a turned part (a spool, a bushing, a pulley) or a drive belt made clean from its profile. The work on the
+// profile is revolve.js; this file is the card and the part that touches the scene. It is the Profile card's twin: the profile as
+// it is (grey) and as it will be (blue) before anything changes, the same editor on it (section-view.js), Apply for every part in
+// one undo step, and the options building them again live in that step afterwards.
+//
+//   Remove ridges  the profile cut through the part, grooves and ridges narrower than the width filled, spun again (fillRoundGrooves)
+//   Make solid     the outline of the whole part spun: fins, ribs and the room between them solid (outlineRevolve)
+//   Belt           a band swept along a closed path, the gaps between its ribs filled (sweepBelt)
+//
+// The profile is drawn along the axis (across) by the distance from it (up); a belt's by its width (across) and the depth in from
+// its back (up). Edited by hand, a part is built from the profile as edited (a point never goes past the axis). The width is
+// remembered as a share of the part's size; Segments around as a number; the Shading angle is the part's own (as in Properties).
+// Once applied, the view is Wireframe with the lines on the parts in work only, so each change of Segments around shows; closing
+// the card puts the view back as it was, unless it was changed by hand meanwhile.
+import { fillRoundGrooves, outlineRevolve, sweepBelt, revolveLoops, sweepLoops } from './revolve.js?v=8';
+import { withUvs } from './meshops.js?v=18';
+import { sectionView } from './section-view.js?v=1';
+
+export function installRoundCard(app) {
+  const {
+    state, _Prefs, _CmdCards, initScrubber, toast, getPart, fmtNum, pushUndo, settle, setViewMode, _wireLimit,
+    _roundGeom, _stampGeometry, _refreshPartBBox, _decSnap, _getEdgesGeom, _cadEdgesPartSwapped, _uvSetsOf, _disposeEdgesFor, _safeDispose, _nextFrame,
+  } = app;
+  const NAMES = { exact: 'Round part: remove ridges', outline: 'Round part: make solid', belt: 'Belt: remove ribs' };
+  const DEF = { mode: 'exact', widthShare: 0.15, segments: 0, smooth: 30 };           // (segments 0: the part's own, or 64 for Make solid)
+  const $i = (id) => document.getElementById(id);
+  const pref = (k) => { const v = _Prefs.get('round.' + k); return v === undefined || v === null ? DEF[k] : v; };
+  let cur = null, timer = 0, busy = false, again = false, wired = false, view = null, scanSeq = 0;
+  const sc = {};
+
+  const sourceOf = (p) => {
+    const g = p.mesh.geometry, pa = g.attributes.position, P = new Float32Array(pa.count * 3);
+    for (let v = 0; v < pa.count; v++) { P[3 * v] = pa.getX(v); P[3 * v + 1] = pa.getY(v); P[3 * v + 2] = pa.getZ(v); }
+    p.mesh.updateWorldMatrix(true, false);
+    const sv = p.mesh.getWorldScale(new p.mesh.scale.constructor());
+    return {
+      partId: p.partId, name: p.name, P, I: g.index ? Uint32Array.from(g.index.array) : Uint32Array.from({ length: pa.count }, (_, i) => i),
+      UV: _uvSetsOf(g), mat: g.groups && g.groups.length ? (g.groups[0].materialIndex || 0) : -1,
+      scale: Math.cbrt(Math.abs(sv.x * sv.y * sv.z)) || 1, tris0: p.triCount | 0, shapes: null, last: null, before: null, trisAfter: 0,
+    };
+  };
+  const itNow = () => cur && cur.items[cur.at];
+  const FN = { exact: fillRoundGrooves, outline: outlineRevolve, belt: sweepBelt };
+  // the profile of one part for the options as they are (cheap enough to run at every change: only the part shown)
+  function profileOf(it) {
+    const o = cur.o, mode = cur.mode;
+    let r; try { r = FN[mode](it.P, it.I, { width: o.width / it.scale, segments: o.segments > 2 ? o.segments : undefined, dryRun: true }); } catch (e) { r = { ok: false, why: e.message }; }
+    if (!r || !r.ok) return r || { ok: false, why: 'nothing came back' };
+    // what it was: the exact cut (Make solid has none of its own: the exact one when the part is round enough to have it)
+    if (!it.before || it.before.mode !== mode) {
+      let b = r.profileBefore;
+      if (!b && mode === 'outline') { try { const x = fillRoundGrooves(it.P, it.I, { width: 0, dryRun: true }); if (x.ok) b = x.profileBefore; } catch (_) {} }
+      it.before = { mode, loops: b || [] };
+    }
+    const N = mode === 'belt' ? null : (o.segments > 2 ? o.segments : (mode === 'outline' ? 64 : r.ownSegments || r.segments));
+    return { ...r, N, before: it.before.loops, after: it.shapes ? it.shapes.map(S => S.outer) : r.profileAfter };
+  }
+  // the new mesh from a profile (as the options make it, or edited)
+  function meshOf(it, r) {
+    const loops = r.after, deg = cur.o.smooth;
+    const g = cur.mode === 'belt' ? sweepLoops(loops, r.sweep, deg) : revolveLoops(loops, r.center, r.axis, r.N, r.phase || 0, r.eps, deg);
+    return it.UV ? withUvs(g, it.P, it.I, it.UV) : g;
+  }
+
+  // ── the preview ──
+  const viewOf = () => view || (view = sectionView($i('rc-svg'), {
+    clampY: 0,
+    onEdit(shapes, fast) {
+      const it = itNow(); if (!it) return;
+      it.shapes = shapes; preview(fast);
+      if (!fast && cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
+    },
+  }));
+  const mm = (v) => fmtNum(v >= 100 ? Math.round(v) : v >= 10 ? Math.round(v * 10) / 10 : Math.round(v * 100) / 100) + ' mm';
+  function preview(fast) {
+    if (!cur) return;
+    const it = itNow(), r = profileOf(it);
+    it.last = r;
+    // (a belt's profile runs in from its back: drawn with the back at the top)
+    viewOf().show(r && r.ok ? { before: r.before, after: r.after, shapes: r.profileAfter.map(L => ({ outer: L, holes: [] })) } : null, cur.fit); cur.fit = false;
+    if (fast) return;
+    if (r && r.ok) { try { it.trisEst = meshOf(it, r).index.length / 3; } catch (_) { it.trisEst = 0; } }
+    const box = $i('rc-stats');
+    if (box) {
+      const row = (k, v) => '<dt>' + k + '</dt><dd>' + v + '</dd>';
+      box.innerHTML = !r || !r.ok ? row('Not this way', r && r.why ? r.why : 'it could not be done') : (cur.items.length > 1 || cur.skipped.length ? row('Parts', fmtNum(cur.items.length) + (cur.skipped.length ? ' · ' + fmtNum(cur.skipped.length) + ' other ' + (cur.skipped.length === 1 ? 'part' : 'parts') + ' left as they are' : '')) : '')
+        + (cur.mode === 'belt' ? row('Path', (r.segments || 0) + ' corners · ' + mm((r.pathLength || 0) * it.scale) + ' round') : row('Axis', axisName(r.axis) + (r.roundness !== undefined ? ' · round to ' + mm(r.roundness * it.scale) : '')))
+        + row(cur.mode === 'belt' ? 'Gaps between ribs' : 'Grooves filled', it.shapes ? 'as edited' : r.grooves ? String(r.grooves) : 'none')
+        + (cur.mode === 'belt' ? '' : row('Segments around', r.N + (r.ownSegments && cur.mode === 'exact' ? ' (the part had ' + r.ownSegments + ')' : '')))
+        + row('Triangles', fmtNum(it.tris0) + ' → ' + fmtNum(it.trisAfter || it.trisEst || 0) + (cur.items.length > 1 ? ' (this part)' : ''));
+    }
+    const n = $i('rc-name'); if (n) n.textContent = it.name;
+    const pos = $i('rc-pos'); if (pos) pos.textContent = (cur.at + 1) + ' of ' + cur.items.length;
+    const st = $i('rc-step'); if (st) st.hidden = cur.items.length < 2;
+    const seg = $i('rc-seg-row'); if (seg) seg.hidden = cur.mode === 'belt';
+    marks();
+  }
+  const axisName = (a) => (!a ? 'tilted' : Math.abs(Math.abs(a[0]) - 1) < 1e-9 ? 'X' : Math.abs(Math.abs(a[1]) - 1) < 1e-9 ? 'Y' : Math.abs(Math.abs(a[2]) - 1) < 1e-9 ? 'Z' : 'tilted');
+  function marks() {
+    const it = itNow(), on = !!(it && it.shapes), ed = !!(view && view.editing);
+    const r = $i('rc-edit-reset'); if (r) r.hidden = !on;
+    const h = $i('rc-edit-hint'); if (h) h.textContent = ed ? 'Drag a point (it snaps to the profile as it was; Shift: free) · double-click an edge to add one · Delete or Alt-click takes one out' + (on ? ' · this part is built from the profile as edited' : '') : (on ? 'Built from the profile as edited by hand.' : '');
+    const b = $i('rc-edit'); if (b) b.classList.toggle('is-on', ed);
+    for (const m of document.querySelectorAll('#rc-mode button')) m.classList.toggle('active', m.dataset.m === cur.mode);
+    const t = $i('rc-title'); if (t) t.textContent = NAMES[cur.mode];
+  }
+  function step(d) {
+    if (!cur || cur.items.length < 2) return;
+    cur.at = (cur.at + d + cur.items.length) % cur.items.length; cur.fit = true;
+    viewOf().reset(itNow().shapes); preview();
+  }
+
+  // ── build ──
+  const alive = () => cur && cur.op && state.history[state.history.length - 1] === cur.op;
+  const say = (t) => { const el = $i('rc-info'); if (el) el.textContent = t; };
+  async function build() {
+    if (!cur) return;
+    if (busy) { again = true; return; }
+    if (cur.op && !alive()) { say('This step is no longer the last one (undo or redo moved past it), so the options change nothing now.'); return; }
+    busy = true; again = false;
+    const btn = $i('rc-run'); if (btn) btn.disabled = true;
+    const freed = [], undoItems = [], bad = [];
+    try {
+      let n = 0;
+      for (const it of cur.items) {
+        if (cur.items.length > 4) say('Building ' + (++n) + ' of ' + cur.items.length + '…');
+        const p = getPart(it.partId); if (!p || p.deleted || !p.mesh) continue;
+        const r = it === itNow() && it.last && it.last.ok ? it.last : profileOf(it);
+        if (!r || !r.ok) { bad.push(it.name + ': ' + ((r && r.why) || 'it could not be done')); continue; }
+        let g; try { g = meshOf(it, r); } catch (e) { bad.push(it.name + ': ' + e.message); continue; }
+        const before = cur.op ? null : _decSnap(p);
+        const out = _roundGeom(g, it.mat, p.mesh.geometry), old = p.mesh.geometry, oldHash = p.hash, hash = 'rp_' + (state._decSeq = (state._decSeq | 0) + 1);
+        try { _getEdgesGeom(out); } catch (_) {}
+        state.geomByHash.set(hash, out);
+        p.mesh.geometry = _stampGeometry(out); p.hash = hash;
+        p.triCount = g.index.length / 3; p.vertCount = g.positions.length / 3; it.trisAfter = p.triCount;
+        p.shadeAngle = cur.o.smooth;
+        _refreshPartBBox(p); p._fp = null; p._fpKey = null;
+        try { _cadEdgesPartSwapped(p); } catch (_) {}
+        if (cur.op) {
+          const u = cur.op.items.find(x => x.partId === it.partId);
+          if (u) u.after = _decSnap(p);
+          if (oldHash && state.geomByHash.get(oldHash) === old) state.geomByHash.delete(oldHash);
+          freed.push(old);
+        } else undoItems.push({ partId: p.partId, before, after: _decSnap(p) });
+        if (n % 4 === 0) await _nextFrame();
+      }
+      if (!cur.op && undoItems.length) {
+        cur.op = { type: 'decimate', label: NAMES[cur.mode], items: undoItems }; pushUndo(cur.op);
+        // Wireframe on the parts in work while the card stays open
+        if (state.viewMode !== 'wire') { cur.viewBefore = state.viewMode; try { setViewMode('wire'); } catch (_) {} }
+        try { _wireLimit(cur.items.map(x => x.partId)); } catch (_) {}
+      }
+    } finally { busy = false; if (btn) btn.disabled = false; }
+    settle();
+    (async () => { await _nextFrame(); await _nextFrame(); for (const g of freed) { try { _disposeEdgesFor(g, false); } catch (_) {} try { _safeDispose(g); } catch (_) {} } })();
+    if (cur && cur.op) {
+      const tb = cur.items.reduce((s, x) => s + x.tris0, 0), ta = cur.items.reduce((s, x) => s + (x.trisAfter || x.tris0), 0);
+      say('Built · ' + fmtNum(tb) + ' → ' + fmtNum(ta) + ' triangles. The options now build ' + (cur.items.length > 1 ? 'them' : 'it') + ' again; Ctrl+Z takes the whole step back.');
+      const lbl = $i('rc-run-lbl'); if (lbl) lbl.textContent = 'Done';
+      const fl = document.querySelector('.section-cmd[data-cmd="round"] .cmd-ok span'); if (fl) fl.textContent = 'Done';
+    }
+    if (bad.length) toast(NAMES[cur ? cur.mode : 'exact'], bad[0] + (bad.length > 1 ? ' (and ' + (bad.length - 1) + ' more)' : ''), 'warn', 6000);
+    if (cur) preview();
+    if (again) build();
+  }
+
+  function changed(k, v, fromCtl) {
+    if (!cur) return;
+    cur.o[k] = v;
+    const it = itNow();
+    if (k === 'width' && it) _Prefs.set('round.widthShare', v / Math.max(1e-9, it.sizeMm));
+    if (k === 'segments') _Prefs.set('roundSegments', v);
+    if (!fromCtl && sc[k]) sc[k].setValue(v);
+    preview();
+    if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
+  }
+  function setMode(m) {
+    if (!cur || cur.mode === m || cur.op) return;
+    cur.mode = m; _Prefs.set('round.mode', m);
+    for (const it of cur.items) { it.shapes = null; it.before = null; }
+    viewOf().reset(null); cur.fit = true; preview();
+  }
+
+  const niceStep = (x) => { const e = Math.pow(10, Math.floor(Math.log10(x))), f = x / e; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * e; };
+  const round = (v, step) => Math.round(v / step) * step;
+  const decOf = (step) => Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+  function scrub(key, el, label, min, max, step, unit) {
+    const box = $i(el); if (!box) return;
+    box.textContent = '';
+    const steps = Math.max(1, Math.round((max - min) / step)), dec = decOf(step);
+    sc[key] = initScrubber({
+      el: box, label, maxSteps: steps, stepToVal: (st) => +(min + st * step).toFixed(dec), valToStep: (v) => Math.max(0, Math.min(steps, Math.round((v - min) / step))),
+      format: (v) => ({ value: (+v).toFixed(dec), unit }), initialValue: cur.o[key], promptTitle: label, promptUnit: unit, onChange: (v) => changed(key, v, true),
+    });
+  }
+  function wire() {
+    if (wired) return; wired = true;
+    const sec = document.querySelector('.section-cmd[data-cmd="round"]');
+    for (const b of document.querySelectorAll('#rc-mode button')) b.addEventListener('click', () => setMode(b.dataset.m));
+    $i('rc-run')?.addEventListener('click', () => { if (cur && cur.op) _CmdCards.close('round'); else build(); });
+    $i('rc-prev')?.addEventListener('click', () => step(-1));
+    $i('rc-next')?.addEventListener('click', () => step(1));
+    $i('rc-edit')?.addEventListener('click', () => { if (!cur) return; viewOf().setEdit(!view.editing); marks(); });
+    $i('rc-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
+    sec?.addEventListener('cmd-close', () => {
+      clearTimeout(timer); scanSeq++;
+      try { _wireLimit(null); } catch (_) {}
+      if (cur && cur.viewBefore && state.viewMode === 'wire') { try { setViewMode(cur.viewBefore); } catch (_) {} }
+      cur = null;
+    });
+  }
+
+  // ── open ──
+  // o: { mode, ids, width_mm, segments, smooth_deg, apply, quiet }. Nothing selected: every part shown is looked at.
+  async function open(o = {}) {
+    const mode = o.mode || pref('mode');
+    const picked = o.ids && o.ids.length ? o.ids : [...state.selected], whole = !picked.length;
+    const parts = (whole ? state.parts.filter(p => p && !p.deleted && p.visible !== false && p.mesh) : picked.map(id => getPart(id)))
+      .filter(p => p && !p.deleted && p.mesh && p.mesh.geometry && p.mesh.geometry.attributes.position && !p.isSpline && !p.isCloner);
+    if (!parts.length) { if (!o.quiet) toast(NAMES[mode], whole ? 'Open a model first' : 'Select a part first', 'info', 2500); return { ok: false, why: 'nothing to look at' }; }
+    const seq = ++scanSeq;
+    if (!o.quiet && whole) toast(NAMES[mode], 'Nothing selected: looking among the ' + fmtNum(parts.length) + ' parts shown', 'info', 3000);
+    const items = [], skipped = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (seq !== scanSeq) return { ok: false, why: 'stopped' };
+      const it = sourceOf(parts[i]);
+      let r; try { r = FN[mode](it.P, it.I, { dryRun: true }); } catch (e) { r = { ok: false, why: e.message }; }
+      if (r && r.ok) { it.sizeMm = (mode === 'belt' ? r.width / 0.25 : r.width / 0.15) * it.scale || 1; items.push(it); } else skipped.push({ name: parts[i].name, why: r && r.why });
+      if (!o.quiet && parts.length > 6 && i % 6 === 5) await _nextFrame();
+    }
+    if (!items.length) { if (!o.quiet) toast(NAMES[mode], (skipped.length === 1 ? skipped[0].name + ' was left as it was: ' : 'None of the ' + skipped.length + ' parts fits: ') + (skipped[0].why || 'it could not be done'), 'warn', 7000); return { ok: false, why: skipped[0].why, skipped }; }
+    clearTimeout(timer);
+    const lead = items[0], wMax = lead.sizeMm * 0.5, wStep = niceStep(wMax / 250);
+    cur = {
+      items, skipped, whole, mode, at: 0, op: null, fit: true,
+      o: {
+        width: o.width_mm >= 0 ? o.width_mm : round(pref('widthShare') * lead.sizeMm, wStep),
+        segments: o.segments > 2 ? Math.round(o.segments) : (_Prefs.get('roundSegments') > 2 ? Math.round(_Prefs.get('roundSegments')) : 0),
+        smooth: o.smooth_deg >= 0 ? o.smooth_deg : (() => { const a = items.map(it => getPart(it.partId)?.shadeAngle); return a.every(x => Number.isFinite(x) && x === a[0]) ? a[0] : DEF.smooth; })(),
+      },
+    };
+    if (!o.quiet) {
+      wire();
+      viewOf().reset(null); viewOf().setEdit(false);
+      scrub('width', 'rc-width-scrub', mode === 'belt' ? 'Fill gaps up to' : 'Fill grooves up to', 0, wMax, wStep, 'mm');
+      // (Segments around: 0 shows as the part's own, which the readout names)
+      if (!(cur.o.segments > 2)) cur.o.segments = 0;
+      scrub('segments', 'rc-seg-scrub', 'Segments around', 0, 128, 1, '');
+      scrub('smooth', 'rc-smooth-scrub', 'Shading angle', 0, 180, 1, '°');
+      const lbl = $i('rc-run-lbl'); if (lbl) lbl.textContent = items.length > 1 ? 'Apply to ' + fmtNum(items.length) : 'Apply';
+      const fl = document.querySelector('.section-cmd[data-cmd="round"] .cmd-ok span'); if (fl) fl.textContent = 'Apply';
+      say('');
+      _CmdCards.open('round');
+    }
+    preview();
+    const res = { ok: true, parts: items.length, skipped, preview: summary() };
+    if (o.apply) { await build(); const s = summary(); if (o.quiet) cur = null; return { ...res, applied: true, result: s }; }
+    if (o.quiet) cur = null;
+    return res;
+  }
+  function summary() {
+    const it = itNow(), r = it && it.last; if (!r || !r.ok) return null;
+    return { mode: cur.mode, parts: cur.items.length, left_out: cur.skipped.length, name: it.name, grooves: r.grooves || 0, segments: r.N, edited: !!it.shapes,
+      width_mm: cur.o.width, triangles_before: it.tris0, triangles_after: it.trisAfter || it.trisEst || undefined };
+  }
+
+  window.__moAgent = Object.assign(window.__moAgent || {}, {
+    roundCard: (o) => open(o || {}),
+    roundCardSet: (k, v) => (k === 'mode' ? setMode(v) : changed(k, v, false)),
+    roundCardState: () => (cur ? { mode: cur.mode, options: { ...cur.o }, applied: !!cur.op, edit: !!(view && view.editing), summary: summary() } : null),
+    roundCardSection: () => { const it = itNow(); return it && it.last && it.last.ok ? it.last.after : null; },
+  });
+  return { open };
+}

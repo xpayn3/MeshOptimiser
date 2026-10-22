@@ -61,6 +61,9 @@ try {
   await sleep(2500);
   console.log('   loaded parts', await evalJS('window.state.parts.length'), 'files', await evalJS("document.getElementById('file-input') ? document.getElementById('file-input').files.length : -1"), 'errors', JSON.stringify(errors.slice(0, 3)), 'welcome', await evalJS("!!document.getElementById('welcome-close')"));
   check('the notes module is there', await evalJS(`!!${UI} && !!document.getElementById('notes-section')`));
+  // (the model may carry notes of its own: they are saved in the scene file, and inbox/GearboxAssy.glb has had one since a Claude session left it
+  //  there. The counts below are of the notes this test makes, so start from none.)
+  await evalJS(`${UI}.reset()`);
 
   // ── the name box is the app's own ──────────────────────────────────────────────────────────────────
   const vp = await centre('#canvas');
@@ -68,10 +71,10 @@ try {
   console.log('   parts', await evalJS('window.state.parts.filter(p => !p.deleted).length'), 'author', JSON.stringify(await evalJS(UI + '.author()')));
   await evalJS(`${UI}.addAt({ clientX: ${vp.x}, clientY: ${vp.y} })`);
   await wait("!!document.querySelector('.dlg-bg.show .dlg-input')");
-  const nb = await evalJS(`(() => { const i = document.querySelector('.dlg-bg.show .dlg-input'); if (!i) return null; const cs = getComputedStyle(i), h = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctl-h')) || 0; const card = document.querySelector('.dlg-bg.show .dlg-card'); return { shown: cs.display !== 'none', height: i.getBoundingClientRect().height, ctl: parseFloat(getComputedStyle(i).minHeight), bg: cs.backgroundColor, radius: cs.borderTopLeftRadius, cardBg: getComputedStyle(card).backgroundColor, okDisabled: document.querySelector('.dlg-bg.show .dlg-btn-ok').disabled }; })()`);
+  const nb = await evalJS(`(() => { const i = document.querySelector('.dlg-bg.show .dlg-input'); if (!i) return null; const cs = getComputedStyle(i), h = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctl-h')) || 0; const card = document.querySelector('.dlg-bg.show .dlg-card'); return { shown: cs.display !== 'none', height: i.getBoundingClientRect().height, ctl: parseFloat(getComputedStyle(i).minHeight), bg: cs.backgroundColor, radius: cs.borderTopLeftRadius, cardBg: getComputedStyle(card).backgroundColor, okDisabled: document.querySelector('.dlg-bg.show .dlg-btn-ok').disabled, surface: (() => { const t = document.createElement('div'); t.style.background = 'var(--surface-pop)'; document.body.appendChild(t); const v = getComputedStyle(t).backgroundColor; t.remove(); return v; })() }; })()`);
   check('the name box shows a field in the app\'s dialog', nb && nb.shown && nb.okDisabled, nb);
   check('the field is as tall as every other control (--ctl-h)', nb && Math.abs(nb.height - nb.ctl) < 1, nb);
-  check('the dialog uses the shared surface (not a literal)', nb && nb.cardBg === 'rgb(22, 22, 22)', nb && nb.cardBg);
+  check('the dialog uses the shared surface (not a literal)', nb && nb.cardBg === nb.surface, nb && [nb.cardBg, nb.surface]);   // (--surface-pop: #161616 until v0.35.3, #1a1a1a since)
   await evalJS(`(() => { const i = document.querySelector('.dlg-bg.show .dlg-input'); i.value = 'Tester One'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
   await sleep(300);
   check('Enter in the name box continues, and the box goes', await evalJS("!document.querySelector('.dlg-bg.show')"));
@@ -243,6 +246,8 @@ try {
   check('the next window opens at the size it was left', Math.abs(nextBox.w - w1) <= 1, [w1, nextBox.w]);
   await evalJS("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
   // ── the card folds ────────────────────────────────────────────────────────────────────────────────────
+  // (every card starts folded since v0.35.3, Notes too, unless the person left it open: open it first, then fold it)
+  await evalJS(`${UI}.openList()`); await wait("document.getElementById('notes-body').getBoundingClientRect().height > 50", 3000);
   await evalJS("document.querySelector('#notes-section .section-h').scrollIntoView({ block: 'center' })"); await sleep(200);
   const hd = await centre('#notes-section .section-h');
   console.log('   fold target', JSON.stringify(hd), await evalJS(`(() => { const e = document.elementFromPoint(${hd.x}, ${hd.y}); return (e && (e.className || e.tagName)) + ' | ' + (e && e.closest('#notes-section') ? 'inside' : 'outside') + ' | ' + window.innerWidth + 'x' + window.innerHeight; })()`));
@@ -251,7 +256,8 @@ try {
   const cls1 = await evalJS("document.querySelector('#notes-section .section-h').classList.contains('collapsed')");
   await wait("document.getElementById('notes-body').getBoundingClientRect().height < 10", 3000);   // (the app slides the body shut)
   const vis1 = await evalJS("document.getElementById('notes-body').getBoundingClientRect().height");
-  await clickAt(hd.x, hd.y); await wait("document.getElementById('notes-body').getBoundingClientRect().height > 50", 3000);
+  const hd2 = await centre('#notes-section .section-h');   // (folded, the side bar is shorter and scrolls: the header is somewhere else now, and its old spot is another card's)
+  await clickAt(hd2.x, hd2.y); await wait("document.getElementById('notes-body').getBoundingClientRect().height > 50", 3000);
   const vis2 = await evalJS("document.getElementById('notes-body').getBoundingClientRect().height");
   check('the card folds', vis0 > 0 && cls1 && vis1 < 10, [vis0, cls1, vis1]);
   check('and opens again', vis2 > 0, vis2);

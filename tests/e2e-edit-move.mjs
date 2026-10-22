@@ -35,6 +35,8 @@ const attach = async () => {
     else if (d.method === 'Runtime.exceptionThrown') errors.push((d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text || '').split('\n').slice(0, 3).join(' | '));
   };
   await send('Page.enable'); await send('Runtime.enable');
+  // (the console, for the check that a move refits the picking tree it had: window.__warns)
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: "(() => { window.__warns = []; for (const k of ['warn', 'error']) { const o = console[k]; console[k] = function (...a) { try { window.__warns.push(k + ': ' + a.map(String).join(' ').slice(0, 200)); } catch (_) {} return o.apply(this, a); }; } })()" });
   await send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 950, deviceScaleFactor: 1, mobile: false });
 };
 
@@ -183,5 +185,7 @@ try {
   let d = 0; for (let i = 0; i < back.P.length; i++) d = Math.max(d, Math.abs(back.P[i] - before.P[i]));
   check('Undo twice puts every point back', back.P.length === before.P.length && d < 1e-6, d);
   check('no page errors', errors.length === 0, errors.slice(0, 3));
+  const treeWarns = JSON.parse(await evalJS('JSON.stringify(window.__warns || [])')).filter(x => /picking tree not refitted|MeshBVH\.deserialize/.test(x));
+  check('the moves refit the picking tree they had (no "not refitted", no format fix-up)', treeWarns.length === 0, treeWarns.slice(0, 3));
 } catch (e) { fail++; console.log('HARNESS ERROR', e); }
 finally { console.log(`${pass} passed, ${fail} failed`); try { chrome.kill(); } catch (_) {} process.exit(fail ? 1 : 0); }

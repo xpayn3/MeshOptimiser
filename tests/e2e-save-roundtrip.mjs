@@ -74,6 +74,7 @@ const attach = async () => {
 
 import fs from 'fs';
 const SP = process.env.SP, PHASE = process.env.PHASE;
+const CHUNK = 1 << 20;                  // (bytes per DevTools message when the saved scene goes out of the page and back in)
 // what to compare: the scene's settings (controls), the part rows, the materials, the tree
 const snapshot = () => evalJS(`(() => {
   const st = window.state, out = { ctl: {}, st: {}, parts: [], mats: [], groups: [], tree: 0 };
@@ -129,15 +130,27 @@ try {
     fs.writeFileSync(SP + '/rt-before.json', JSON.stringify(await snapshot(), null, 1));
     await evalJS(`window.__F = window.File; window.File = function (parts, name, opts) { const f = new window.__F(parts, name, opts); if (/ copy\.glb$/.test(name)) window.__capt = f; return f; }; window.File.prototype = window.__F.prototype; true`);
     await evalJS('window.__moDuplicateScene()'); await sleep(5000);
-    const b64 = await evalJS(`(async () => { const b = new Uint8Array(await window.__capt.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); })()`);
+    // (out of the page in pieces of 1 MB: one DevTools message of 7.7 MB stalled the connection and the test hung)
+    const size = await evalJS(`(async () => { window.__captBytes = new Uint8Array(await window.__capt.arrayBuffer()); return window.__captBytes.length; })()`);
+    const parts = [];
+    for (let at = 0; at < size; at += CHUNK) parts.push(Buffer.from(await evalJS(`(() => { const b = window.__captBytes.subarray(${at}, ${at + CHUNK}); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); })()`), 'base64'));
+    const b64 = Buffer.concat(parts).toString('base64');
     fs.writeFileSync(SP + '/rt.glb', Buffer.from(b64, 'base64'));
     console.log('   saved', fs.statSync(SP + '/rt.glb').size, 'bytes');
   } else {
-    const b64 = fs.readFileSync(SP + '/rt.glb').toString('base64');
-    await evalJS(`(async () => { const bin = Uint8Array.from(atob(${JSON.stringify(b64)}), c => c.charCodeAt(0)); const f = new File([bin], 'roundtrip copy.glb'); const dt = new DataTransfer(); dt.items.add(f); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+    // (into the page in pieces of 1 MB, for the same reason)
+    const raw = fs.readFileSync(SP + '/rt.glb');
+    await evalJS('window.__rtParts = []; true');
+    for (let at = 0; at < raw.length; at += CHUNK) await evalJS(`window.__rtParts.push(Uint8Array.from(atob(${JSON.stringify(raw.subarray(at, at + CHUNK).toString('base64'))}), c => c.charCodeAt(0))); true`);
+    await evalJS(`(async () => { const bin = new Uint8Array(await new Blob(window.__rtParts).arrayBuffer()); window.__rtParts = null; const f = new File([bin], 'roundtrip copy.glb'); const dt = new DataTransfer(); dt.items.add(f); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
     for (let i = 0; i < 160; i++) { const n = await evalJS("document.querySelectorAll('#tree .tree-node').length"); if (n > 3) break; await sleep(500); }
     await sleep(4000);
-    fs.writeFileSync(SP + '/rt-after.json', JSON.stringify(await snapshot(), null, 1));
+    // (settled: the part count the same for 2 s, then a snapshot that goes through; a busy machine was not done at 4 s)
+    for (let i = 0, last = -1, still = 0; i < 120 && still < 8; i++) { const n = await evalJS('window.state ? window.state.parts.filter(p => !p.deleted).length : -1').catch(() => -1); still = n === last && n > 0 ? still + 1 : 0; last = n; await sleep(250); }
+    let snap = null, err = null;
+    for (let i = 0; i < 20 && !snap; i++) { try { snap = await snapshot(); } catch (e) { err = e; await sleep(1000); } }
+    if (!snap) throw err;
+    fs.writeFileSync(SP + '/rt-after.json', JSON.stringify(snap, null, 1));
     console.log('   reopened');
   }
 } catch (e) { console.log('HARNESS ERROR:', e.message); }

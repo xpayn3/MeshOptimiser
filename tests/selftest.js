@@ -146,17 +146,25 @@
     const blob = T.blobs.find(b => (b.type || '').includes('json')) || T.blobs[0];
     return JSON.parse(await blob.text());
   };
-  // mesh node name → world translation, from an exported glTF
+  // mesh node name → where its origin is in the scene (millimetres, Z up, rounded), from an exported glTF. The node's whole world transform
+  // is followed (a rotation on a parent moves the child too), and the file's own convention, which it states in
+  // asset.extras.meshoptimiser { up, mmPerUnit } (a glTF is written Y up in metres), is turned back into the scene's.
   T.gltfNodes = (j) => {
-    const out = {};
-    const walk = (i, off) => {
-      const n = j.nodes[i], m = n.matrix;
-      const t = n.translation || (m ? [m[12], m[13], m[14]] : [0, 0, 0]);
-      const w = [off[0] + t[0], off[1] + t[1], off[2] + t[2]];
-      if (n.mesh !== undefined) out[n.name] = w.map(x => Math.round(x));
+    const THREE = T.F().THREE, out = {};
+    const conv = (j.asset && j.asset.extras && j.asset.extras.meshoptimiser) || { up: 'Z', mmPerUnit: 1 };
+    const k = +conv.mmPerUnit > 0 ? +conv.mmPerUnit : 1;
+    const local = (n) => n.matrix ? new THREE.Matrix4().fromArray(n.matrix)
+      : new THREE.Matrix4().compose(new THREE.Vector3(...(n.translation || [0, 0, 0])), new THREE.Quaternion(...(n.rotation || [0, 0, 0, 1])), new THREE.Vector3(...(n.scale || [1, 1, 1])));
+    const walk = (i, parent) => {
+      const n = j.nodes[i], w = parent.clone().multiply(local(n));
+      if (n.mesh !== undefined) {
+        const p = new THREE.Vector3().setFromMatrixPosition(w);
+        const scene = conv.up === 'Y' ? [p.x * k, -p.z * k, p.y * k] : [p.x * k, p.y * k, p.z * k];
+        out[n.name] = scene.map(x => Math.round(x));
+      }
       (n.children || []).forEach(c => walk(c, w));
     };
-    j.scenes[0].nodes.forEach(i => walk(i, [0, 0, 0]));
+    j.scenes[0].nodes.forEach(i => walk(i, new THREE.Matrix4()));
     return out;
   };
   T.saveScene = async () => {
@@ -601,7 +609,8 @@
   test('repeats: copies that arrive as separate meshes are kept once, and nothing moves', async () => {
     await T.fresh([]);
     const bytes = await (await fetch('tests/fixtures/repeats-60.glb')).arrayBuffer();
-    // where every vertex of the file should end up (node translation + rotation applied by hand)
+    // where every vertex of the file should end up (node translation + rotation applied by hand, then the file's Y up in metres turned
+    // into the scene's Z up in millimetres, as the app does when it opens a glTF)
     const dv = new DataView(bytes), jl = dv.getUint32(12, true);
     const json = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes, 20, jl)));
     const bin = bytes.slice(20 + jl + 8);
@@ -615,6 +624,7 @@
         let p = [f[i], f[i + 1], f[i + 2]];
         if (n.rotation) p = rot(n.rotation, p);
         if (n.translation) p = p.map((x, k) => x + n.translation[k]);
+        p = [p[0] * 1000, -p[2] * 1000, p[1] * 1000];      // (a glTF is Y up in metres; the scene is Z up in millimetres: _toSceneConvention)
         for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]); }
       }
     }
@@ -634,7 +644,8 @@
       const pos = geomOf(p).attributes.position;
       for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(mm); for (let k = 0; k < 3; k++) { const x = v.getComponent(k); if (x < wlo[k]) wlo[k] = x; if (x > whi[k]) whi[k] = x; } }
     }
-    for (let k = 0; k < 3; k++) T.assert(Math.abs(wlo[k] - lo[k]) < 0.02 && Math.abs(whi[k] - hi[k]) < 0.02, 'the model moved: axis ' + k + ' ' + wlo[k].toFixed(3) + '…' + whi[k].toFixed(3) + ' instead of ' + lo[k].toFixed(3) + '…' + hi[k].toFixed(3));
+    const tol = (x) => Math.max(0.02, Math.abs(x) * 1e-6);      // (float32 at a million millimetres is good to some 0.06 mm)
+    for (let k = 0; k < 3; k++) T.assert(Math.abs(wlo[k] - lo[k]) < tol(lo[k]) && Math.abs(whi[k] - hi[k]) < tol(hi[k]), 'the model moved: axis ' + k + ' ' + wlo[k].toFixed(3) + '…' + whi[k].toFixed(3) + ' instead of ' + lo[k].toFixed(3) + '…' + hi[k].toFixed(3));
     // the saved file keeps the sharing
     const glb = await T.exportAs('glb');
     const out = new Uint8Array(await glb.arrayBuffer()), odv = new DataView(out.buffer);
@@ -1185,12 +1196,15 @@
   test('delete small parts: the slider is live, and an isolated view follows it', async () => {
     await T.fresh(['cube', 'sphere']);
     const range = document.querySelector('#thr-scrub .scrub-range'), btn = document.getElementById('btn-delete-small');
+    // (the slider hands its value on at the next frame: wait for frames, not a fixed time, since a frame of the software renderer
+    // headless Chrome uses can take longer than 120 ms)
+    const frames = async () => { for (let k = 0; k < 3; k++) await new Promise(r => requestAnimationFrame(r)); await T.sleep(30); };
     if (!range || !btn) return 'skipped (no threshold slider)';
     const t0 = state.threshold, v0 = range.value;
     // while the slider is held: the threshold, the count on the button and the sentence all follow
     range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     range.value = String(+range.value + 200); range.dispatchEvent(new Event('input', { bubbles: true }));
-    await T.sleep(120);
+    await frames();
     T.assert(state.threshold !== t0, 'the threshold did not follow the slider while it was held');
     // (the button is off while nothing is flagged, and never busy while the slider is held)
     T.assert(btn.disabled === !(state.pendingFlagged.size > 0) && !btn.classList.contains('is-busy'), 'the Delete button does not follow the count while the slider is held');
@@ -1212,13 +1226,13 @@
       document.getElementById('btn-isolate-small').click(); await T.sleep(300);
       T.eq(visible(), flagged(), 'Isolate did not show the flagged parts');
       range.value = String(Math.round(max * 0.5)); range.dispatchEvent(new Event('input', { bubbles: true }));
-      await T.sleep(120);
+      await frames();
       T.eq(visible(), flagged(), 'the isolated view did not follow the slider');
       range.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(300);
       T.eq(state.history.length, steps + 1, 'following the slider added undo steps of its own');
       document.getElementById('btn-isolate-small').click(); await T.sleep(300);
       T.eq(T.live().filter(p => !p.visible).length, 0, 'Show all left parts hidden');
-      range.value = String(max); range.dispatchEvent(new Event('input', { bubbles: true })); await T.sleep(150);
+      range.value = String(max); range.dispatchEvent(new Event('input', { bubbles: true })); await frames();
       T.eq(T.live().filter(p => !p.visible).length, 0, 'the slider hid parts although nothing is isolated any more');
     }
     range.value = v0; range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1468,6 +1482,98 @@
     if (g2.offsetParent) { drag(g2, -60, 0); await T.sleep(150); T.assert(insp.getBoundingClientRect().width > w0 + 30, 'dragging the inspector edge did not widen it'); }
     g1.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); g2.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await T.sleep(150);
     T.assert(Math.abs(dock.getBoundingClientRect().height - h0) < 2, 'double-click did not reset the dock height');
+    const pop = document.getElementById('_mat-editor-popup');
+    [...(pop?.querySelectorAll('button') || [])].find(b => /close/i.test(b.className + ' ' + (b.title || '') + ' ' + (b.getAttribute('aria-label') || '')))?.click();
+    await T.sleep(200);
+    tg.click(); await T.sleep(300);
+  });
+
+  test('materials: after the preset list was open, the next click on + still adds a material', async () => {
+    await T.fresh(['cube']);
+    const dock = document.getElementById('vp-materials-pop'), tg = document.getElementById('tg-materials');
+    if (!dock || !tg) return 'skipped (no materials dock)';
+    if (dock.classList.contains('show')) { tg.click(); await T.sleep(400); }
+    tg.click(); await T.sleep(450);
+    await T.pick(['Cube']);
+    const more = document.getElementById('mat-act-add-more');
+    if (!more) return 'skipped (no preset arrow)';
+    more.click(); await T.sleep(200);
+    T.assert(document.getElementById('mat-presets-menu').classList.contains('show'), 'the arrow did not open the preset list');
+    more.click(); await T.sleep(200);
+    const m0 = T.part('Cube').mesh.material;
+    document.getElementById('mat-act-add').click(); await T.sleep(500);      // (a click with no press before it: Enter, or New material from the palette)
+    T.assert(T.part('Cube').mesh.material !== m0, 'the click on + after the preset list was swallowed: no new material');
+    await T.undo(); await T.sleep(300);
+    tg.click(); await T.sleep(300);
+  });
+
+  test('materials: a colour texture shows on the ball in the Materials dock and in its slot', async () => {
+    await T.fresh(['cube']);
+    const dock = document.getElementById('vp-materials-pop'), tg = document.getElementById('tg-materials');
+    if (!dock || !tg) return 'skipped (no materials dock)';
+    // (a dock left open by the test before shows the list of that test's scene: it is opened afresh)
+    if (dock.classList.contains('show')) { tg.click(); await T.sleep(400); }
+    tg.click(); await T.sleep(450);
+    const cellOf = (m) => [...dock.querySelectorAll('.mat-cell, .mat-row')].find(c => c._mat === m);
+    const waitFor = async (fn, ms = 3000) => { for (let t = 0; t < ms; t += 100) { const v = await fn(); if (v) return v; await T.sleep(100); } return null; };
+    await T.pick(['Cube']);
+    const m0 = T.part('Cube').mesh.material;
+    document.getElementById('mat-act-add').click();
+    // (the new material is the Cube's once the add has run: it may take a moment after other tests)
+    const m = await waitFor(() => { const x = T.part('Cube').mesh.material; return x !== m0 ? x : null; });
+    T.assert(m, 'Add did not give the Cube a new material');
+    const cell = await waitFor(() => cellOf(m));
+    T.assert(cell, 'the new material has no cell in the dock: ' + JSON.stringify({ shown: dock.classList.contains('show'), name: m.name, cells: [...dock.querySelectorAll('.mat-cell, .mat-row')].map(c => c._mat ? c._mat.name : '?').slice(0, 8), filters: [...dock.querySelectorAll('input[type=search], input[type=text], select, .is-on, [aria-pressed=true]')].map(e => (e.id || e.className) + '=' + (e.value || e.textContent || '').trim().slice(0, 20)).slice(0, 8), parts: T.live().map(p => p.name), sel: [...state.selected].length, mat: m && (m.uuid.slice(0, 6) + ':' + m.type), empty: (dock.querySelector('.mat-empty, .mat-none, [class*=empty]')?.textContent || '').trim().slice(0, 60), addBtn: !!document.getElementById('mat-act-add'), addDisabled: document.getElementById('mat-act-add')?.disabled }));
+    const wasOpen = (() => { const p = document.getElementById('_mat-editor-popup'); return p ? { shown: !!p.getClientRects().length, name: document.querySelector('.mat-edit-preview-name')?.textContent } : null; })();
+    cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await T.sleep(700);
+    const edNow = document.querySelector('.mat-edit-preview-name')?.textContent;
+    T.assert(edNow === m.name, 'a double-click on the material opened the editor of ' + edNow + ' instead of ' + m.name + '; before it: ' + JSON.stringify(wasOpen));
+    const slot = document.querySelector('#_mat-editor-popup .mat-row-tex[data-tex-prop="map"]');
+    if (!slot) return 'skipped (the editor has no colour texture slot)';
+    // a texture: the left half red, the right half blue, as a PNG file picked in the file dialog
+    const c = document.createElement('canvas'); c.width = 64; c.height = 32;
+    const g = c.getContext('2d'); g.fillStyle = '#e02020'; g.fillRect(0, 0, 32, 32); g.fillStyle = '#2040e0'; g.fillRect(32, 0, 32, 32);
+    const file = new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'halves.png', { type: 'image/png' });
+    const click = HTMLInputElement.prototype.click;
+    HTMLInputElement.prototype.click = function () {
+      if (this.type !== 'file') return click.call(this);
+      const dt = new DataTransfer(); dt.items.add(file); this.files = dt.files; this.dispatchEvent(new Event('change'));
+    };
+    try {
+      slot.click(); await T.sleep(250);
+      document.querySelector('#_mat-tex-pop.show [data-pop-load], #_mat-tex-pop [data-pop-load]').click();
+      for (let i = 0; i < 40 && !m.map; i++) await T.sleep(100);
+    } finally { HTMLInputElement.prototype.click = click; }
+    T.assert(m.map && m.map.image, 'the texture was not loaded into the material: ' + JSON.stringify({ editors: document.querySelectorAll('#_mat-editor-popup').length, edName: document.querySelector('.mat-edit-preview-name')?.textContent, mName: m.name, isCube: T.part('Cube').mesh.material === m, popShown: document.getElementById('_mat-tex-pop')?.classList.contains('show'), popProp: document.querySelector('#_mat-tex-pop .mat-tex-pop-prop')?.textContent, slots: document.querySelectorAll('.mat-row-tex[data-tex-prop="map"]').length }));
+    // the ball in the dock: read its picture, count red and blue pixels on it (it is drawn again a frame or two after the change)
+    const count = async () => {
+      const img = cellOf(m)?.querySelector('img');
+      if (!img || !img.src.startsWith('data:')) return null;
+      if (!img.complete) await new Promise(r => { img.onload = r; setTimeout(r, 500); });
+      const k = document.createElement('canvas'); k.width = img.naturalWidth; k.height = img.naturalHeight;
+      const kg = k.getContext('2d'); kg.drawImage(img, 0, 0);
+      const d = kg.getImageData(0, 0, k.width, k.height).data;
+      let red = 0, blue = 0;
+      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 200) continue; if (d[i] > d[i + 2] + 40) red++; else if (d[i + 2] > d[i] + 40) blue++; }
+      return { red, blue };
+    };
+    const seen = await waitFor(async () => { const n = await count(); return n && n.red > 50 && n.blue > 50 ? n : null; });
+    T.assert(seen, 'the ball does not show the texture (' + JSON.stringify(await count()) + ')');
+    // the slot shows the picture, also for a texture as it comes with a model (an ImageBitmap, with no file behind it)
+    const slotPic = () => getComputedStyle(document.querySelector('#_mat-editor-popup .mat-row-tex[data-tex-prop="map"]')).backgroundImage;
+    T.assert(/url\(/.test(slotPic()), 'the slot does not show the loaded texture');
+    const THREE = window._appFns.THREE;
+    const bmp = await createImageBitmap(c);
+    const t2 = new THREE.Texture(bmp); t2.needsUpdate = true;
+    m.map = t2; m.needsUpdate = true;
+    const edPop = document.getElementById('_mat-editor-popup');
+    [...(edPop?.querySelectorAll('button') || [])].find(b => /close/i.test(b.className + ' ' + (b.title || '') + ' ' + (b.getAttribute('aria-label') || '')))?.click();
+    await T.sleep(250);
+    (await waitFor(() => cellOf(m))).dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await T.sleep(700);
+    T.assert(/url\("data:/.test(slotPic()), 'the slot does not show a texture that came as an ImageBitmap: ' + slotPic().slice(0, 40));
+    document.querySelector('#_mat-editor-popup .mat-row-tex[data-tex-prop="map"]').click(); await T.sleep(250);
+    T.assert(document.querySelector('#_mat-tex-pop.show .mat-tex-pop-thumb img'), 'the texture card shows no picture of an ImageBitmap texture');
+    document.body.click(); await T.sleep(150);
     const pop = document.getElementById('_mat-editor-popup');
     [...(pop?.querySelectorAll('button') || [])].find(b => /close/i.test(b.className + ' ' + (b.title || '') + ' ' + (b.getAttribute('aria-label') || '')))?.click();
     await T.sleep(200);

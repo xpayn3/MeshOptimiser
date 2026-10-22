@@ -363,7 +363,7 @@ body.left-collapsed #sidebar-left{opacity:0;transform:translateX(-12px);pointer-
    nothing over the viewport or the sidebars can be caught by accident), 16px wide and centred on the gap between its sidebar and the
    viewport (the viewport's edge on the left, the middle of the 12px gap on the right). A short faint notch shows in the middle of it
    once the pointer has rested on it for a moment; otherwise it is invisible. */
-.resize-handle{position:relative;grid-row:3;align-self:stretch;justify-self:start;width:16px;cursor:col-resize;z-index:calc(var(--z-toolbar) + 2);background:transparent;touch-action:none}
+.resize-handle{position:relative;grid-row:3;align-self:stretch;justify-self:start;width:16px;cursor:col-resize;z-index:calc(var(--z-statusbar) + 1);background:transparent;touch-action:none}
 .resize-handle::after{content:'';position:absolute;top:50%;left:50%;width:2px;height:12px;margin:-6px 0 0 -1px;border-radius:var(--r-3xs);pointer-events:none;opacity:0;
   background:var(--ac);transition:opacity var(--dur-160) var(--ease-out)}
 /* the notch comes only after the pointer has rested on the handle for a moment (passing over it shows nothing), and goes at once when it leaves */
@@ -875,6 +875,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 #draw-card .sw-label{display:none}
 [data-cmd=draw] .section-h em:not(:empty)::before{content:'·';margin-right:var(--space-7)}
 [data-cmd=draw] .section-h em{font-style:normal;margin-left:var(--space-3);color:var(--tx3);text-transform:none;letter-spacing:0;font-weight:var(--fw-regular)}
+.section-cmd[data-cmd="align"] .section-h .align-what{font-style:normal;margin-left:var(--space-md);color:var(--tx3);text-transform:none;letter-spacing:0;font-weight:var(--fw-regular)}      /* (whole model or the selection: what Align to floor will move) */
 #draw-card .section-h em{font-style:normal;margin-left:var(--space-md);color:var(--tx3);text-transform:none;letter-spacing:0;font-weight:var(--fw-regular)}
 #draw-card .dr-grid{grid-template-columns:repeat(7,1fr);gap:0;padding:var(--space-2xs);background:var(--bg2);border-radius:var(--r-lg)}
 #draw-card .dr-grid button{height:30px;padding:0;gap:0;border:0;background:transparent;border-radius:var(--r-lg);color:var(--tx3);transition:background var(--dur-180) var(--ease-ios),color var(--dur-180) var(--ease-ios),transform var(--dur-fast) var(--ease-ios)}
@@ -909,6 +910,34 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 /* Sweep: the lines to pick from (see _Sweep) */
 .section-cmd[data-cmd="sweep"] [hidden]{display:none!important}
 .sw-label{font-size:var(--fs-11);color:var(--tx3);margin:var(--space-2xs) 0 -2px}
+/* Profile: clean outline: the cross-section before (grey line, chambers dashed) and after (accent fill and line), the key under it,
+   the readout. On the card's spacing scale: lede, preview, key, then the rows. */
+.pf-preview{position:relative;aspect-ratio:3/2;border:1px solid var(--surface-line);border-radius:var(--r-md);background:var(--surface-inset);overflow:hidden;padding:var(--space-xl);box-sizing:border-box}
+.pf-preview svg{cursor:grab;outline:none;touch-action:none}
+.pf-preview svg:active{cursor:grabbing}
+.pf-keys{position:absolute;top:var(--space-md);left:var(--space-md);display:flex;gap:var(--space-lg);font-size:var(--fs-11);color:var(--tx3);line-height:var(--icon-md);pointer-events:none}
+.pf-preview .pf-pt{fill:var(--bg);stroke:var(--ac);stroke-width:1;vector-effect:non-scaling-stroke;cursor:move}
+.pf-preview .pf-pt:hover{fill:var(--ac-tint-35)}
+.pf-preview .pf-pt.is-sel{fill:var(--ac);stroke:var(--tx-on-accent)}
+.pf-preview .pf-snap{fill:none;stroke:var(--wn);stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+.pf-step{display:inline-flex;align-items:center;gap:var(--space-2xs);color:var(--tx2);font-variant-numeric:tabular-nums}
+.pf-edit.is-on{background:var(--ac-tint-15);border-color:var(--ac-line);color:var(--ac-text)}
+.pf-edit-row{display:flex;align-items:flex-start;gap:var(--space-md);margin:calc(-1 * var(--space-md)) 0 var(--space-xl);font-size:var(--fs-11);line-height:var(--lh-note);color:var(--tx3)}
+.pf-edit-row:has(.pf-hint:empty):has(.cmd-link[hidden]){display:none}
+.pf-hint{flex:1;min-width:0}
+.pf-preview svg{display:block;width:100%;height:100%;overflow:visible}
+.pf-preview .pf-now{fill:var(--ac-tint-15);stroke:var(--ac);stroke-width:2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.pf-preview .pf-was{fill:none;stroke:var(--tx3);stroke-width:1;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.pf-preview .pf-hole{stroke-dasharray:3 3}
+.pf-legend{display:flex;align-items:center;gap:var(--space-md);margin:var(--space-md) 0 var(--space-xl);font-size:var(--fs-11);color:var(--tx3);line-height:var(--icon-md)}
+.pf-legend .pf-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)}
+.pf-leg{display:inline-flex;align-items:center;gap:var(--space-xs)}
+.pf-key{width:var(--icon-xs);height:var(--space-2xs);border-radius:var(--r-3xs);background:var(--tx3)}
+.pf-key-new{height:var(--space-md);background:var(--ac-tint-15);border:1px solid var(--ac);border-radius:var(--r-3xs);box-sizing:border-box}
+.pf-stats{display:grid;grid-template-columns:auto 1fr;gap:var(--space-xs) var(--space-md);margin:var(--space-md) 0 0;font-size:var(--fs-11);line-height:var(--lh-note);color:var(--tx3)}
+.pf-stats dt,.pf-stats dd{margin:0}
+.pf-stats dd{color:var(--tx2);text-align:right;font-variant-numeric:tabular-nums}
+.pf-stats:empty{display:none}
 .sw-list{display:flex;flex-direction:column;gap:var(--space-3);max-height:132px;overflow:auto}
 .sw-list[hidden]{display:none}
 .sw-empty{font-size:var(--fs-12);color:var(--tx3);padding:var(--space-sm) var(--space-2xs)}
@@ -2426,7 +2455,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 }
 /* small surfaces */
 .export-menu,.vp-pill-menu,.vp-prim-pop,.cs-pop,#ctx-menu,
-#vp-settings-pop,#vp-materials-pop,.mat-presets-menu,.mat-tex-pop,.brn-token-pop,
+#vp-settings-pop,#vp-materials-pop,.vp-cam-pop,.mat-presets-menu,.mat-tex-pop,.brn-token-pop,
 .brand-menu,.sc-prof-menu,.tip-pop{
   background:var(--surface-pop);border:0;border-radius:var(--surface-pop-r);
   box-shadow:var(--surface-shadow),var(--surface-ring);backdrop-filter:none;
@@ -3100,6 +3129,24 @@ body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
    The mode pills (Isolated, Exploded, Measure, Snap) stay at the top centre, now on their own. */
 .vpc.cam-corner{top:8px;left:11px;flex-direction:column;align-items:flex-start;gap:0}      /* (the camera pill: in the top left corner; 11px puts its middle on the middle of the 38px tool column below it) */
 .vpc.cam-corner>.vp-pill-menu{position:absolute;top:calc(100% + 4px);left:0;right:auto;translate:none;transform-origin:top left}
+/* the camera popup (a right-click on the pill): the Settings › Camera pane, lent while it is open */
+.vpc.cam-corner>.vp-cam-pop{position:absolute;top:0;left:calc(100% + 8px);width:300px;max-height:calc(100vh - 160px);overflow-y:auto;padding:0 var(--space-xl) var(--space-xl);z-index:var(--z-vp-pop);visibility:hidden;pointer-events:none;transform-origin:top left}
+.vpc.cam-corner>.vp-cam-pop.show{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
+.vpc.cam-corner>.vp-cam-pop{background:var(--pill-bg)}      /* (as see-through as the camera pill beside it: its .94 background at .78 opacity comes to .72; only the background, the text stays solid) */
+.vp-cam-pop-h{display:flex;align-items:center;justify-content:space-between;height:var(--btn-h-lg);font-size:var(--fs-12);color:var(--tx2)}
+.vp-cam-pop .set-pane-b{padding:0}
+.vp-cam-pop .set-help{display:none}      /* (the popup is the short form: the descriptions are in Settings) */
+.vp-cam-pop .set-pane-b .field>label{flex:none;white-space:nowrap}      /* (Projection and Clip planes keep their whole name beside the dropdown) */
+.vp-cam-pop .set-pane-b .field>:is(select,.cs-wrap){flex:0 0 150px;width:150px;margin-left:auto}      /* (a short dropdown at the right, not the 230px of Settings) */
+.vp-cam-pop .set-pane-b .cam-pop-off{display:none}      /* (Speed and Orbit: in Settings only) */
+/* rows as in the cards of the right sidebar: their spacing (the Field of view row is one of theirs), 12px labels, no bold */
+.vp-cam-pop .set-pane-b .field,.vp-cam-pop .set-pane-b .set-row,.vp-cam-pop .set-pane-b .toggle{min-height:0;margin:0;padding:var(--space-3) 0}
+.vp-cam-pop .set-pane-b .field>label,.vp-cam-pop .set-pane-b .set-row>span:first-child,.vp-cam-pop .set-pane-b .toggle>span:first-child{font-size:var(--fs-12);font-weight:var(--fw-regular);color:var(--tx2)}
+.vp-cam-pop .set-pane-b .set-row.set-stack{gap:var(--space-md)}
+.vp-cam-pop .set-pane-b .set-group-title{margin:var(--space-xl) 0 var(--space-2xs);font-size:var(--fs-11);font-weight:var(--fw-regular);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
+.vp-cam-pop .set-pane-b>.set-group-title:first-child{margin-top:0}
+.vp-cam-pop #set-camera-prefs>.set-group-title:first-child{display:none}      /* (no "Navigation" over Orbit around: one title there; Settings keeps it) */
+.vp-cam-pop #set-camera-prefs>.set-group-title:first-child+.set-row{padding-top:calc(var(--space-3) + var(--space-xl))}      /* (padding: every settings row has margin:0!important) */
 #vp-view-pill.vp-pill{background:var(--blk-20);opacity:.78;transition:opacity var(--dur-160) var(--ease-out),background var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
 #vp-view-pill.vp-pill:hover,#vp-view-pill.vp-pill:focus-visible,#vp-view-pill.vp-pill[aria-expanded="true"]{opacity:1}
 /* Only an icon, in a vertical pill: the camera on top, the arrow below it. The icon grows a little under the pointer. The words stay
@@ -3464,7 +3511,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-card-h{height:calc(var(--btn-h-lg) + var(--space-md));color:var(--tx);font-weight:var(--fw-semibold)}
 .set-card:not(.is-fold){padding-bottom:var(--space-md)}
 /* no line between the switches and fields of a section */
-#settings-modal .set-pane-b .toggle,#settings-modal .set-pane-b .field,#settings-modal .set-pane-b .set-row{border-top:0}
+#settings-modal .set-pane-b .toggle,#settings-modal .set-pane-b .field,#settings-modal .set-pane-b .set-row,.vp-cam-pop .set-pane-b .toggle,.vp-cam-pop .set-pane-b .field,.vp-cam-pop .set-pane-b .set-row{border-top:0}
 .set-jump{position:sticky;top:-18px;z-index:2;display:flex;flex-wrap:wrap;gap:var(--space-md);margin:0 -24px var(--space-xl);padding:10px var(--space-5xl);background:var(--surface-pop);border-bottom:1px solid var(--surface-line)}
 .set-jump-c{height:24px;padding:0 var(--space-lg);border:1px solid var(--surface-line);border-radius:var(--r-pill);background:none;color:var(--tx2);font:inherit;font-size:var(--fs-12);cursor:pointer}
 .set-jump-c:hover{background:var(--s3);color:var(--tx-control-hover)}
@@ -4497,8 +4544,14 @@ html,body{user-select:none;-webkit-user-select:none}
 .exp-name-box .exp-name-ext{font-size:var(--fs-11)}
 /* Appearance (Settings › Appearance; appearance.js sets the tokens) */
 html.no-motion *,html.no-motion *::before,html.no-motion *::after{animation-duration:.001ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
-#settings-modal .set-row.set-stack{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--space-lg)}
-#settings-modal .set-row.set-stack>span:first-child{flex:none;width:100%}
+#settings-modal .set-row.set-stack,.vp-cam-pop .set-row.set-stack{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--space-lg)}
+#settings-modal .set-row.set-stack>span:first-child,.vp-cam-pop .set-row.set-stack>span:first-child{flex:none;width:100%}
+/* a text link in Settings (the credits of About): the accent for text, no underline until the pointer is on it, a ring for the keyboard */
+#settings-modal .set-pane-b a:not(.btn){color:var(--ac-text);text-decoration:none;border-radius:var(--r-sm);transition:color var(--dur-fast) var(--ease-out)}
+#settings-modal .set-pane-b a:not(.btn):hover{color:var(--ac);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+#settings-modal .set-pane-b a:not(.btn):focus-visible{outline:2px solid var(--ac-line);outline-offset:2px}
+/* a row that is only a name and a value (the facts of About: Version, Renderer, Scene...) is a line of a list, not a setting: no room kept for a description */
+#settings-modal .set-pane-b .set-row:has(>.set-val):not(:has(.set-help)){min-height:0;padding:var(--space-md) 0}
 .set-chips{display:flex;flex-wrap:wrap;gap:var(--space-sm)}
 .ap-swatches{display:flex;flex-wrap:wrap;gap:var(--space-md);align-items:center}
 .ap-sw{all:unset;box-sizing:border-box;position:relative;width:24px;height:24px;border-radius:50%;background:var(--sw);cursor:pointer;box-shadow:inset 0 0 0 1px var(--s5);transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
@@ -4862,6 +4915,7 @@ svg.lucide *{vector-effect:non-scaling-stroke}
 #_mat-editor-popup .mat-row-tex.has-tex{background-color:var(--bg3);border-style:solid;border-color:var(--bd)}
 #_mat-editor-popup .mat-row-tex.has-tex:hover{border-color:var(--bd2)}
 #_mat-editor-popup .mat-row-tex.has-tex.has-thumb svg{display:none}
+#_mat-editor-popup .mat-row-tex.tex-drop-over{border-color:var(--ac);background-color:var(--ac-tint-12);box-shadow:0 0 0 1px var(--ac)}      /* (a picture file is over the slot: a drop loads it) */
 /* the four switches: toggle buttons, two across, the name on the left and a small switch on the right */
 #_mat-editor-popup .mat-edit-toggle-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-sm);padding:var(--space-sm) 0 var(--space-2xs)}
 #_mat-editor-popup .mat-edit-toggle{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);height:var(--btn-h-sm);padding:0 var(--space-md) 0 var(--space-lg);border-radius:var(--btn-r-sm);background:var(--bg2);border:1px solid var(--bd);font-size:var(--fs-12);color:var(--tx-control);white-space:nowrap;overflow:hidden}
@@ -6634,7 +6688,7 @@ window.moSplash = function (msg, pct) {
                 <option value="ortho">Orthographic</option>
               </select>
             </div>
-            <div class="prim-row" id="cam-fov-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="cam-fov">Field of view</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="cam-fov" min="10" max="100" step="1" value="45"><span class="prim-unit">°</span></span></div>
+            <div class="prim-row" id="cam-fov-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="cam-fov" title="The lens, as on a full-frame camera: a bigger number zooms in (35 mm wide, 50 mm normal, 85 mm close)">Focal length</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="cam-fov" min="10" max="200" step="1" value="29"><span class="prim-unit">mm</span></span></div>
             <div class="field" style="margin-bottom:0"><label id="cam-clip-lbl"><span>Clip planes</span></label>
               <select id="cam-clip" aria-labelledby="cam-clip-lbl" class="mac-sel">
                 <option value="auto" selected>Auto (fit to scene)</option>
@@ -7001,7 +7055,6 @@ window.moSplash = function (msg, pct) {
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
-    <!-- Round part: after Remove ridges or Make solid, the number of segments round the axis; the kept profile is spun again live, in the same undo step. -->
     <!-- Mesh tools (Close cracks, Remove slivers, Patch holes, Remesh evenly, Smooth surface, Convex hull, Convex pieces): the tool's settings,
          built by _MeshOps when it opens; a change runs the tool again; one undo step. -->
     <div class="section section-cmd" data-cmd="meshop" hidden>
@@ -7014,6 +7067,73 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Done</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
+
+    <!-- Profile: clean outline (profile-card.js): a straight profile made one solid. The preview shows its cross-section as it is (grey)
+         and as it will be (blue) while the options change; Apply builds the parts, one undo step, and the options then build them again. -->
+    <div class="section section-cmd" data-cmd="profile" hidden>
+      <div class="section-h"><span>Profile: clean outline</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="cmd-lede">Fills the chambers of a straight profile, closes narrow gaps and extrudes the outline again, square or mitred ends alike.</div>
+        <div class="pf-preview"><svg id="pf-svg" tabindex="0" preserveAspectRatio="xMidYMid meet" aria-label="The cross-section, before and after. Wheel zooms, drag pans, double-click fits"></svg><div class="pf-keys"><span class="pf-leg"><span class="pf-key"></span>Now</span><span class="pf-leg"><span class="pf-key pf-key-new"></span>New</span></div></div>
+        <div class="pf-legend">
+          <span class="pf-step" id="pf-step" hidden><button type="button" class="lc-icon-btn" id="pf-prev" title="The profile before"><i data-lucide="chevron-left"></i></button><span id="pf-pos"></span><button type="button" class="lc-icon-btn" id="pf-next" title="The next profile"><i data-lucide="chevron-right"></i></button></span>
+          <span id="pf-name" class="pf-name"></span>
+          <button type="button" class="lc-icon-btn pf-edit" id="pf-edit" title="Edit points: drag one, double-click an edge to add one, Delete or Alt-click takes one out"><i data-lucide="pen-line"></i></button>
+        </div>
+        <div class="pf-edit-row"><span id="pf-edit-hint" class="pf-hint"></span><button type="button" class="cmd-link" id="pf-edit-reset" hidden title="Back to the section the options make">Reset points</button></div>
+        <div class="toggle" title="Fill the hollow cells inside the profile. Off: they stay, only the outline is cleaned"><span id="pf-fill-lbl">Fill chambers</span><label><input type="checkbox" id="pf-fill" checked aria-labelledby="pf-fill-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="A bar with drilled holes, slots or notches cut across it is taken too, and they are filled. Off: such a bar is left as it is"><span id="pf-machining-lbl">Fill holes and cuts across</span><label><input type="checkbox" id="pf-machining" checked aria-labelledby="pf-machining-lbl"><span class="switch"></span></label></div>
+        <div class="field" title="Notches, slots and teeth narrower than this are closed flush. 0 closes none"><div id="pf-width-scrub"></div></div>
+        <details class="cmd-adv" id="pf-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="field" title="Points that bend the outline less than this are dropped: fewer triangles, the same shape"><div id="pf-straight-scrub"></div></div>
+            <div class="field" title="The part's Shading angle (as in Properties): edges sharper than this stay sharp, gentler ones (the round beads) shade smooth"><div id="pf-smooth-scrub"></div></div>
+            <button type="button" class="cmd-link" id="pf-reset">Reset to defaults</button>
+          </div>
+        </details>
+        <dl class="pf-stats" id="pf-stats"></dl>
+        <button class="btn primary" id="pf-run" data-cmd-primary title="Build the selected profiles again. Ctrl+Z takes it back."><i data-lucide="check"></i><span id="pf-run-lbl">Apply</span></button>
+        <div class="field-help" id="pf-info"></div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Apply</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+
+    <!-- Round part (round-card.js): a turned part or a belt made clean from its profile. The preview shows the profile as it is (grey) and as
+         it will be (blue), with the same editor as the Profile card; Apply builds the parts, one undo step, and the options then build them again. -->
+    <div class="section section-cmd" data-cmd="round" hidden>
+      <div class="section-h"><span id="rc-title">Round part</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="cmd-lede">Builds a turned part again from its profile, or a belt from its cross-section, with the grooves filled.</div>
+        <div class="cmd-seg" id="rc-mode" role="group" aria-label="What to do">
+          <button type="button" data-m="exact" title="The profile cut through the part; grooves and ridges narrower than the width filled">Ridges</button>
+          <button type="button" data-m="outline" title="The outline of the whole part spun round: fins, ribs and the room between them solid">Solid</button>
+          <button type="button" data-m="belt" title="A band swept along a closed path; the gaps between its ribs filled">Belt</button>
+        </div>
+        <div class="pf-preview"><svg id="rc-svg" tabindex="0" preserveAspectRatio="xMidYMid meet" aria-label="The profile, before and after. Wheel zooms, drag pans, double-click fits"></svg><div class="pf-keys"><span class="pf-leg"><span class="pf-key"></span>Now</span><span class="pf-leg"><span class="pf-key pf-key-new"></span>New</span></div></div>
+        <div class="pf-legend">
+          <span class="pf-step" id="rc-step" hidden><button type="button" class="lc-icon-btn" id="rc-prev" title="The part before"><i data-lucide="chevron-left"></i></button><span id="rc-pos"></span><button type="button" class="lc-icon-btn" id="rc-next" title="The next part"><i data-lucide="chevron-right"></i></button></span>
+          <span id="rc-name" class="pf-name"></span>
+          <button type="button" class="lc-icon-btn pf-edit" id="rc-edit" title="Edit points: drag one, double-click an edge to add one, Delete or Alt-click takes one out"><i data-lucide="pen-line"></i></button>
+        </div>
+        <div class="pf-edit-row"><span id="rc-edit-hint" class="pf-hint"></span><button type="button" class="cmd-link" id="rc-edit-reset" hidden title="Back to the profile the options make">Reset points</button></div>
+        <div class="field" title="Grooves, ridges and gaps narrower than this are filled flush. 0 fills none"><div id="rc-width-scrub"></div></div>
+        <div class="field" id="rc-seg-row" title="Flat steps around the axis; more is rounder and heavier. 0: as many as the part had"><div id="rc-seg-scrub"></div></div>
+        <details class="cmd-adv" id="rc-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="field" title="The part's Shading angle (as in Properties): edges sharper than this stay sharp, gentler ones shade smooth"><div id="rc-smooth-scrub"></div></div>
+          </div>
+        </details>
+        <dl class="pf-stats" id="rc-stats"></dl>
+        <button class="btn primary" id="rc-run" data-cmd-primary title="Build the parts again. Ctrl+Z takes it back."><i data-lucide="check"></i><span id="rc-run-lbl">Apply</span></button>
+        <div class="field-help" id="rc-info"></div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Apply</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+
     <!-- Voxel remesh: after the command, its four settings (the job runs again when a slider is let go); one undo step. -->
     <div class="section section-cmd" data-cmd="voxel" hidden>
       <div class="section-h"><span>Voxel remesh</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
@@ -7024,17 +7144,6 @@ window.moSplash = function (msg, pct) {
         <div class="field" title="Fill gaps and slots narrower than this share of the length"><div id="vox-gap-scrub"></div></div>
         <div class="field-help" id="vox-info"></div>
         <button class="btn primary" id="vox-ok" data-cmd-primary title="Keep it"><i data-lucide="check"></i>Done</button>
-      </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Done</span><kbd class="kbd-chip">↵</kbd></button></div>
-    </div>
-
-    <div class="section section-cmd" data-cmd="roundpart" hidden>
-      <div class="section-h"><span id="rnd-title">Round part</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
-      <div class="section-b">
-        <div class="field" title="Flat steps around the axis; more is rounder and heavier"><div id="rnd-seg-scrub"></div></div>
-        <div class="field" title="Faces meeting at less than this angle shade smooth"><div id="rnd-smooth-scrub"></div></div>
-        <div class="field-help" id="rnd-info"></div>
-        <button class="btn primary" id="rnd-ok" data-cmd-primary title="Keep this number of segments"><i data-lucide="check"></i>Done</button>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Done</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
@@ -7740,9 +7849,13 @@ window.moSplash = function (msg, pct) {
           <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
           <label class="prim-toggle"><input type="checkbox" id="photo-stage" checked><span></span></label>
         </div>
-        <div class="prim-row" title="Edge smoothness and samples for occlusion and glow">
+        <div class="prim-row" title="Edge smoothness, samples for occlusion and glow, and how many frames a still view is refined over">
           <label class="prim-label" for="photo-quality">Quality</label>
           <select id="photo-quality" class="mac-sel"><option value="draft">Draft (fastest)</option><option value="good">Good</option><option value="best" selected>Best</option><option value="max">Maximum</option></select>
+        </div>
+        <div class="prim-row" title="The tone curve the picture is finished with">
+          <label class="prim-label" for="photo-look">Look</label>
+          <select id="photo-look" class="mac-sel"><option value="neutral" selected>Neutral</option><option value="agx">Soft (AgX)</option><option value="aces">Contrast (ACES)</option></select>
         </div>
         <div class="prim-row photo-fx-row" id="photo-row-ao" title="Darkens creases and places where parts meet" style="grid-template-columns:auto minmax(0,1fr) auto">
           <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-ao" aria-label="Ambient occlusion on or off" checked><span></span></label>
@@ -7999,7 +8112,7 @@ window.moSplash = function (msg, pct) {
   </div>
 </div>
 
-<input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.iges,.igs,.IGES,.IGS,.brep,.brp,.BREP,.BRP,.glb,.gltf,.GLB,.GLTF,.fbx,.FBX,.obj,.OBJ,.3mf,.3MF,.stl,.STL" style="display:none">
+<input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.iges,.igs,.IGES,.IGS,.brep,.brp,.BREP,.BRP,.glb,.gltf,.GLB,.GLTF,.fbx,.FBX,.obj,.OBJ,.3mf,.3MF,.stl,.STL,.usd,.usda,.usdc,.usdz,.USD,.USDA,.USDC,.USDZ,.dae,.DAE" style="display:none">
 
 <!-- Import-settings modal — shown between picking a file and starting the
      load/conversion. Lets the user trade XCAF read fidelity for conversion
@@ -8113,6 +8226,7 @@ window.moSplash = function (msg, pct) {
           <div class="imp-h">Model</div>
           <div class="imp-grp">
             <div class="toggle imp-row"><span id="imp-keep-uv-lbl" class="imp-t"><b>Keep texture coordinates (UVs)</b><small>Needed to put a texture on a part later. Off saves a little memory</small></span><label><input type="checkbox" id="imp-keep-uv" aria-labelledby="imp-keep-uv-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle imp-row"><span id="imp-tex-sets-lbl" class="imp-t"><b>Find textures by name</b><small>Maps beside the model named like it (_BaseColor, _Normal, _Roughness, _AO) go on its materials. Drop the folder, or the files together</small></span><label><input type="checkbox" id="imp-tex-sets" aria-labelledby="imp-tex-sets-lbl" checked><span class="switch"></span></label></div>
           </div>
         </div>
       </div>
@@ -8368,7 +8482,8 @@ window.moSplash = function (msg, pct) {
           <tr><td><strong>GLB</strong></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">PBR</td><td class="y">●</td><td>Best all-round. Recommended for Cinema 4D 2026.</td></tr>
           <tr><td><strong>glTF</strong></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">PBR</td><td class="y">●</td><td>JSON variant of GLB. Same capabilities, larger.</td></tr>
           <tr><td><strong>FBX</strong></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>Maya, Blender, Unreal, 3ds&nbsp;Max. Binary 7.4 default; ASCII fallback.</td></tr>
-          <tr><td><strong>USDZ</strong></td><td class="n">—</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>Apple Quick Look, Reality Composer, Cinema 4D R26+.</td></tr>
+          <tr><td><strong>USDZ</strong></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>Apple Quick Look, Reality Composer, Cinema 4D R26+. Opens .usd, .usda and .usdc too.</td></tr>
+          <tr><td><strong>Collada</strong></td><td class="y">●</td><td class="n">—</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>.dae from SketchUp and older tools. Import only.</td></tr>
           <tr><td><strong>OBJ</strong></td><td class="y">●</td><td class="y">●</td><td class="n">flat</td><td class="y">via&nbsp;.mtl</td><td class="n">—</td><td>Universal but no transforms; hierarchy baked into names.</td></tr>
           <tr><td><strong>3MF</strong></td><td class="y">●</td><td class="n">—</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>3D-printing standard. Import only for now.</td></tr>
           <tr><td><strong>STL</strong></td><td class="y">●</td><td class="y">●</td><td class="n">single&nbsp;mesh</td><td class="n">—</td><td class="n">—</td><td>Geometry only. 3D printing.</td></tr>
@@ -8509,7 +8624,7 @@ window.moSplash = function (msg, pct) {
         </div>
 
         <div class="wl-foot">
-          <span>Opens STEP · IGES · BREP · GLB · glTF · FBX · OBJ · 3MF · STL</span>
+          <span>Opens STEP · IGES · BREP · GLB · glTF · FBX · OBJ · 3MF · STL · USD · Collada</span>
           <span><kbd>Shift+C</kbd>Search commands</span>
         </div>
       </div>
@@ -8934,11 +9049,11 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=115"></script>
-<script type="module" src="js/app.js?v=20261148-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1"></script>
+<script type="module" src="js/app.js?v=20261160-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1-campop1-campop2-campop3-campop4-campop5-campop6-lensmm1-texball1-texfmt1-texthumb1-matheld1-texsets1-mateditreopen1-clnbox1-texask1-texdrop1-estnode1-isoundo1-isoundo2-matundo1-texthumb2-texsmall1-texsmall2-alignsel1-texsmall3-copyshadow1-copyshadow2-links1-valrows1-three186-photoacc1-sun1-orthokey2-bvhv1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
-<script defer src="js/cloner.js?v=20261018-undo"></script>
+<script defer src="js/cloner.js?v=20261022-box1"></script>
 <script defer src="js/help.js?v=25"></script>
 <script>
   // Reveal the app when it says it has booted (app.js: 'mo-boot-ready', after the renderer and the

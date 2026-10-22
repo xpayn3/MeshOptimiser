@@ -1,9 +1,9 @@
 // node tests/e2e-round-wire.mjs
 //
-// Fill solid round: while its card is open the view is Wireframe, with the lines on the part in work only; the other parts stay
-// plain. Closing the card puts the view back, and a Wireframe switched on by hand afterwards draws every part again. A spool (a
-// cylinder of 48 segments) and a block are opened from an OBJ; the spool is selected and the command run. Needs the app served on
-// http://localhost:4242, Chrome and Node 22+.
+// The Round part card, Make solid: once applied the view is Wireframe, with the lines on the part in work only; the other parts stay
+// plain. Closing the card (Done) puts the view back, and a Wireframe switched on by hand afterwards draws every part again. A spool (a
+// cylinder of 48 segments) and a block are opened from an OBJ; the spool is selected, the card opened and applied. Needs the app
+// served on http://localhost:4242, Chrome and Node 22+.
 import { spawn } from 'child_process';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PORT = 9353, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-roundwire-' + Date.now();
@@ -73,15 +73,18 @@ try {
   check('the view starts in Solid', await evalJS("window.state.viewMode") === 'solid', await evalJS("window.state.viewMode"));
   const sel = await call('select_parts', { name_contains: 'spool' });
   check('the spool is selected', sel.ok && await evalJS('window.state.selected.size') === 1, sel);
-  await evalJS("window.__moAgent.fillGrooves({ mode: 'outline' }); true");
-  check('the card switches the view to Wireframe', await until("window.state.viewMode === 'wire'", 60, 500));
-  check('the Round part card is open', await until("(() => { const s = document.querySelector('.section-cmd[data-cmd=\"roundpart\"]'); return !!s && s.offsetHeight > 0; })()", 20));
+  await evalJS("window.__moAgent.roundCard({ mode: 'outline' })");
+  check('the Round part card is open, on Make solid', await until("(() => { const s = document.querySelector('.section-cmd[data-cmd=\"round\"]'); return !!s && s.offsetHeight > 0 && window.__moAgent.roundCardState().mode === 'outline'; })()", 20));
+  check('before Apply the view stays Solid', await evalJS("window.state.viewMode") === 'solid');
+  await evalJS("document.getElementById('rc-run').click(); true");
+  check('Apply switches the view to Wireframe', await until("window.state.viewMode === 'wire'", 60, 500));
   await until(`(() => { const l = ${LINES}; return l.spool > 0; })()`, 40, 250);
   await sleep(1000);
   const open = await evalJS(LINES);
   check('the spool has its lines', open.spool > 0, open);
   check('the block has none while the card is open', open.block === 0, open);
-  await evalJS("document.getElementById('rnd-ok')?.click(); true");
+  await until("!document.getElementById('rc-run').disabled", 20);
+  await evalJS("document.getElementById('rc-run')?.click(); true");                  // (Done, once applied)
   await sleep(800);
   check('closing the card puts the view back to Solid', await until("window.state.viewMode === 'solid'", 20), await evalJS('window.state.viewMode'));
   await evalJS("window._appFns._Actions.list.find(a => a.id === 'wire').run(); true");

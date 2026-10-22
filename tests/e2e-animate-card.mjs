@@ -48,14 +48,21 @@ try {
   const txt = (id) => q(`document.getElementById('${id}').textContent`);
   const click = (id) => q(`document.getElementById('${id}').click()`);
   check('the card is hidden while nothing is animated', await q("document.getElementById('anim-card').hidden"));
-  const lp = await call('list_parts', { sort_by: 'triangles', limit: 3 });
+  let lp = await call('list_parts', { sort_by: 'triangles', limit: 3 });
+  for (let i = 0; i < 40 && !(lp.j && lp.j.parts && lp.j.parts.length); i++) { await sleep(500); lp = await call('list_parts', { sort_by: 'triangles', limit: 3 }); }      // (the model may still be settling when the GPU is busy)
+  if (!(lp.j && lp.j.parts && lp.j.parts.length)) throw new Error('list_parts gave no parts: ' + JSON.stringify(lp).slice(0, 300));
   const id1 = lp.j.parts[0].id;
   let r = await call('animate_parts', { action: 'add', ids: [id1], type: 'spin', rpm: 60, axis: 'Z' });
   check('a part is set to spin', r.ok && r.j && r.j.animated === 1, r);
   await sleep(600);
   check('the card shows', await q("!document.getElementById('anim-card').hidden && document.getElementById('anim-card').offsetParent !== null"));
   check('the miniature timeline has a bar for the clip', await q("document.querySelectorAll('#ac-tl-bars .ac-clip').length") === 1);
-  check('it is playing: the button offers Pause', await q("document.getElementById('ac-play').title") === 'Pause');
+  // (since v0.35.2 a new animation does not start by itself: it stands at its first pose until Play is pressed)
+  check('a new animation waits for Play: the button offers Play', await q("document.getElementById('ac-play').title") === 'Play');
+  check('not playing yet: no Playing pill at the top', await q("(() => { const t = document.getElementById('vp-animate-pill'); return t.hidden || !/Playing/.test(t.textContent); })()"));
+  check('not playing yet: the time stands at the start', /^0:00.00/.test(await txt('ac-elapsed')), await txt('ac-elapsed'));
+  await click('ac-play'); await sleep(300);
+  check('a click plays it: the button offers Pause', await q("document.getElementById('ac-play').title") === 'Pause');
   check('the pill at the top says Playing', await q("(() => { const t = document.getElementById('vp-animate-pill'); return !t.hidden && /Playing/.test(t.textContent); })()"));
   const t1 = await txt('ac-elapsed'); let t2 = t1; for (let i = 0; i < 20 && t2 === t1; i++) { await sleep(300); t2 = await txt('ac-elapsed'); }      // (software rendering of a big model can take a while per frame)
   check('the time moves while it plays', t1 !== t2, { t1, t2 });
@@ -64,7 +71,10 @@ try {
   check('paused: the pill at the top is gone', await q("document.getElementById('vp-animate-pill').hidden"));
   const p1 = await txt('ac-elapsed'); await sleep(600);
   check('paused: the time stays', (await txt('ac-elapsed')) === p1);
-  // a press on the miniature puts the playhead there (40% of 5 s = 2 s)
+  // a press on the miniature puts the playhead there (40% of 5 s = 2 s). Since v0.35.3 the card no longer opens itself (it starts folded like
+  // every card of the right sidebar, and a folded card's miniature has no width): open it by its header first.
+  await q("(() => { const h = document.querySelector('#anim-card .section-h'); if (h && h.classList.contains('collapsed')) h.click(); })()"); await sleep(300);
+  check('the card opens by its header and the miniature has a width', await q("document.getElementById('ac-tl').getBoundingClientRect().width > 50"));
   await q("(() => { const t = document.getElementById('ac-tl'), r = t.getBoundingClientRect(); const o = { bubbles: true, clientX: r.left + r.width * 0.4, clientY: r.top + r.height / 2, pointerId: 1, button: 0, isPrimary: true }; t.dispatchEvent(new PointerEvent('pointerdown', o)); t.dispatchEvent(new PointerEvent('pointerup', o)); })()"); await sleep(300);
   check('a press on the miniature seeks to 2 s', /^0:02\.0/.test(await txt('ac-elapsed')), await txt('ac-elapsed'));
   check('the time left is shown', /^\u22120:02\.9|^\u22120:03\.0/.test(await txt('ac-left')), await txt('ac-left'));

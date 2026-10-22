@@ -30,7 +30,7 @@
 //
 // Every reply carries the request's id and ok: true / false.
 
-import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=33';
+import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=34';
 import { findEmbossedBodies, findSurfaceMarks } from './emboss.js?v=7';
 import { reduceIndex } from './simplify-core.js?v=6';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=3';
@@ -40,7 +40,7 @@ import { buildTopology, pairQuads, buildPolygons, outlineLines, outlinePoints, l
 import { untriangulate, evenTriangles, pairIntoQuads } from './untriangulate.js?v=12';
 import { unsubdivide } from './unsubdivide.js?v=1';
 import { voxelRemesh } from './voxel.js?v=4';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=13';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=18';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
 // then in the middle of one. (Three more passes at most; each is a fraction of the first.)
 function untriangulatePasses(positions, index, opts) {
@@ -61,10 +61,12 @@ function untriangulatePasses(positions, index, opts) {
 
 // What Quick remesh asks of Untriangulate (Blender's Planar decimate and Beautify): faces that are flat to a degree and shade the same
 // way are joined and cut again with the fewest triangles, flipped to be as even as their points allow. Before the simplifier, at the
-// levels that take away half or more, points on faces that are flat to 3 degrees and on straight runs go too (a limited dissolve).
+// levels that take away half or more, points on straight runs of an outline go too. (A limited dissolve of faces flat to 3 degrees was
+// here until 2026-10-22: on the Gearbox it left long fans on gently curved faces that the simplifier kept, more slivers than a plain
+// reduction at 25 % and 10 %, for no gain in accuracy.)
 function smartOpts(m, triangulate, before) {
   const dissolve = before && m.keep <= 0.5;
-  return { angleDeg: 1, normals: m.normals || null, triangulate, normalTol: 5, flip: true, tolerance: 0, straight: dissolve, limitDeg: dissolve ? 3 : 0 };
+  return { angleDeg: 1, normals: m.normals || null, triangulate, normalTol: 5, flip: true, tolerance: 0, straight: dissolve, limitDeg: 0 };
 }
 
 function bboxDiag(P) {

@@ -39,13 +39,17 @@ const attach = async () => {
   await send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 950, deviceScaleFactor: 1, mobile: false });
 };
 const ready = async () => {
-  for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
+  // (app-ready alone is not enough: the page shows itself after a cap even while the app's module is still starting, e.g. on a busy
+  // graphics card, and the tools below would not be there yet; so the module's own hooks are waited for too)
+  for (let i = 0; i < 120; i++) { if (await evalJS("!!(document.body && document.body.classList.contains('app-ready') && window.__moBridgeTools && window.__moOpenFile)").catch(() => false)) break; await sleep(500); }
   await sleep(1500);
   await evalJS("document.getElementById('welcome-close')?.click(); true");
 };
 // open a file in the page (bytes given as base64 or fetched from the server), as if it was dropped
 const openBytes = (name, b64, mime = 'application/octet-stream') => evalJS(`(() => { const bin = atob(${JSON.stringify(b64)}); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); window.__moOpenFile(new File([u], ${JSON.stringify(name)}, { type: ${JSON.stringify(mime)} })); return true; })()`);
 const openFetched = (url) => evalJS(`(async () => { const r = await fetch(${JSON.stringify(url)}); const b = await r.blob(); window.__moOpenFile(new File([b], ${JSON.stringify(path.basename(url))})); return true; })()`);
+// the model cut short in the page: '12', '40', 'third' or 'minus5' (bytes kept, a third, all but the last five)
+const openCut = (name, cut) => evalJS(`(async () => { const r = await fetch(${JSON.stringify(MODEL)}); const b = await r.blob(); const n = { '12': 12, '40': 40, third: Math.floor(b.size / 3), minus5: b.size - 5 }[${JSON.stringify(cut)}]; window.__moOpenFile(new File([b.slice(0, n)], ${JSON.stringify(name)})); return true; })()`);
 const liveParts = () => evalJS('window.state.parts.filter(p => !p.deleted).length');
 const loaderShown = () => evalJS("document.getElementById('loader')?.classList.contains('show') === true");
 // wait until the loader is gone and the answer stops changing; returns ms or -1 on a stuck loader
@@ -146,8 +150,9 @@ try {
     add('3mf-not-a-zip.3mf', bin(rnd(1000, 5)));
     add('3mf-zip-header-only.3mf', bin([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));
     // a truncated copy of a real model, at several cuts
-    const real = await evalJS(`(async () => { const r = await fetch(${JSON.stringify(MODEL)}); const u = new Uint8Array(await r.arrayBuffer()); const cut = (n) => { let s = ''; for (let i = 0; i < n; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, Math.min(n, i + 32768))); return btoa(s); }; return { size: u.length, cuts: [cut(12), cut(40), cut(Math.floor(u.length / 3)), cut(u.length - 5)] }; })()`);
-    ['12-bytes', '40-bytes', 'one-third', 'last-5-bytes-missing'].forEach((n, i) => add('truncated-' + n + '.glb', real.cuts[i]));
+    // a truncated copy of a real model, at several cuts. The page cuts it itself when the case comes (the copies used to be made here as
+    // base64, some 10 MB of text for a 5.7 MB model through the DevTools connection: longer than the harness waits, so it stopped there)
+    for (const [n, cut] of [['12-bytes', '12'], ['40-bytes', '40'], ['one-third', 'third'], ['last-5-bytes-missing', 'minus5']]) cases.push({ name: 'truncated-' + n + '.glb', cut });
 
     let before = await sceneCounts();
     for (const c of cases) {
@@ -155,7 +160,7 @@ try {
       const errN = errors.length;
       try {
         await evalJS('window.__moResetScene(); true', 15000);
-        await openBytes(c.name, c.b64);
+        if (c.cut) await openCut(c.name, c.cut); else await openBytes(c.name, c.b64);
         const s = await settle(45000);
         stuck = s < 0;
         // the page must still answer, and a toast, a model or nothing are all fine

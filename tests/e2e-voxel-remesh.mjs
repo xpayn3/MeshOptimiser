@@ -26,7 +26,9 @@ const call = async (name, args = {}) => {
 };
 const sum = async () => (await call('scene_summary')).j;
 const ready = async () => {
-  for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
+  // (app-ready alone is not enough: the page shows itself after a cap even while the app's module is still starting, e.g. on a busy
+  // graphics card, and the tools below would not be there yet; so the module's own hooks are waited for too)
+  for (let i = 0; i < 120; i++) { if (await evalJS("!!(document.body && document.body.classList.contains('app-ready') && window.__moBridgeTools && window.__moOpenFile)").catch(() => false)) break; await sleep(500); }
   await sleep(1500);
 };
 try {
@@ -73,7 +75,9 @@ try {
   // Adaptivity 0: every face of the grid
   await evalJS("window.__moAgent.voxelSet('adapt', 0)"); await waitIdle();
   const s3 = await sum();
-  check('Adaptivity 0: many more triangles', s3.triangles > s2.triangles * 2, { s2, s3 });
+  // (the part's own triangles: the scene's minus the other parts', which stay as they were; the model may be an assembly)
+  const rest = s0.triangles - lp.j.parts[0].triangles, p2 = s2.triangles - rest, p3 = s3.triangles - rest;
+  check('Adaptivity 0: many more triangles', p3 > p2 * 2, { part_at_adapt_half: p2, part_at_adapt_0: p3, s2, s3 });
   await evalJS("window.__moAgent.voxelSet('adapt', 0.5)"); await waitIdle();
   // Close gaps: a share of the length
   await evalJS("window.__moAgent.voxelSet('gap', 0.06)"); await waitIdle();

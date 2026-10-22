@@ -26,7 +26,9 @@ const call = async (name, args = {}) => {
 const sum = async () => (await call('scene_summary')).j;
 const copies = () => evalJS(`new Promise((res) => { const r = indexedDB.open('mo-recovery', 1); r.onupgradeneeded = () => r.result.createObjectStore('snaps', { keyPath: 'key' }); r.onsuccess = () => { const q = r.result.transaction('snaps').objectStore('snaps').getAll(); q.onsuccess = () => { res(q.result.map(s => ({ name: s.name, parts: s.parts, size: s.size, unit: s.unit, up: s.up }))); r.result.close(); }; }; r.onerror = () => res(null); })`);
 const ready = async () => {
-  for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
+  // (app-ready alone is not enough: the page shows itself after a cap even while the app's module is still starting, e.g. on a busy
+  // graphics card, and the tools below would not be there yet; so the module's own hooks are waited for too)
+  for (let i = 0; i < 120; i++) { if (await evalJS("!!(document.body && document.body.classList.contains('app-ready') && window.__moBridgeTools && window.__moOpenFile)").catch(() => false)) break; await sleep(500); }
   await sleep(1500);
 };
 const attach = async () => {

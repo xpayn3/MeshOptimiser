@@ -1159,7 +1159,8 @@ MCP_TIMEOUT = {"decimate": 900, "fit_to_budget": 900, "fill_holes": 900, "merge_
                "split_parts": 600, "repair_mesh": 600, "remove_hidden_faces": 900, "duplicate_parts": 300, "merge_by_colour": 600,
                "smart_optimise": 1800, "render_image": 900, "run_recipe": 1800, "save_scene": 600, "check_model": 300, "find_hidden_parts": 600, "smart_fit": 600, "untriangulate": 900, "remove_fillets": 600, "simplify_round_faces": 900, "simplify_round_part": 300, "voxel_remesh": 900, "fix_mesh": 600, "reshape_mesh": 900, "boolean_parts": 600, "remove_floating_pieces": 600, "make_unique": 300}
 MCP_TIMEOUT.update(MCP_TIMEOUT_MORE)
-OPEN_EXT = {".step", ".stp", ".iges", ".igs", ".brep", ".brp", ".glb", ".gltf", ".fbx", ".obj", ".3mf", ".stl"}
+OPEN_EXT = {".step", ".stp", ".iges", ".igs", ".brep", ".brp", ".glb", ".gltf", ".fbx", ".obj", ".3mf", ".stl",
+            ".usd", ".usda", ".usdc", ".usdz", ".dae"}
 EXPORT_DIR = Path(__file__).resolve().parent / "exports"
 # ── What Claude is told: hints on every tool, a guide it can read, and ready-made jobs ─────────────────────────────────────────
 # MCP lets a server say more than "here are my tools": each tool can say whether it only reads or changes things (Claude's

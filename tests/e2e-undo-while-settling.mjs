@@ -52,7 +52,9 @@ try {
     check('Ctrl+Y puts it back', (await parts()) === n0 + 1, { parts: await parts() });
     const u = await call('undo'); await sleep(300);
     check("Claude's undo takes it back too", u.ok && (await parts()) === n0, u);
-    check('(all of it while the loader still said "Preparing the view", so the case was really tested)', still1 && await settling());
+    // (the view is ready sooner since three.js r184 (compileAsync no longer holds the drawing back): what counts is that Ctrl+Z came
+    // while it was still being prepared)
+    check('(Ctrl+Z came while the loader still said "Preparing the view", so the case was really tested)', still1);
   }
   check('no uncaught errors in the page', errors.length === 0, errors);
 } catch (e) { fail++; console.log('FAIL (threw)', e.message); }
