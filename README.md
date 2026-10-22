@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.35.5** — Depth of field in Photo mode, a *Visible* switch in Edit mesh, status pills that slide, and 42 fixes: merges keep their materials, mirrored parts stay the right way out, the STEP converter cleans up after itself, and the app does no work while idle.
+
+- ![new][new] **Photo mode: depth of field,** focused with Alt+click or *Pick*.
+- ![new][new] **Edit mesh: a *Visible* switch:** off, a box or the Brush takes back sides and hidden parts too.
+- ![polish][polish] **The status pills slide in and out** beside the camera pill.
+- ![fix][fix] **A merge keeps each part's material;** Bake transforms and the booleans keep mirrored parts facing out.
+- ![perf][perf] **No style work while idle;** 232 tooltips are one short line.
+
 **v0.35.4** — Edit mesh keeps up with big models: a part of millions of triangles is read in the background, shows its points, and moves and box-picks without holding the view up.
 
 - ![perf][perf] **Big parts are read in the background** as soon as Edit mesh is entered; a click or box made meanwhile is made when the part is ready.

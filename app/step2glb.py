@@ -239,6 +239,7 @@ class Config:
     # anyway. Lossy — the original GLB is replaced.
     simplify: float = 0.0
     force: bool = False          # ignore cached output even if newer than source
+    xcaf_cache: bool = True      # keep the parsed document beside the STEP for the next run (off for the server's uploads)
     # XCAF read-mode toggles. `Transfer(doc)` time scales with how many of these
     # are enabled — SHUO in particular is expensive on instanced assemblies
     # because per-instance attribute overrides are resolved combinatorially.
@@ -289,6 +290,16 @@ def parse_step_xcaf_cached(path: Path):
         and overwrite the cache with a current-version copy.
     """
     cache_path = path.with_suffix(".xcaf-cache.xbf")
+    if not CFG.xcaf_cache:
+        return parse_step_xcaf(path)
+    # The cache names the file it was made from (name, size, time to the nanosecond) in <cache>.src, and is used only for that file.
+    # By date alone a newer revision with an older date (as a zip gives it) was read as the old one, and part.step and part.stp shared it.
+    _st = path.stat()
+    stamp = {"name": path.name, "size": _st.st_size, "mtime_ns": _st.st_mtime_ns}
+    stamp_path = cache_path.with_name(cache_path.name + ".src")
+    def _stamp_ok() -> bool:
+        try: return json.loads(stamp_path.read_text(encoding="utf-8")) == stamp
+        except Exception: return False
     # Cached docs are always written with the full XCAF read set (names, layers,
     # materials, props, SHUO). If the user disabled any of those for this run,
     # a cache hit would silently give them attributes they asked us to skip —
@@ -299,7 +310,7 @@ def parse_step_xcaf_cached(path: Path):
     # Cache hit?
     if (full_read and not CFG.force
         and cache_path.exists()
-        and cache_path.stat().st_mtime > path.stat().st_mtime):
+        and cache_path.stat().st_mtime > path.stat().st_mtime and _stamp_ok()):
         cache_mb = cache_path.stat().st_size / 1048576
         log(f"loading cached XCAF doc: {cache_path.name} ({cache_mb:.1f} MB)")
         try:
@@ -332,6 +343,7 @@ def parse_step_xcaf_cached(path: Path):
         with Heartbeat("XCAF cache write"):
             _save_xcaf_cache(doc, cache_path)
         out_mb = cache_path.stat().st_size / 1048576
+        stamp_path.write_text(json.dumps(stamp), encoding="utf-8")
         log(f"  → cached in {time.time()-t0:.2f}s ({out_mb:.1f} MB) — re-runs will skip the STEP parse", "ok")
     except Exception as e:
         log(f"cache write failed ({e!r}); next run will re-parse from scratch", "warn")
@@ -3533,6 +3545,8 @@ def main() -> int:
                          "Plain (non-XCAF) reader only.")
     ap.add_argument("--force", action="store_true",
                     help="Re-convert even if cached output is newer than source")
+    ap.add_argument("--no-xcaf-cache", dest="no_xcaf_cache", action="store_true",
+                    help="Neither read nor write the <name>.xcaf-cache.xbf beside the STEP (a file that is converted once)")
     ap.add_argument("--parallel", type=int, default=0,
                     help="Use N worker processes for mesh extraction (default 0 = sequential). "
                          "Plain (non-XCAF) reader only.")
@@ -3677,6 +3691,7 @@ def main() -> int:
         quantize      = bool(args.quantize),
         simplify      = float(args.simplify) if args.simplify else 0.0,
         force         = bool(args.force),
+        xcaf_cache    = not args.no_xcaf_cache,
         read_shuo      = not args.no_shuo,
         read_layers    = not args.no_layers,
         read_materials = not args.no_materials,

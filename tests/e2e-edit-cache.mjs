@@ -96,10 +96,11 @@ try {
   await settle();
   m = await evalJS(PICKED);
   check('a pass of the pointer leaves the picked edges as they were', m.ver === ver0 && m.edges === all, { ver0, m });
-  // the view turned to the plate's back: its faces look away, so its edges are behind it; and back again
+  // the view turned to the plate's back: an open sheet is seen from both sides, so its picked edges are all drawn (a closed part's far
+  // side is still left out; until 2026-10-21 a sheet's were too, and a panel seen from behind showed none); and back again
   await evalJS(SIDE(-1)); await repaint();
   m = await evalJS(PICKED);
-  check('seen from the back, no picked edge is drawn', m.edges === 0, m);
+  check('seen from the back, the open plate\'s picked edges are all drawn', m.edges === all, { all, m });
   await evalJS(SIDE(1)); await repaint();
   m = await evalJS(PICKED);
   check('turned to the front again, all of them are', m.edges === all, { all, m });

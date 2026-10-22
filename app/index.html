@@ -1699,6 +1699,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* Photo mode takes a moment to start (the light is loaded, the pictures are compiled): a card with a spinner in the middle of the view says so. The spinner turns on the compositor, so it keeps turning while the page is busy. */
 #photo-loading{position:absolute;left:50%;top:50%;z-index:var(--z-vp-pop);display:flex;align-items:center;gap:var(--space-2xl);padding:var(--space-2xl) var(--space-3xl);border-radius:var(--r-lg);background:color-mix(in srgb,var(--bg2) 88%,transparent);backdrop-filter:blur(12px);box-shadow:var(--surface-shadow);font-size:var(--fs-12);color:var(--tx);pointer-events:none;opacity:0;visibility:hidden;transform:translate(-50%,-50%) scale(.96);transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),visibility 0s linear var(--dur-fast)}
 #photo-loading.show{opacity:1;visibility:visible;transform:translate(-50%,-50%);transition-delay:0s}
+#photo-loading:not(.show) .spinner{animation-play-state:paused}      /* (hidden, an endless spin still made the page work out its style on every frame) */
 .loader-card{width:600px;max-width:92vw;padding:var(--space-4xl) 22px 18px}
 .loader-head{display:flex;align-items:center;gap:var(--space-2xl)}
 .spinner{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--bg3);border-top-color:var(--ac);animation:spin .7s linear infinite;flex-shrink:0}
@@ -2185,6 +2186,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .hdri-photo.btn-sm{color:var(--tx);padding:0 var(--space-sm);width:100%}
 #photo-fx{transition:opacity .15s}
 #photo-fx.is-off,.photo-fx-row.is-off{opacity:.5}
+#photo-focus-pick.active{background:var(--ac-soft);border-color:var(--ac-line);color:var(--ac-text)}      /* (armed: the next click in the view sets the focus) */
 .tree-search input{box-sizing:border-box;height:var(--btn-h-md);padding:0 var(--space-lg) 0 28px;border-radius:var(--btn-r-md)}
 /* modal close — one icon button everywhere */
 button.x,.modal-h .x{box-sizing:border-box;width:var(--btn-h-md);height:var(--btn-h-md);padding:0;display:inline-grid;place-items:center;border-radius:var(--btn-r-md);color:var(--tx3);font-size:var(--fs-13);line-height:var(--lh-none);transition:var(--tr-bg-fg)}
@@ -6299,16 +6301,16 @@ window.moSplash = function (msg, pct) {
           <div class="brand-menu-titles">
             <div class="brand-menu-title">MeshOptimiser</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.35.4</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.35.5</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>Big parts are read in the background</li>
-            <li>Points mode shows up to two million points</li>
-            <li>Moving picked pieces is ten times quicker</li>
-            <li>A quick box over a big part</li>
-            <li>Merge by group keeps the group's name</li>
+            <li>Depth of field in Photo mode</li>
+            <li>A Visible switch in Edit mesh</li>
+            <li>Status pills that slide</li>
+            <li>A merge keeps its materials</li>
+            <li>42 fixes from a review of the app</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -6346,7 +6348,7 @@ window.moSplash = function (msg, pct) {
         <button class="export-menu-item" role="menuitem" data-file-cmd="new"><span class="fmt">New scene</span><span class="hint">Alt+N</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="newwindow" title="Open the app again in a window of its own"><span class="fmt">New window</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="open"><span class="fmt">Open file…</span><span class="hint">Ctrl+O</span></button>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="inbox" title="Open the app's inbox folder in your file manager: the models it has converted are kept there"><span class="fmt">Show inbox folder</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="inbox" title="Open the inbox folder with the converted models"><span class="fmt">Show inbox folder</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="import"><span class="fmt">Import into scene…</span><span class="hint">Ctrl+Shift+O</span></button>
         <div class="export-menu-sep" role="separator"></div>
         <button class="export-menu-item" role="menuitem" data-file-cmd="save"><span class="fmt">Save scene…</span><span class="hint">Ctrl+S</span></button>
@@ -6387,7 +6389,7 @@ window.moSplash = function (msg, pct) {
   </header>
 
   <aside id="sidebar-left" class="panel">
-    <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…" autocomplete="off" spellcheck="false" title="Several words narrow it down, in any order. A comma means or. -word leaves it out. &quot;two words&quot; in quotes are found as written. &gt;5000 or &lt;200 finds parts by triangles. is:hidden, is:visible, is:selected"><button type="button" class="tree-search-clear" id="tree-filter-clear" title="Clear the search" hidden><i data-lucide="x"></i></button></div>
+    <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…" autocomplete="off" spellcheck="false" title="Type words to narrow the list; a comma means or"><button type="button" class="tree-search-clear" id="tree-filter-clear" title="Clear the search" hidden><i data-lucide="x"></i></button></div>
     <div class="tree-toolbar">
       <!-- Each button says what it does: an icon over one word. (Hide
            unselected and Show all used to be here too; they are in the
@@ -6420,7 +6422,7 @@ window.moSplash = function (msg, pct) {
       <div class="tform-head">
         <span class="tform-title"><i data-lucide="move-3d"></i>Transform</span>
         <span class="tform-actions">
-          <button class="tform-reset" id="tform-scale-toggle" type="button" aria-pressed="false" title="Show the third column as Scale (a factor: 1 is the part as it came) instead of Size">Scale</button>
+          <button class="tform-reset" id="tform-scale-toggle" type="button" aria-pressed="false" title="Show Scale (1 is as it came) instead of Size">Scale</button>
           <button class="tform-reset" id="tform-reset" title="Reset position, rotation and size">Reset</button>
         </span>
       </div>
@@ -6471,17 +6473,17 @@ window.moSplash = function (msg, pct) {
         <button class="vpb em-toolbtn" id="em-tool-btn" title="Selection tool: Click" aria-label="Selection tool"><i data-lucide="mouse-pointer-2"></i></button>
         <div id="em-tool-pop" class="vp-prim-pop" style="display:none" role="menu" aria-label="Selection tool"></div>
         <div class="vpb-sep"></div>
-        <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to round steps sized to the model"><i data-lucide="move-3d"></i></button>
+        <button class="vpb" id="gz-translate" title="Translate gizmo (E): hold Shift to snap to round steps"><i data-lucide="move-3d"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-3d"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scale-3d"></i></button>
         <div class="vpb-sep"></div>
-        <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
+        <button class="vpb" id="msr-toggle" title="Measure (M): click two points; Esc cancels"><i data-lucide="ruler"></i></button>
         <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="spline-pointer"></i></button>
         <button class="vpb" id="notes-tool" aria-pressed="false" title="Enter notes mode"><i data-lucide="sticky-notes"></i></button>
-        <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): pick the selected part up and drag it over other surfaces. It rests on them and turns to face them."><i data-lucide="dynamic-place"></i></button>
+        <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): drag the part over other surfaces"><i data-lucide="dynamic-place"></i></button>
         <div class="vpb-sep"></div>
         <!-- How the model is drawn, as one button like the selection tool's: it shows the view in use, a click goes to the next, holding it (or a right-click) lists the four. -->
-        <button class="vpb" id="vw-mode-btn" title="View: Solid. Click turns the Wireframe on or off, hold for all four views" aria-label="View"><i data-lucide="cube-solid"></i></button>
+        <button class="vpb" id="vw-mode-btn" title="Solid view; click toggles Wireframe, hold for all views" aria-label="View"><i data-lucide="cube-solid"></i></button>
         <div id="vw-mode-pop" class="vp-prim-pop" style="display:none" role="menu" aria-label="View"></div>
         <!-- (the four old buttons stay, out of sight: the rest of the app still marks them as it changes the view) -->
         <button class="vpb" id="vw-solid" data-mode="solid" style="display:none" tabindex="-1" aria-hidden="true" title="Solid (Alt+1)"><i data-lucide="cube-solid"></i></button>
@@ -6494,28 +6496,29 @@ window.moSplash = function (msg, pct) {
            (each works on one kind of piece: the button is on when that kind is picked). Icons only; the name and the explanation are in
            the tooltip. -->
       <div class="vpc el-bar" id="el-bar" hidden data-tip-side="left" role="toolbar" aria-label="Edit mesh">
-        <div class="el-size" id="el-brush-row" hidden title="How wide the brush is on the screen (its radius, in pixels). Hold the middle button and drag in the view to change it"><i data-lucide="circle-dashed"></i><span class="el-size-l">Brush size</span><label class="size-field"><input type="text" inputmode="numeric" id="el-brush" value="20" aria-label="Brush size"><span>px</span></label></div>
+        <div class="el-size" id="el-brush-row" hidden title="Brush radius on screen, in pixels"><i data-lucide="circle-dashed"></i><span class="el-size-l">Brush size</span><label class="size-field"><input type="text" inputmode="numeric" id="el-brush" value="20" aria-label="Brush size"><span>px</span></label></div>
         <div class="el-row" id="el-space" role="group" aria-label="Pivot orientation">
           <button type="button" class="active" data-space="world" title="World: the gizmo's axes are the scene's X, Y and Z" aria-label="World axes"><i data-lucide="globe"></i><span>World</span></button>
           <button type="button" data-space="local" title="Local: the gizmo's axes are the part's own, as it is turned" aria-label="Local axes"><i data-lucide="box"></i><span>Local</span></button>
-          <button type="button" data-space="normal" title="Normal: the gizmo's Z points along the picked pieces' average normal, so a face can be pulled straight out of itself" aria-label="Normal axes"><i data-lucide="crosshair"></i><span>Normal</span></button>
+          <button type="button" data-space="normal" title="Gizmo Z follows the picked pieces' average normal" aria-label="Normal axes"><i data-lucide="crosshair"></i><span>Normal</span></button>
         </div>
         <div class="vpb-sep"></div>
         <div class="el-row">
           <label class="el-ibtn" id="el-loop-btn" title="Pick loops: every click picks a loop, as a double-click does"><input type="checkbox" id="el-loop" aria-label="Pick loops"><i data-lucide="repeat-2"></i><span>Loops</span></label>
+          <label class="el-ibtn" id="el-vis-btn" title="Visible only: the box picks what you can see. Off: it picks everything inside it, also the back and what is hidden"><input type="checkbox" id="el-vis" aria-label="Visible only" checked><i data-lucide="eye"></i><span>Visible</span></label>
         </div>
         <div class="vpb-sep"></div>
         <div class="el-row">
-          <button type="button" class="el-ibtn" id="btn-el-planar" title="Planarize (polygons): make the picked polygons flat. Their points move onto the best-fit plane of each polygon, a little. A polygon that would have to bend a long way (a curved face) is left. One undo step" aria-label="Planarize" disabled><i data-lucide="square"></i><span>Planarize</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-straight" title="Straighten (edges): the points along a picked line of edges move onto the straight line between its two ends. One undo step" aria-label="Straighten" disabled><i data-lucide="move-diagonal"></i><span>Straighten</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-weld-open" title="Weld (points or edges): opens the Weld card, where the picked points become one, or the ones that are close enough to each other" aria-label="Weld" aria-haspopup="dialog" disabled><i data-lucide="merge"></i></button>
-          <button type="button" class="el-ibtn" id="btn-el-fill" title="Fill (edges): close a hole whose whole rim is picked (a double-click on an open edge picks the loop). The cap has points of its own, so it shades on its own. One undo step" aria-label="Fill" disabled><i data-lucide="circle-dot"></i><span>Fill</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-close" title="Close open edges. With nothing picked: cap every rim where the surface stops, on the selected parts, for a mesh that is missing faces (open bores, a side that was never exported). With one rim picked (edges; a double-click picks the loop): cap it. With two rims picked: close the gap between them with a strip of triangles, the ring between the rims of a counterbore or the missing length of a tube. One undo step" aria-label="Close open edges" disabled><i data-lucide="circle-dot-dashed"></i><span>Close</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="unfold-vertical"></i><span>Reverse</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-dissolve" title="Dissolve: take the picked points out and close the surface over them; the polygons round them become one. For edges and polygons: the polygons become one, and the points left inside them or on a straight line of their outline go. The shape does not change there. One undo step (Ctrl+Backspace)" aria-label="Dissolve" disabled><i data-lucide="diamond-minus"></i><span>Dissolve</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-extract" title="Extract (polygons): take the picked polygons out into a part of their own, in the same place and with the same material. One undo step" aria-label="Extract" disabled><i data-lucide="split"></i><span>Extract</span></button>
-          <label class="el-ibtn" id="el-cad-btn" title="CAD faces (polygons), on or off. On: a click picks the whole CAD face under the pointer, the area its CAD lines bound (a hole's wall, a boss, a fillet), and Delete takes the picked faces out, closes the gap with a patch that follows the surface round it and makes the triangles round it even. The faces that stay keep their CAD faces and lines. One undo step. For a part opened from a STEP with its CAD faces"><input type="checkbox" id="el-cad" aria-label="CAD faces"><i data-lucide="eraser"></i><span>CAD faces</span></label>
-          <button type="button" class="el-ibtn" id="btn-el-colour" title="Colour (polygons): give the picked polygons a colour of their own, on the colour wheel; the rest of the part keeps its colour. A material from the Materials panel can be dropped on them too. One undo step" aria-label="Colour" disabled><i data-lucide="palette"></i><span>Colour</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-planar" title="Make the picked polygons flat" aria-label="Planarize" disabled><i data-lucide="square"></i><span>Planarize</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-straight" title="Straighten the picked line of edges" aria-label="Straighten" disabled><i data-lucide="move-diagonal"></i><span>Straighten</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-weld-open" title="Open the Weld card to merge picked points" aria-label="Weld" aria-haspopup="dialog" disabled><i data-lucide="merge"></i></button>
+          <button type="button" class="el-ibtn" id="btn-el-fill" title="Close a hole whose whole rim is picked" aria-label="Fill" disabled><i data-lucide="circle-dot"></i><span>Fill</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-close" title="Close open edges: cap a rim or bridge two rims" aria-label="Close open edges" disabled><i data-lucide="circle-dot-dashed"></i><span>Close</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-flip" title="Turn the picked polygons to face the other way" aria-label="Reverse normals" disabled><i data-lucide="unfold-vertical"></i><span>Reverse</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-dissolve" title="Dissolve the picked points, edges or polygons (Ctrl+Backspace)" aria-label="Dissolve" disabled><i data-lucide="diamond-minus"></i><span>Dissolve</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-extract" title="Move the picked polygons into a part of their own" aria-label="Extract" disabled><i data-lucide="split"></i><span>Extract</span></button>
+          <label class="el-ibtn" id="el-cad-btn" title="CAD faces: pick whole CAD faces, Delete removes them"><input type="checkbox" id="el-cad" aria-label="CAD faces"><i data-lucide="eraser"></i><span>CAD faces</span></label>
+          <button type="button" class="el-ibtn" id="btn-el-colour" title="Give the picked polygons a colour of their own" aria-label="Colour" disabled><i data-lucide="palette"></i><span>Colour</span></button>
         </div>
       </div>
     <div class="vpc tc">
@@ -6527,11 +6530,11 @@ window.moSplash = function (msg, pct) {
             <span class="vp-pill-label">Isolated</span>
             <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
           </button>
-          <button id="vp-brep-pill" class="vp-pill vp-pill-mode" type="button" hidden aria-expanded="false" aria-controls="vp-brep-pop" title="The CAD faces and edges of the STEP are in this scene. Click for the options">
+          <button id="vp-brep-pill" class="vp-pill vp-pill-mode" type="button" hidden aria-expanded="false" aria-controls="vp-brep-pop" title="The STEP's CAD faces and edges are here; click for options">
             <i class="vp-pill-icon" data-lucide="box" aria-hidden="true"></i>
             <span class="vp-pill-label">CAD edges</span>
           </button>
-          <button id="vp-cadedit-pill" class="vp-pill vp-pill-mode" type="button" hidden title="CAD edit: a click picks whole CAD faces, Delete takes them out and the card at the bottom left says how the gap is closed and remeshed. Click to leave CAD edit">
+          <button id="vp-cadedit-pill" class="vp-pill vp-pill-mode" type="button" hidden title="CAD edit: Delete removes picked CAD faces; click to leave">
             <i class="vp-pill-icon" data-lucide="eraser" aria-hidden="true"></i>
             <span class="vp-pill-label">CAD edit</span>
             <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
@@ -6551,7 +6554,7 @@ window.moSplash = function (msg, pct) {
           <!-- Animate: the window is open, or something is animated (Playing / Paused with a pause button and an X). A click on it opens the window. -->
           <div id="vp-animate-pill" class="vp-pill vp-pill-mode" role="group" aria-label="Animation" hidden></div>
           <!-- Snap is on (Shift is held and a gizmo is on a part): what a drag snaps to. -->
-          <div id="vp-snap-pill" class="vp-pill vp-pill-mode" hidden role="status" aria-live="polite" title="Snap is on while Shift is held. Turn the wheel during a drag to change the step.">
+          <div id="vp-snap-pill" class="vp-pill vp-pill-mode" hidden role="status" aria-live="polite" title="Snap is on while Shift is held; the wheel changes the step">
             <div class="snap-top"><span class="vp-pill-label" id="vp-snap-label">Snap</span></div>
             <div class="snap-ruler" id="vp-snap-ruler" aria-hidden="true"></div>
           </div>
@@ -6588,7 +6591,7 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="tg-split" data-cmd-toggle="split" title="Split (X)"><i data-lucide="split"></i></button>
         <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Remove holes (P)"><i data-lucide="circle-off"></i></button>
         <button class="vpb" id="tg-smart-fit" data-cmd-toggle="smartfit" title="Smart fit (Ctrl+B)"><i data-lucide="wand-2"></i></button>
-        <button class="vpb" id="tg-remesh" data-cmd-toggle="remesh" title="Remesh: untriangulate or triangulate (U, Shift+U run it on the selection)"><i data-lucide="grid-3x3"></i></button>
+        <button class="vpb" id="tg-remesh" data-cmd-toggle="remesh" title="Untriangulate or triangulate (U; Shift+U on the selection)"><i data-lucide="grid-3x3"></i></button>
         <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="ghost"></i></button>
         <button class="vpb" id="tg-fasteners" data-cmd-toggle="fasteners" title="Fasteners: select bolts, nuts and washers"><i data-lucide="bolt"></i></button>
         <div class="vpb-sep"></div>
@@ -6615,11 +6618,11 @@ window.moSplash = function (msg, pct) {
             <div class="toggle"><span id="toggle-fps-lbl">FPS counter</span><label><input type="checkbox" id="toggle-fps" aria-labelledby="toggle-fps-lbl"><span class="switch"></span></label></div>
             <div class="toggle" title="Show a dot at the origin point of each group in the viewport."><span id="toggle-show-origin-points-lbl">Show origin points</span><label><input type="checkbox" id="toggle-show-origin-points" aria-labelledby="toggle-show-origin-points-lbl"><span class="switch"></span></label></div>
             <div class="toggle"><span id="toggle-stats-lbl">Renderer stats</span><label><input type="checkbox" id="toggle-stats" aria-labelledby="toggle-stats-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="Atmospheric fog — fades the grid and distant geometry into the background."><span id="toggle-fog-lbl">Fog</span><label><input type="checkbox" id="toggle-fog" aria-labelledby="toggle-fog-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Fog fades the grid and distant geometry"><span id="toggle-fog-lbl">Fog</span><label><input type="checkbox" id="toggle-fog" aria-labelledby="toggle-fog-lbl"><span class="switch"></span></label></div>
             <div id="fog-controls" style="display:none;flex-direction:column;gap:var(--space-md);margin:6px 0 0 0;padding:var(--space-md) 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:6px">
-              <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'auto' = 3× model footprint."><label for="fog-near" style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input class="mac-input mac-input-sm" type="number" id="fog-near" step="any" placeholder="auto"></div>
+              <div class="field" style="margin:0" title="Distance where fog starts; 'auto' follows the model"><label for="fog-near" style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input class="mac-input mac-input-sm" type="number" id="fog-near" step="any" placeholder="auto"></div>
               <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'auto' = 30× model footprint."><label for="fog-far" style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input class="mac-input mac-input-sm" type="number" id="fog-far" step="any" placeholder="auto"></div>
-              <div class="prim-row" title="Multiplier on the fog falloff. >1 = denser (fog ramps in faster); <1 = gentler." style="margin:0;grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="fog-int">Intensity</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="fog-int" min="0.1" max="3" step="0.05" value="1"><span class="prim-unit">×</span></span></div>
+              <div class="prim-row" title="Fog falloff multiplier; above 1 is denser" style="margin:0;grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="fog-int">Intensity</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="fog-int" min="0.1" max="3" step="0.05" value="1"><span class="prim-unit">×</span></span></div>
               <button id="fog-reset" type="button" class="btn-sm" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
             </div>
           </div>
@@ -6667,18 +6670,18 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="active" data-scope="sel" title="Only the selected parts are repaired">Selected parts</button>
           <button type="button" data-scope="all" title="Every part in the scene is repaired">Whole scene</button>
         </div>
-        <div class="toggle" title="Vertices that sit in the same place become one, so the surface is closed and the mesh gets lighter"><span id="rp-weld-lbl">Join doubled vertices</span><label><input type="checkbox" id="rp-weld" aria-labelledby="rp-weld-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Merge vertices in the same place to close and lighten the mesh"><span id="rp-weld-lbl">Join doubled vertices</span><label><input type="checkbox" id="rp-weld" aria-labelledby="rp-weld-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle" title="Triangles with no area, and the same triangle stored twice"><span id="rp-degen-lbl">Remove empty and doubled triangles</span><label><input type="checkbox" id="rp-degen" aria-labelledby="rp-degen-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Faces next to each other are made to agree on which side is out; a closed shape is turned outward"><span id="rp-orient-lbl">Turn faces the same way</span><label><input type="checkbox" id="rp-orient" aria-labelledby="rp-orient-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Where two surfaces only touch (along an edge shared by three or more triangles, or at a pinched corner) they are taken apart: the smaller side gets its own corners, moved in by about a hundred-thousandth of the part's size. No face is removed."><span id="rp-manifold-lbl">Separate surfaces that only touch</span><label><input type="checkbox" id="rp-manifold" aria-labelledby="rp-manifold-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Works the normals out afresh: smooth where faces meet at a shallow angle, sharp where they meet at a steep one"><span id="rp-normals-lbl">Smooth the shading again</span><label><input type="checkbox" id="rp-normals" aria-labelledby="rp-normals-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Make neighbouring faces agree on which side is out"><span id="rp-orient-lbl">Turn faces the same way</span><label><input type="checkbox" id="rp-orient" aria-labelledby="rp-orient-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Pull apart surfaces that only touch at an edge or corner"><span id="rp-manifold-lbl">Separate surfaces that only touch</span><label><input type="checkbox" id="rp-manifold" aria-labelledby="rp-manifold-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Recalculate normals: smooth at shallow angles, sharp at steep"><span id="rp-normals-lbl">Smooth the shading again</span><label><input type="checkbox" id="rp-normals" aria-labelledby="rp-normals-lbl"><span class="switch"></span></label></div>
         <button class="btn warn" id="rp-run" data-cmd-primary title="Repair the parts. Can be undone."><i data-lucide="wrench"></i>Repair</button>
         <div class="field-help" id="rp-info">Nothing is changed on a part that is already sound.</div>
         <details class="cmd-adv" id="rp-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
-            <div class="cmd-num" title="Vertices closer together than this are joined. Empty: a millionth of the part's size."><span>Join within</span><label class="size-field"><input type="text" inputmode="decimal" id="rp-tol" placeholder="auto" spellcheck="false" autocomplete="off"><span>units</span></label></div>
-            <div class="cmd-num" title="With the shading smoothed again: faces that meet at a sharper angle than this stay sharp"><span>Smooth up to</span><label class="size-field"><input type="text" inputmode="decimal" id="rp-angle" value="30" spellcheck="false" autocomplete="off"><span>°</span></label></div>
+            <div class="cmd-num" title="Vertices closer than this are joined"><span>Join within</span><label class="size-field"><input type="text" inputmode="decimal" id="rp-tol" placeholder="auto" spellcheck="false" autocomplete="off"><span>units</span></label></div>
+            <div class="cmd-num" title="Faces meeting at a sharper angle than this stay sharp"><span>Smooth up to</span><label class="size-field"><input type="text" inputmode="decimal" id="rp-angle" value="30" spellcheck="false" autocomplete="off"><span>°</span></label></div>
             <button type="button" class="cmd-link" id="rp-reset">Reset to defaults</button>
           </div>
         </details>
@@ -6694,12 +6697,12 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="active" data-scope="sel" title="Only the selected parts are changed">Selected parts</button>
           <button type="button" data-scope="all" title="Every part in the scene is changed">Whole scene</button>
         </div>
-        <div class="toggle" title="Paints every face that turns away from you red, so reversed faces and inside-out parts show at once. It is only a view: nothing is changed"><span id="nm-hl-lbl">Highlight back faces</span><label><input type="checkbox" id="nm-hl" aria-labelledby="nm-hl-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" title="With Align: a closed shape is turned so its faces point out of it, not into it"><span id="nm-out-lbl">Point closed shapes outward</span><label><input type="checkbox" id="nm-out" aria-labelledby="nm-out-lbl" checked><span class="switch"></span></label></div>
-        <button class="btn" id="nm-find" title="Look for faces that point the wrong way, parts that are inside out and shading that disagrees with the faces. Nothing is changed: the parts that have a problem are selected"><i data-lucide="scan-search"></i>Find problems</button>
+        <div class="toggle" title="Paint faces that turn away from you red"><span id="nm-hl-lbl">Highlight back faces</span><label><input type="checkbox" id="nm-hl" aria-labelledby="nm-hl-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Turn closed shapes so their faces point outward"><span id="nm-out-lbl">Point closed shapes outward</span><label><input type="checkbox" id="nm-out" aria-labelledby="nm-out-lbl" checked><span class="switch"></span></label></div>
+        <button class="btn" id="nm-find" title="Find reversed faces and inside-out parts, and select them"><i data-lucide="scan-search"></i>Find problems</button>
         <div class="btn-row">
-          <button class="btn" id="nm-flip" title="Reverse: every face of the parts is turned round, front becomes back. Can be undone."><i data-lucide="unfold-vertical"></i>Reverse</button>
-          <button class="btn warn" id="nm-align" title="Align: neighbouring faces are made to agree on which side is out. Can be undone."><i data-lucide="layer-arrow-up"></i>Align</button>
+          <button class="btn" id="nm-flip" title="Flip every face of the parts"><i data-lucide="unfold-vertical"></i>Reverse</button>
+          <button class="btn warn" id="nm-align" title="Make neighbouring faces agree on which side is out"><i data-lucide="layer-arrow-up"></i>Align</button>
           <button type="button" id="nm-primary" data-cmd-primary hidden aria-hidden="true" tabindex="-1"></button>
         </div>
         <div class="field-help" id="nm-info">Nothing is changed on a part that is already facing the right way.</div>
@@ -6715,20 +6718,20 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="active" data-scope="sel" title="Only the selected parts are cleaned (everything still hides them)">Selected parts</button>
           <button type="button" data-scope="all" title="Every part in the scene is cleaned">Whole scene</button>
         </div>
-        <button class="btn warn" id="hf-run" data-cmd-primary title="Look at each part from every side and delete the faces that never show. Can be undone."><i data-lucide="scan-eye"></i>Remove hidden faces</button>
+        <button class="btn warn" id="hf-run" data-cmd-primary title="Delete the faces that never show from any side"><i data-lucide="scan-eye"></i>Remove hidden faces</button>
         <div class="field-help" id="hf-info">Parts are looked at one by one from many sides, so a large scene takes a while. Start with a few parts.</div>
         <details class="cmd-adv" id="hf-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
-            <div class="cmd-num" title="How many directions each part is looked at from. More directions find faces that show only through a narrow gap, and take longer.">
+            <div class="cmd-num" title="Directions each part is viewed from; more is slower">
               <div class="cmd-seg" id="hf-views" role="group" aria-label="Accuracy">
                 <button type="button" data-views="26">Fast</button>
                 <button type="button" class="active" data-views="64">Normal</button>
                 <button type="button" data-views="128">Thorough</button>
               </div>
             </div>
-        <div class="toggle" title="A face is kept if it touches one that can be seen: no holes open up in the surface, and a face too small to be caught is not lost"><span id="hf-safe-lbl">Keep faces next to visible ones</span><label><input type="checkbox" id="hf-safe" aria-labelledby="hf-safe-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Off: a clear part (glass) hides nothing, so what is behind it counts as visible"><span id="hf-glass-lbl">Glass blocks the view</span><label><input type="checkbox" id="hf-glass" aria-labelledby="hf-glass-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Keep a face if it touches a visible one"><span id="hf-safe-lbl">Keep faces next to visible ones</span><label><input type="checkbox" id="hf-safe" aria-labelledby="hf-safe-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Off: a clear part (glass) hides nothing behind it"><span id="hf-glass-lbl">Glass blocks the view</span><label><input type="checkbox" id="hf-glass" aria-labelledby="hf-glass-lbl"><span class="switch"></span></label></div>
             <div class="cmd-num" title="Parts with fewer triangles than this are left alone"><span>Skip parts under</span><label class="size-field"><input type="text" inputmode="decimal" id="hf-min" value="20" spellcheck="false" autocomplete="off"><span>tri</span></label></div>
             <button type="button" class="cmd-link" id="hf-reset">Reset to defaults</button>
           </div>
@@ -6744,26 +6747,26 @@ window.moSplash = function (msg, pct) {
         <div class="cmd-seg" id="smart-level" role="group" aria-label="How far to go">
           <button type="button" class="active" data-level="auto" title="The app picks the level from how heavy the scene is">Auto</button>
           <button type="button" data-level="light" title="Only what cannot be seen: empty and broken parts, empty groups">Light</button>
-          <button type="button" data-level="balanced" title="Also removes hidden and very small parts, simplifies fasteners and halves the triangles">Balanced</button>
-          <button type="button" data-level="strong" title="Removes more small parts, fills holes and keeps a quarter of the triangles">Strong</button>
+          <button type="button" data-level="balanced" title="Also removes hidden and small parts; halves the triangles">Balanced</button>
+          <button type="button" data-level="strong" title="More small parts removed, holes filled, a quarter of triangles kept">Strong</button>
         </div>
         <div class="smart-scan" id="smart-scan">
           <span class="smart-scan-t" id="smart-scan-t">Not scanned yet</span>
-          <button type="button" class="btn quiet" id="smart-scan-btn" title="Look through the scene without changing it, and count what each step would find">Scan</button>
+          <button type="button" class="btn quiet" id="smart-scan-btn" title="Count what each step would find, without changing anything">Scan</button>
         </div>
         <ul class="smart-finds" id="smart-finds" aria-label="What the scan found" hidden></ul>
         <details class="cmd-adv" id="smart-adv">
           <summary><span>Steps</span></summary>
           <div class="cmd-adv-b">
-        <div class="toggle" title="Off: the run only removes and tidies parts; the meshes that stay keep every triangle"><span id="smart-remesh-lbl">Reduce triangles</span><label><input type="checkbox" id="smart-remesh" aria-labelledby="smart-remesh-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" id="smart-target-row" title="How many triangles the whole scene may have after the run (150000, 150k, 1.5m). The densest meshes give up the most."><span>Target</span><label class="size-field"><input type="text" inputmode="numeric" id="smart-target" value="" aria-label="Triangle target"><span>tris</span></label></div>
-            <div class="toggle" title="Parts with no triangles, parts whose triangles have no area, and groups left with nothing in them"><span id="smart-clean-lbl">Empty parts</span><label><input type="checkbox" id="smart-clean" aria-labelledby="smart-clean-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Off: only remove and tidy parts; meshes keep every triangle"><span id="smart-remesh-lbl">Reduce triangles</span><label><input type="checkbox" id="smart-remesh" aria-labelledby="smart-remesh-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" id="smart-target-row" title="Triangle budget for the whole scene after the run"><span>Target</span><label class="size-field"><input type="text" inputmode="numeric" id="smart-target" value="" aria-label="Triangle target"><span>tris</span></label></div>
+            <div class="toggle" title="Parts with no triangles or no area, and empty groups"><span id="smart-clean-lbl">Empty parts</span><label><input type="checkbox" id="smart-clean" aria-labelledby="smart-clean-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="Parts that cannot be seen from outside the model, from any direction"><span id="smart-hidden-lbl">Hidden parts</span><label><input type="checkbox" id="smart-hidden" aria-labelledby="smart-hidden-lbl"><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Bolts, nuts and washers found by their shape. Simplify turns each into a plain cylinder; Delete removes them."><span>Fasteners</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
-            <div class="cmd-num" title="Parts whose box, corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone."><span>Small parts</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
-            <div class="toggle" title="Closes holes in flat faces, with the settings of the Remove holes panel"><span id="smart-holes-lbl">Holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="The same part twice in the same place. Only the second copy goes; parts that merely share a shape stay."><span id="smart-dupes-lbl">Exact copies</span><label><input type="checkbox" id="smart-dupes" aria-labelledby="smart-dupes-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Takes out triangles from each part for as long as no point of its surface moves by more than this. 0 leaves it out. Runs before the triangle target."><span>Tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-tol" value="0" aria-label="Largest move of any point, in millimetres"><span>mm</span></label></div>
+            <div class="cmd-num" title="Bolts, nuts and washers found by their shape"><span>Fasteners</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
+            <div class="cmd-num" title="Parts smaller than this share of the whole model"><span>Small parts</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
+            <div class="toggle" title="Close holes in flat faces, with the Remove holes settings"><span id="smart-holes-lbl">Holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Duplicates stacked in the same place; the second goes"><span id="smart-dupes-lbl">Exact copies</span><label><input type="checkbox" id="smart-dupes" aria-labelledby="smart-dupes-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Largest surface movement allowed while reducing"><span>Tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-tol" value="0" aria-label="Largest move of any point, in millimetres"><span>mm</span></label></div>
           </div>
         </details>
         <details class="cmd-adv" id="smart-recipes">
@@ -6771,8 +6774,8 @@ window.moSplash = function (msg, pct) {
           <div class="cmd-adv-b">
             <div class="cmd-num" title="Settings you saved. Choose one to put them in the controls above."><span>Saved</span><select id="recipe-list" class="mac-sel" aria-label="Saved recipes"></select></div>
             <div class="btn-row">
-              <button class="btn quiet" id="recipe-run" title="Put the chosen recipe's settings in the controls and run them on this scene">Apply and run</button>
-              <button class="btn quiet" id="recipe-save" title="Save the settings above under a name, to run again on the next revision of the model">Save these…</button>
+              <button class="btn quiet" id="recipe-run" title="Load the recipe's settings and run them on this scene">Apply and run</button>
+              <button class="btn quiet" id="recipe-save" title="Save the settings above under a name to reuse">Save these…</button>
             </div>
             <div class="btn-row" style="grid-template-columns:repeat(3,minmax(0,1fr))">
               <button class="btn quiet" id="recipe-export" title="Write the saved recipes to a file you can keep or share">Export</button>
@@ -6783,7 +6786,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
         <div class="field-help smart-info" id="smart-info"></div>
-        <button class="btn primary" id="btn-smart-run" data-cmd-primary title="Run every step that is switched on, on the whole scene. Lossy, but one undo takes the whole run back."><i data-lucide="broom-sparkles"></i>Optimise</button>
+        <button class="btn primary" id="btn-smart-run" data-cmd-primary title="Run every switched-on step on the whole scene"><i data-lucide="broom-sparkles"></i>Optimise</button>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Optimise</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
@@ -6791,17 +6794,17 @@ window.moSplash = function (msg, pct) {
     <div class="section section-cmd" data-cmd="reduce" hidden>
       <div class="section-h"><span>Reduce triangles</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="toggle" id="decimate-smart-row" title="Tidy the flat faces before and after the reduction (flat triangles joined into polygons and re-triangulated with fewer; every second line of a ring grid taken out). Quick remesh (B) uses the same switch, so the same share gives the same result on both."><span id="decimate-smart-lbl">Smart: tidy flat faces</span><label><input type="checkbox" id="decimate-smart" checked aria-labelledby="decimate-smart-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" id="keep-sharp-row" title="While triangles are taken out, hold on to the hard edges of a part (a rim, a step, a corner), when the part has few of them and the goal can still be reached. Parts that are mostly hard edges, like gears, are reduced as before."><span id="keep-sharp-lbl">Keep sharp edges</span><label><input type="checkbox" id="keep-sharp" checked aria-labelledby="keep-sharp-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" id="decimate-smart-row" title="Tidy flat faces before and after reducing (Quick remesh: B)"><span id="decimate-smart-lbl">Smart: tidy flat faces</span><label><input type="checkbox" id="decimate-smart" checked aria-labelledby="decimate-smart-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" id="keep-sharp-row" title="Keep hard edges while triangles are removed"><span id="keep-sharp-lbl">Keep sharp edges</span><label><input type="checkbox" id="keep-sharp" checked aria-labelledby="keep-sharp-lbl"><span class="switch"></span></label></div>
         <div class="remesh-sub">Whole scene</div>
         <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
-          <button class="btn primary" id="btn-budget" data-cmd-primary title="Reduce the whole scene to a triangle budget. The densest meshes give up the most; large, sparse ones are left alone. Lossy, but undoable."><i data-lucide="gauge"></i>Fit to budget</button>
+          <button class="btn primary" id="btn-budget" data-cmd-primary title="Reduce the whole scene to a triangle budget"><i data-lucide="gauge"></i>Fit to budget</button>
           <label class="size-field budget-field" title="Triangle budget for the whole scene (150000, 150k, 1.5m)"><input type="text" inputmode="numeric" id="budget-target" value="150k"><span>tris</span></label>
         </div>
         <div class="field-help plan-line" style="margin-top:-2px"><span id="budget-info"></span><button type="button" class="plan-link" id="budget-preview" hidden title="See which meshes will be reduced, and by how much, before running it">Preview…</button></div>
         <div class="remesh-sub">Selected parts</div>
         <div class="btn-row">
-          <button class="btn warn" id="btn-decimate-sel" title="Reduce the triangle count of the selected parts. Normals, UVs and vertex colours are kept. Lossy, but undoable."><i data-lucide="shrink"></i>Decimate <span id="dec-sel-count">0</span></button>
+          <button class="btn warn" id="btn-decimate-sel" title="Reduce the triangle count of the selected parts"><i data-lucide="shrink"></i>Decimate <span id="dec-sel-count">0</span></button>
           <select id="decimate-strength" class="mac-sel" title="How many triangles to remove from each selected part" style="flex:0 0 96px">
             <option value="0.25">−25%</option>
             <option value="0.5" selected>−50%</option>
@@ -6811,13 +6814,13 @@ window.moSplash = function (msg, pct) {
             <option value="tol">Within…</option>
           </select>
         </div>
-        <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
-        <label class="size-field" id="decimate-tol-row" style="display:none" title="Take out as many triangles as possible without moving any point of the surface by more than this"><span>no point moves more than</span><input type="text" inputmode="decimal" id="decimate-tol" value="0.1"><span>mm</span></label>
+        <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for the selection, shared evenly" style="display:none">
+        <label class="size-field" id="decimate-tol-row" style="display:none" title="Remove as many triangles as possible within this surface movement"><span>no point moves more than</span><input type="text" inputmode="decimal" id="decimate-tol" value="0.1"><span>mm</span></label>
         <div class="field-help plan-line" style="margin-top:-2px"><span id="decimate-info"></span><button type="button" class="plan-link" id="decimate-preview" hidden title="See what each part will lose before running it">Preview…</button></div>
         <div class="remesh-sub">Replace with shapes</div>
         <div class="btn-list">
-          <button class="btn quiet" id="btn-bbox-all" title="Smart fit every part: each becomes a box, a turned box or a cylinder, whichever fits it best. Removes most of the detail."><i data-lucide="box-select"></i>Smart fit all parts</button>
-          <button class="btn quiet" id="btn-report" title="The model as it was opened against what it is now: triangles, draw calls, materials, file size"><i data-lucide="clipboard-list"></i>Optimisation report</button>
+          <button class="btn quiet" id="btn-bbox-all" title="Fit each part with a box or cylinder"><i data-lucide="box-select"></i>Smart fit all parts</button>
+          <button class="btn quiet" id="btn-report" title="Compare the model as opened with now: triangles, draw calls, size"><i data-lucide="clipboard-list"></i>Optimisation report</button>
         </div>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button></div>
@@ -6850,7 +6853,7 @@ window.moSplash = function (msg, pct) {
             <div class="cmd-num" title="How big the profile is where the path ends (a taper)"><span>Size at the end</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-scale1" value="100"><span>%</span></label></div>
             <div class="cmd-num" title="How far the profile turns about the path from the start to the end"><span>Twist</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-twist" value="0"><span>°</span></label></div>
             <div class="toggle" title="Close the two ends of an open path with a flat face"><span id="sw-caps-lbl">Close the ends</span><label><input type="checkbox" id="sw-caps" aria-labelledby="sw-caps-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="A corner of the profile sharper than this stays a hard edge; the rest is shaded smooth"><span>Hard edges from</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-crease" value="30"><span>°</span></label></div>
+            <div class="cmd-num" title="Profile corners sharper than this stay hard edges"><span>Hard edges from</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-crease" value="30"><span>°</span></label></div>
             <button type="button" class="cmd-link" id="sw-reset">Reset to defaults</button>
           </div>
         </details>
@@ -6888,7 +6891,7 @@ window.moSplash = function (msg, pct) {
         <div class="dr-group" id="dr-snapgroup">
         <div class="cmd-num" title="How far the plane is moved along its normal"><span>Offset</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-offset" value="0"><span>mm</span></label></div>
         <div class="toggle" title="Points land on the grid"><span id="dr-snap-grid-lbl">Snap to grid</span><label><input type="checkbox" id="dr-snap-grid" aria-labelledby="dr-snap-grid-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" title="The grid step. Auto follows the zoom; type a number to fix it, or empty for Auto"><span>Grid step</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-grid" value="Auto"><span>mm</span></label></div>
+        <div class="cmd-num" title="Grid step; Auto follows the zoom, or type a number"><span>Grid step</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-grid" value="Auto"><span>mm</span></label></div>
         <div class="toggle" title="Points land on the points of other lines"><span id="dr-snap-pts-lbl">Snap to points</span><label><input type="checkbox" id="dr-snap-pts" aria-labelledby="dr-snap-pts-lbl" checked><span class="switch"></span></label></div>
         </div>
         <div class="dr-group" id="dr-shapegroup">
@@ -6902,7 +6905,7 @@ window.moSplash = function (msg, pct) {
         <div class="cmd-num" id="dr-r-sides" hidden><span>Sides</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-sides" value="6"></label></div>
         <div class="toggle" id="dr-r-star" hidden title="Alternate points on a smaller radius"><span id="dr-star-lbl">Star</span><label><input type="checkbox" id="dr-star" aria-labelledby="dr-star-lbl"><span class="switch"></span></label></div>
         <div class="cmd-num" id="dr-r-inner" hidden title="The inner radius of the star, as a share of the outer"><span>Inner radius</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-inner" value="50"><span>%</span></label></div>
-        <div class="toggle" id="dr-r-circum" hidden title="The size is the circle the sides touch, not the circle the corners lie on"><span id="dr-circum-lbl">Around the circle</span><label><input type="checkbox" id="dr-circum" aria-labelledby="dr-circum-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" id="dr-r-circum" hidden title="Size is the circle the sides touch, not the corners"><span id="dr-circum-lbl">Around the circle</span><label><input type="checkbox" id="dr-circum" aria-labelledby="dr-circum-lbl"><span class="switch"></span></label></div>
         <div class="toggle" id="dr-r-ellipse" hidden title="Two radii: the pointer sets one along each axis"><span id="dr-ellipse-lbl">Ellipse</span><label><input type="checkbox" id="dr-ellipse" aria-labelledby="dr-ellipse-lbl"><span class="switch"></span></label></div>
         <div class="toggle" id="dr-r-center" hidden title="The first click is the middle of the rectangle (Alt does the same)"><span id="dr-center-lbl">From the centre</span><label><input type="checkbox" id="dr-center" aria-labelledby="dr-center-lbl"><span class="switch"></span></label></div>
         <div class="cmd-num" id="dr-r-smooth" hidden title="How far the smoothed line may stray from the stroke, in pixels"><span>Smoothing</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-smooth" value="4"><span>px</span></label></div>
@@ -6981,16 +6984,16 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><span>Lettering and logos</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="field-help">Text and marks on the selected parts, however the CAD system made them: cut into a part's own mesh (raised or engraved, on a flat or a curved face), or as bodies of their own laid over it. Select the part or parts first; Remove finds the lettering and takes it away in one go (Ctrl+Z brings it back); Find only shows what it would take.</div>
-        <div class="cmd-num" title="Raised text and logos no higher than this above their face are removed. Embossed type is usually 0.1 to 0.5 mm; cast lettering on a housing stands 1 to 2 mm; a boss or a rib stands higher and stays. When nothing is found, the card says how high the marks it left stand."><span>Raised, up to</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-rise" value="0.6"><span class="unit">mm</span></label></div>
-        <div class="cmd-num" title="Engraved text no deeper than this below its face is closed. 0 leaves engraved text alone."><span>Engraved, down to</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-depth" value="0.5"><span class="unit">mm</span></label></div>
-        <div class="cmd-num" title="The widest a letter, a logo or a line of text may be. Larger marks are left alone."><span>Largest mark</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-size" value="40"><span class="unit">mm</span></label></div>
-        <div class="toggle" title="Text and marks that are part of the part's own mesh, on a flat or a curved face: raised ones are flattened into the face, engraved ones are closed flush with it"><span id="lt-mesh-lbl">Cut into the part's mesh</span><label><input type="checkbox" id="lt-mesh" checked aria-labelledby="lt-mesh-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" title="Text modelled as a body of its own, sunk into the part and standing out of it by no more than the rise. The body is deleted; the part under it is complete."><span id="lt-bodies-lbl">Bodies laid over a part</span><label><input type="checkbox" id="lt-bodies" checked aria-labelledby="lt-bodies-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" title="Thin bodies that lie entirely inside another closed part, close under its face (the back of a letter, a logo's plate): never visible. They are deleted too. A part deep inside a housing is not one; Hidden parts finds those."><span id="lt-hidden-lbl">Bodies hidden inside a part</span><label><input type="checkbox" id="lt-hidden" checked aria-labelledby="lt-hidden-lbl"><span class="switch"></span></label></div>
+        <div class="cmd-num" title="Remove raised marks no higher than this"><span>Raised, up to</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-rise" value="0.6"><span class="unit">mm</span></label></div>
+        <div class="cmd-num" title="Close engraved text no deeper than this; 0 leaves it"><span>Engraved, down to</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-depth" value="0.5"><span class="unit">mm</span></label></div>
+        <div class="cmd-num" title="Widest letter, logo or line of text to remove"><span>Largest mark</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-size" value="40"><span class="unit">mm</span></label></div>
+        <div class="toggle" title="Flatten or close text marks that are part of the mesh"><span id="lt-mesh-lbl">Cut into the part's mesh</span><label><input type="checkbox" id="lt-mesh" checked aria-labelledby="lt-mesh-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Delete text modelled as a separate body"><span id="lt-bodies-lbl">Bodies laid over a part</span><label><input type="checkbox" id="lt-bodies" checked aria-labelledby="lt-bodies-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Delete thin bodies just under another part's face"><span id="lt-hidden-lbl">Bodies hidden inside a part</span><label><input type="checkbox" id="lt-hidden" checked aria-labelledby="lt-hidden-lbl"><span class="switch"></span></label></div>
         <button type="button" class="cmd-link" id="lt-reset" title="0.6 mm raised, 0.5 mm engraved, marks up to 40 mm, every kind on">Reset to defaults</button>
-        <button class="btn primary" id="lt-remove" data-cmd-primary title="Find the lettering on the selected parts and on what is laid over them, and remove it: the separate bodies are deleted, the marks in the meshes flattened or closed. Undo brings it back (two steps when there were both: the bodies, then the meshes)."><i data-lucide="eraser"></i>Remove lettering</button>
+        <button class="btn primary" id="lt-remove" data-cmd-primary title="Remove lettering from the selected parts and what covers them"><i data-lucide="eraser"></i>Remove lettering</button>
         <div class="btn-row">
-          <button class="btn" id="lt-find" title="Only look: select the separate bodies and count the marks in the meshes, without changing anything"><i data-lucide="type"></i>Find only</button>
+          <button class="btn" id="lt-find" title="Select the bodies and count the marks, changing nothing"><i data-lucide="type"></i>Find only</button>
           <button class="btn" id="lt-isolate" title="Show only the separate bodies that Find found, to check them"><i data-lucide="focus"></i>Isolate</button>
         </div>
         <div class="field-help" id="lt-info"></div>
@@ -7015,10 +7018,10 @@ window.moSplash = function (msg, pct) {
     <div class="section section-cmd" data-cmd="voxel" hidden>
       <div class="section-h"><span>Voxel remesh</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
-        <div class="field" title="Voxels along the part's longest side. More keeps finer detail and sharper edges, and takes longer."><div id="vox-detail-scrub"></div></div>
-        <div class="field" title="How far the surface may move when it is reduced afterwards, in voxels. 0 keeps every face of the grid (dense and even); more gives fewer triangles where the surface is flat."><div id="vox-adapt-scrub"></div></div>
-        <div class="field" title="Faces that meet at less than this angle are shaded smooth; at more, the edge is shown sharp."><div id="vox-smooth-scrub"></div></div>
-        <div class="field" title="Gaps, slots and pockets narrower than this share of the part's length are filled as well. 0 fills none."><div id="vox-gap-scrub"></div></div>
+        <div class="field" title="Voxels along the longest side; more keeps finer detail, slower"><div id="vox-detail-scrub"></div></div>
+        <div class="field" title="How far the surface may move when reduced afterwards"><div id="vox-adapt-scrub"></div></div>
+        <div class="field" title="Faces meeting at less than this angle shade smooth"><div id="vox-smooth-scrub"></div></div>
+        <div class="field" title="Fill gaps and slots narrower than this share of the length"><div id="vox-gap-scrub"></div></div>
         <div class="field-help" id="vox-info"></div>
         <button class="btn primary" id="vox-ok" data-cmd-primary title="Keep it"><i data-lucide="check"></i>Done</button>
       </div>
@@ -7028,8 +7031,8 @@ window.moSplash = function (msg, pct) {
     <div class="section section-cmd" data-cmd="roundpart" hidden>
       <div class="section-h"><span id="rnd-title">Round part</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
-        <div class="field" title="How many flat steps go round the axis. More is rounder and heavier; fewer is lighter."><div id="rnd-seg-scrub"></div></div>
-        <div class="field" title="Faces that meet at less than this angle are shaded smooth, as if round; at more, each face is lit flat. Segments meet at 360° divided by their number."><div id="rnd-smooth-scrub"></div></div>
+        <div class="field" title="Flat steps around the axis; more is rounder and heavier"><div id="rnd-seg-scrub"></div></div>
+        <div class="field" title="Faces meeting at less than this angle shade smooth"><div id="rnd-smooth-scrub"></div></div>
         <div class="field-help" id="rnd-info"></div>
         <button class="btn primary" id="rnd-ok" data-cmd-primary title="Keep this number of segments"><i data-lucide="check"></i>Done</button>
       </div>
@@ -7041,7 +7044,7 @@ window.moSplash = function (msg, pct) {
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="field-help">Parts that sit on top of an identical copy: the same shape in the same place, drawn twice (and flickering where the two meet). One of each pair is kept.</div>
         <div class="field"><div id="stk-tol-scrub"></div></div>
-        <div class="toggle" title="Also count a part as a copy when its triangle count differs a little (another export of the same part, a re-meshed duplicate)"><span id="stk-near-lbl">Also near copies</span><label><input type="checkbox" id="stk-near" aria-labelledby="stk-near-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Also count near-identical triangle counts as copies"><span id="stk-near-lbl">Also near copies</span><label><input type="checkbox" id="stk-near" aria-labelledby="stk-near-lbl"><span class="switch"></span></label></div>
         <button class="btn primary" id="stk-run" data-cmd-primary title="Select the extra copies. Nothing is deleted until you press Delete."><i data-lucide="layers-2"></i>Find stacked copies</button>
         <div class="field-help" id="stk-info"></div>
         <div class="btn-row" id="stk-after" hidden>
@@ -7059,8 +7062,8 @@ window.moSplash = function (msg, pct) {
         <div class="cmd-lede">Line the selected parts up, or spread them out evenly. Each press is one undo step.</div>
         <div class="align-head"><span>Align to</span></div>
         <div class="cmd-seg" id="arr-to" role="group" aria-label="Align to" style="--seg-n:3">
-          <button type="button" class="active" data-to="sel" title="The parts line up on the box round the whole selection: its low side, its middle or its high side">Selection</button>
-          <button type="button" data-to="key" title="The parts line up on the part that was picked last, which stays where it is">Last picked</button>
+          <button type="button" class="active" data-to="sel" title="Line up on the selection's low, middle or high side">Selection</button>
+          <button type="button" data-to="key" title="Line up on the part picked last, which stays put">Last picked</button>
           <button type="button" data-to="origin" title="The parts line up on zero">Origin</button>
         </div>
         <div class="arr-grid">
@@ -7072,8 +7075,8 @@ window.moSplash = function (msg, pct) {
             <button type="button" class="btn" data-arr="align" data-axis="x" data-v="max" title="Line up the high sides along X" aria-label="Align high sides on X"><i data-lucide="align-end-vertical"></i></button>
           </div>
           <div class="arr-set">
-            <button type="button" class="btn" data-arr="spread" data-axis="x" data-v="centers" title="Spread along X so the middles are the same distance apart. The two outermost parts stay where they are." aria-label="Spread middles evenly on X"><i data-lucide="align-horizontal-distribute-center"></i></button>
-            <button type="button" class="btn" data-arr="spread" data-axis="x" data-v="gaps" title="Spread along X so the gaps between the parts are the same. With a Gap typed in below, that gap is used, counted from the lowest part." aria-label="Spread with even gaps on X"><i data-lucide="align-horizontal-space-between"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="x" data-v="centers" title="Even spacing along X between part middles" aria-label="Spread middles evenly on X"><i data-lucide="align-horizontal-distribute-center"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="x" data-v="gaps" title="Even gaps along X between parts" aria-label="Spread with even gaps on X"><i data-lucide="align-horizontal-space-between"></i></button>
           </div>
           <span class="arr-ax" data-axis="y">Y</span>
           <div class="arr-set">
@@ -7082,8 +7085,8 @@ window.moSplash = function (msg, pct) {
             <button type="button" class="btn" data-arr="align" data-axis="y" data-v="max" title="Line up the high sides along Y" aria-label="Align high sides on Y"><i data-lucide="align-end-vertical"></i></button>
           </div>
           <div class="arr-set">
-            <button type="button" class="btn" data-arr="spread" data-axis="y" data-v="centers" title="Spread along Y so the middles are the same distance apart. The two outermost parts stay where they are." aria-label="Spread middles evenly on Y"><i data-lucide="align-horizontal-distribute-center"></i></button>
-            <button type="button" class="btn" data-arr="spread" data-axis="y" data-v="gaps" title="Spread along Y so the gaps between the parts are the same. With a Gap typed in below, that gap is used, counted from the lowest part." aria-label="Spread with even gaps on Y"><i data-lucide="align-horizontal-space-between"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="y" data-v="centers" title="Even spacing along Y between part middles" aria-label="Spread middles evenly on Y"><i data-lucide="align-horizontal-distribute-center"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="y" data-v="gaps" title="Even gaps along Y between parts" aria-label="Spread with even gaps on Y"><i data-lucide="align-horizontal-space-between"></i></button>
           </div>
           <span class="arr-ax" data-axis="z">Z</span>
           <div class="arr-set">
@@ -7092,11 +7095,11 @@ window.moSplash = function (msg, pct) {
             <button type="button" class="btn" data-arr="align" data-axis="z" data-v="max" title="Line up the high sides along Z" aria-label="Align high sides on Z"><i data-lucide="align-end-vertical"></i></button>
           </div>
           <div class="arr-set">
-            <button type="button" class="btn" data-arr="spread" data-axis="z" data-v="centers" title="Spread along Z so the middles are the same distance apart. The two outermost parts stay where they are." aria-label="Spread middles evenly on Z"><i data-lucide="align-horizontal-distribute-center"></i></button>
-            <button type="button" class="btn" data-arr="spread" data-axis="z" data-v="gaps" title="Spread along Z so the gaps between the parts are the same. With a Gap typed in below, that gap is used, counted from the lowest part." aria-label="Spread with even gaps on Z"><i data-lucide="align-horizontal-space-between"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="z" data-v="centers" title="Even spacing along Z between part middles" aria-label="Spread middles evenly on Z"><i data-lucide="align-horizontal-distribute-center"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="z" data-v="gaps" title="Even gaps along Z between parts" aria-label="Spread with even gaps on Z"><i data-lucide="align-horizontal-space-between"></i></button>
           </div>
         </div>
-        <div class="cmd-num" title="The gap the second Spread button leaves between one part and the next. Empty: the parts are spread evenly between the two outermost ones."><span>Gap</span><label class="size-field"><input type="text" inputmode="decimal" id="arr-gap" value="" placeholder="even"><span>mm</span></label></div>
+        <div class="cmd-num" title="Gap left between parts; empty spreads them evenly"><span>Gap</span><label class="size-field"><input type="text" inputmode="decimal" id="arr-gap" value="" placeholder="even"><span>mm</span></label></div>
         <div class="field-help" id="arr-info"></div>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
@@ -7107,7 +7110,7 @@ window.moSplash = function (msg, pct) {
       <div class="section-b align-box" id="align-box">
         <canvas id="align-view" class="align-view" aria-label="A drawing of the floor, the origin and the model: where it stands and which point of it sits at zero"></canvas>
         <div class="align-legend" aria-hidden="true"><span><i class="ring"></i>goes to zero</span><span><i class="arr y"></i>top</span><span><i class="arr w"></i>front</span></div>
-        <div class="align-head"><span>Turn the model</span><label class="size-field" title="How far one press turns the model: 90 for quarter turns, something small to straighten a tilted model"><span>each press</span><input type="text" inputmode="decimal" id="align-step" value="90"><span>°</span></label></div>
+        <div class="align-head"><span>Turn the model</span><label class="size-field" title="Degrees one press turns the model"><span>each press</span><input type="text" inputmode="decimal" id="align-step" value="90"><span>°</span></label></div>
         <div class="align-grid" id="align-turns">
           <div class="align-turn"><span>X</span><button type="button" class="btn" data-turn="x-" title="Turn the model about the scene's X axis, backwards by the step"><i data-lucide="rotate-ccw"></i></button><button type="button" class="btn" data-turn="x+" title="Turn the model about the scene's X axis, forwards by the step"><i data-lucide="rotate-cw"></i></button></div>
           <div class="align-turn"><span>Y</span><button type="button" class="btn" data-turn="y-" title="Turn the model about the scene's Y axis, backwards by the step"><i data-lucide="rotate-ccw"></i></button><button type="button" class="btn" data-turn="y+" title="Turn the model about the scene's Y axis, forwards by the step"><i data-lucide="rotate-cw"></i></button></div>
@@ -7119,7 +7122,7 @@ window.moSplash = function (msg, pct) {
           <div class="align-axis"><span class="align-axis-name" id="align-b-label">Y</span><div class="cmd-seg" id="align-b" role="group" aria-label="Y" style="--seg-n:4"><button type="button" data-v="min" title="The low side of the model goes to 0">Low</button><button type="button" data-v="center" title="The middle of the model goes to 0">Mid</button><button type="button" data-v="max" title="The high side of the model goes to 0">High</button><button type="button" data-v="keep" title="Leave the model where it is on this axis">Keep</button></div></div>
           <div class="align-axis"><span class="align-axis-name">Up</span><div class="cmd-seg" id="align-up" role="group" aria-label="Up" style="--seg-n:4"><button type="button" data-v="min" title="The model stands on the grid">Floor</button><button type="button" data-v="center" title="The middle of the model is at the grid">Mid</button><button type="button" data-v="max" title="The model hangs from the grid">Top</button><button type="button" data-v="keep" title="Leave the model at its height">Keep</button></div></div>
         </div>
-        <button class="btn primary" id="btn-align-floor" data-cmd-primary title="Stand the model on the floor with its middle over 0,0,0 (or wherever the choices above say). The turns and the choices above only change the drawing until you press this. One undo step."><i data-lucide="arrow-down-to-line"></i>Align to floor</button>
+        <button class="btn primary" id="btn-align-floor" data-cmd-primary title="Stand the model on the floor, centred over 0,0,0"><i data-lucide="arrow-down-to-line"></i>Align to floor</button>
         <button class="btn quiet" id="btn-align-reset" title="Put the model back where and how it was loaded"><i data-lucide="rotate-ccw"></i>Reset original position</button>
         <div class="field-help" id="align-info"></div>
       </div>
@@ -7143,11 +7146,11 @@ window.moSplash = function (msg, pct) {
       <div class="section-b">
         <div class="cmd-lede">Turns the pivot of each selected part: its own X, Y and Z, which the gizmo follows. The parts stay where they are and look the same.</div>
         <div class="pv-chips" id="pivot-chips">
-          <button type="button" class="btn" data-orient="object" title="Turn each pivot to the way its own part is turned: its biggest flat faces, by the smallest turn (curved shapes with no flat faces are left alone)"><i data-lucide="box-select"></i>Object</button>
+          <button type="button" class="btn" data-orient="object" title="Turn each pivot to match its own part"><i data-lucide="box-select"></i>Object</button>
           <button type="button" class="btn" data-orient="world" title="Turn the pivot to the scene's X, Y and Z"><i data-lucide="globe"></i>World</button>
           <button type="button" class="btn" data-orient="active" title="Turn every selected pivot to the axes of the part picked last"><i data-lucide="mouse-pointer-click"></i>Last selected</button>
           <button type="button" class="btn" data-orient="view" title="Turn the pivot to the screen: X right, Y up, Z toward you"><i data-lucide="camera"></i>View</button>
-          <button type="button" class="btn" data-orient="spread" title="Turn the pivot to the axes the selected parts are spread along (three or more parts)"><i data-lucide="scan-line"></i>Spread</button>
+          <button type="button" class="btn" data-orient="spread" title="Turn the pivot to the axes the parts spread along"><i data-lucide="scan-line"></i>Spread</button>
         </div>
         <div class="pv-head"><span>Or type the angles</span></div>
         <div class="cmd-num" title="The pivot's turn about the scene's X axis"><span>X</span><label class="size-field"><input type="text" inputmode="decimal" id="pivot-x" value="0"><span>°</span></label></div>
@@ -7163,19 +7166,19 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><span>Axis</span><button type="button" class="lc-icon-btn cmd-close" title="Done (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-lede">Moves or turns the axis of the selected parts. The shapes stay put.</div>
-        <button class="btn primary" type="button" data-axis-act="centre" data-cmd-primary title="The axis goes to the middle of the part and its rotation is reset to 0, 0, 0 (the scene's axes)"><i data-lucide="crosshair"></i>Axis Center</button>
+        <button class="btn primary" type="button" data-axis-act="centre" data-cmd-primary title="Move the axis to the part's middle and reset its rotation"><i data-lucide="crosshair"></i>Axis Center</button>
         <div class="pv-head"><span>Center axis to</span></div>
         <div class="ax-chips">
           <button type="button" class="btn" data-axis-act="axis-origin" title="The axis goes to 0, 0, 0"><i data-lucide="axis-3d"></i>Origin</button>
           <button type="button" class="btn" data-axis-act="axis-selection" title="The axis of every selected part goes to the middle of the selection"><i data-lucide="box-select"></i>Selection</button>
-          <button type="button" class="btn" data-axis-act="axis-active" title="The axis of the selected parts goes to the axis of the part picked last"><i data-lucide="mouse-pointer-click"></i>Last picked</button>
+          <button type="button" class="btn" data-axis-act="axis-active" title="Move the axis to the last picked part's axis"><i data-lucide="mouse-pointer-click"></i>Last picked</button>
           <button type="button" class="btn" data-axis-act="axis-view" title="The axis goes to the middle of the view (what the camera orbits)"><i data-lucide="camera"></i>View</button>
         </div>
-        <div class="toggle" title="Also turn the axis: to the world for the first three, to the last selected part's axes for Last selected"><span id="axis-rot-lbl">Also reset its rotation</span><label><input type="checkbox" id="axis-reset-rot" aria-labelledby="axis-rot-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Turn the axis as well as the pivot"><span id="axis-rot-lbl">Also reset its rotation</span><label><input type="checkbox" id="axis-reset-rot" aria-labelledby="axis-rot-lbl"><span class="switch"></span></label></div>
         <div class="pv-head"><span>Center object to</span></div>
         <div class="ax-chips">
           <button type="button" class="btn" data-axis-act="obj-origin" title="The object moves so that its axis is on 0, 0, 0"><i data-lucide="axis-3d"></i>Origin</button>
-          <button type="button" class="btn" data-axis-act="obj-active" title="The objects move so that their axes are on the axis of the part picked last"><i data-lucide="mouse-pointer-click"></i>Last picked</button>
+          <button type="button" class="btn" data-axis-act="obj-active" title="Move the objects so their axes match the last picked part"><i data-lucide="mouse-pointer-click"></i>Last picked</button>
           <button type="button" class="btn" data-axis-act="obj-view" title="The object moves so that its axis is at the middle of the view"><i data-lucide="camera"></i>View</button>
         </div>
         <div class="pv-head"><span>Align axis to</span></div>
@@ -7186,7 +7189,7 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="pv-head"><span>Scale</span></div>
         <div class="ax-chips">
-          <button type="button" class="btn" data-axis-act="scale" title="The scale goes back to 1, 1, 1 and is built into the mesh. The part looks the same."><i data-lucide="scaling"></i>Reset Scale</button>
+          <button type="button" class="btn" data-axis-act="scale" title="Reset the scale to 1 and build it into the mesh"><i data-lucide="scaling"></i>Reset Scale</button>
         </div>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Axis Center</span><kbd class="kbd-chip">↵</kbd></button></div>
@@ -7198,17 +7201,17 @@ window.moSplash = function (msg, pct) {
         <div class="cmd-lede">
           Press the selected part and drag it over the model. It rests on the surface under the cursor, and turns to face it.
         </div>
-        <div class="toggle" title="Turn the part so that what was its top points away from the surface, as when a part is dragged out of a library onto a model. Off: it keeps the way it faces."><span id="place-align-lbl">Align to surface</span><label><input type="checkbox" id="place-align" aria-labelledby="place-align-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="A bolt goes in by its shank: only its head is left standing on the surface, as if it were screwed in. Parts that are not bolts rest as usual. Needs Align to surface."><span id="place-head-lbl">Seat bolts by the head</span><label><input type="checkbox" id="place-head" aria-labelledby="place-head-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" title="Where nothing is under the cursor, the part lands on the grid. Off: it stays where it last rested."><span id="place-ground-lbl">Land on the grid</span><label><input type="checkbox" id="place-ground" aria-labelledby="place-ground-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" title="Which axis of the part points away from the surface it rests on. X, Y and Z are the part's own axes as it stands when you first pick it up."><span>Top axis</span>
+        <div class="toggle" title="Tilt the part so its top points away from the surface"><span id="place-align-lbl">Align to surface</span><label><input type="checkbox" id="place-align" aria-labelledby="place-align-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Sink bolts by the shank, leaving only the head"><span id="place-head-lbl">Seat bolts by the head</span><label><input type="checkbox" id="place-head" aria-labelledby="place-head-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Land on the grid where nothing is under the cursor"><span id="place-ground-lbl">Land on the grid</span><label><input type="checkbox" id="place-ground" aria-labelledby="place-ground-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" title="Which of the part's axes points away from the surface"><span>Top axis</span>
           <div class="cmd-seg" id="place-axis-seg" role="group" aria-label="Top axis" style="--seg-n:3;width:96px"><button type="button" data-axis="x">X</button><button type="button" data-axis="y">Y</button><button type="button" data-axis="z">Z</button></div>
         </div>
         <div class="cmd-num" title="Whether that axis points away from the surface (+) or into it (-)."><span>Direction</span>
           <div class="cmd-seg" id="place-sign-seg" role="group" aria-label="Direction" style="--seg-n:2;width:96px"><button type="button" data-sign="1">+</button><button type="button" data-sign="-1">&minus;</button></div>
         </div>
-        <div class="cmd-num" title="How far the part floats above the surface it rests on. Negative sinks it in."><span>Gap</span><label class="size-field"><input type="text" inputmode="decimal" id="place-offset" value="0"><span>mm</span></label></div>
-        <div class="cmd-num" title="Turn the part about the surface's normal. Scrolling while you hold it turns it in steps of 15°."><span>Turn</span><label class="size-field"><input type="text" inputmode="decimal" id="place-spin" value="0"><span>°</span></label></div>
+        <div class="cmd-num" title="Height the part floats above the surface; negative sinks it"><span>Gap</span><label class="size-field"><input type="text" inputmode="decimal" id="place-offset" value="0"><span>mm</span></label></div>
+        <div class="cmd-num" title="Turn the part about the surface normal; scroll turns in 15° steps"><span>Turn</span><label class="size-field"><input type="text" inputmode="decimal" id="place-spin" value="0"><span>°</span></label></div>
         <div class="cmd-seg" id="place-spin-seg" role="group" aria-label="Turn" style="--seg-n:4;margin-top:4px">
           <button type="button" class="active" data-spin="0">0°</button><button type="button" data-spin="90">90°</button><button type="button" data-spin="180">180°</button><button type="button" data-spin="270">270°</button>
         </div>
@@ -7224,7 +7227,7 @@ window.moSplash = function (msg, pct) {
           Closes holes and flattens lettering on flat faces, leaving the rest untouched.
         </div>
         <div class="cmd-num" title="Largest hole to fill, measured across its widest point"><span>Hole width up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fill-holes-size" value="12"><span>mm</span></label></div>
-        <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Remove holes</span></button>
+        <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces; everything else stays"><i data-lucide="circle-off"></i><span id="fill-holes-label">Remove holes</span></button>
         <div class="field-help" id="fill-holes-info"></div>
         <details class="cmd-adv" id="fh-adv">
           <summary><span>Advanced</span></summary>
@@ -7232,16 +7235,16 @@ window.moSplash = function (msg, pct) {
             <div class="toggle" title="Holes that go right through: an opening on both sides"><span id="fh-through-lbl">Through holes</span><label><input type="checkbox" id="fh-through" aria-labelledby="fh-through-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="Holes and pockets with a floor: an opening on one side only"><span id="fh-blind-lbl">Blind holes</span><label><input type="checkbox" id="fh-blind" aria-labelledby="fh-blind-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="Openings with nothing behind them (a missing patch in a flat face)"><span id="fh-open-lbl">Open holes</span><label><input type="checkbox" id="fh-open" aria-labelledby="fh-open-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight."><span id="fh-seal-lbl">Seal hollows</span><label><input type="checkbox" id="fh-seal" aria-labelledby="fh-seal-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="After the holes are closed, the flat face around each one is joined again and triangulated with the fewest triangles, so the edges and vertices that only cut it up around the old hole are gone. Press Remove holes again to clean up what an earlier run left behind, also on parts in n-gons."><span id="fh-tidy-lbl">Leftover vertices</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="A mesh can hold separate closed pieces inside its body (the balls of a valve, a pin in a bore). Once the holes are closed they are sealed inside and never visible again, though still drawn. On: every piece that lies entirely inside the closed part is removed."><span id="fh-enclosed-lbl">Inner pieces</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="Anything that stands proud of a flat face and is no higher than the limit below is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. (Engraved lettering is a shallow pocket and counts as a blind hole.) What stands higher than the limit stays."><span id="fh-raised-lbl">Raised details</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too."><span>Up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
-            <div class="toggle" title="On: an opening that takes up much of its face and of the part is kept (the bore of a washer, a window in a frame). Off: only the size limit decides."><span id="fh-shape-lbl">Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" aria-labelledby="fh-shape-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Also close openings that lead into a hollow space"><span id="fh-seal-lbl">Seal hollows</span><label><input type="checkbox" id="fh-seal" aria-labelledby="fh-seal-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Re-join and re-triangulate the flat face round each hole"><span id="fh-tidy-lbl">Leftover vertices</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Remove closed pieces sealed inside the part"><span id="fh-enclosed-lbl">Inner pieces</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Flatten raised details lower than the limit into their face"><span id="fh-raised-lbl">Raised details</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Tallest raised detail that is flattened"><span>Up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
+            <div class="toggle" title="Keep big openings, like a washer's bore"><span id="fh-shape-lbl">Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" aria-labelledby="fh-shape-lbl" checked><span class="switch"></span></label></div>
             <div class="cmd-num" title="Holes narrower than this are left alone"><span>Smallest hole</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-min" value="0"><span>mm</span></label></div>
-            <div class="cmd-num" title="How far the inside of a hole may reach, as a multiple of the size limit. Lower it to leave deep bores alone."><span>Depth limit</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-depth" value="10"><span>× size</span></label></div>
-            <div class="cmd-num" title="How far apart the directions of two triangles may be and still count as one flat face. Raise it for meshes whose flat faces are slightly bent."><span>Flatness</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-flat" value="0.57"><span>°</span></label></div>
-            <div class="cmd-num" title="After a hole is closed, a vertex of the flat face round it that is a little off the plane of the face (a gently curved panel) may still go if the surface moves no more than this. Never more than 1% of the part's size. 0: only vertices exactly in the plane."><span>Surface may move</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-move" value="0.5"><span>mm</span></label></div>
+            <div class="cmd-num" title="Deepest hole reach, as a multiple of the size limit"><span>Depth limit</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-depth" value="10"><span>× size</span></label></div>
+            <div class="cmd-num" title="Largest angle between triangles still counted as one flat face"><span>Flatness</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-flat" value="0.57"><span>°</span></label></div>
+            <div class="cmd-num" title="Surface movement allowed when dropping off-plane vertices"><span>Surface may move</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-move" value="0.5"><span>mm</span></label></div>
             <button type="button" class="cmd-link" id="fh-reset">Reset to defaults</button>
           </div>
         </details>
@@ -7253,9 +7256,9 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><span>Remove floating pieces</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-lede">The biggest piece of each part always stays.</div>
-        <div class="cmd-num" title="A loose piece is removed if its longest side is no more than this. The biggest piece of a part always stays."><span>Piece size up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fl-size" value="5"><span>mm</span></label></div>
-        <div class="cmd-num" title="A loose piece with more triangles than this is kept, however small it is. 0 switches this off: the number of triangles does not matter."><span>Keep if over</span><label class="size-field"><input type="text" inputmode="numeric" id="fl-tris" value="0"><span>triangles</span></label></div>
-        <button class="btn warn" id="btn-floating-run" data-cmd-primary title="Delete the small loose pieces of a part that touch nothing (plugs, shavings, dots). Works on the selection, or on every visible part when nothing is selected. One undo step."><i data-lucide="unlink"></i>Remove</button>
+        <div class="cmd-num" title="Remove loose pieces no longer than this"><span>Piece size up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fl-size" value="5"><span>mm</span></label></div>
+        <div class="cmd-num" title="Keep loose pieces with more triangles than this"><span>Keep if over</span><label class="size-field"><input type="text" inputmode="numeric" id="fl-tris" value="0"><span>triangles</span></label></div>
+        <button class="btn warn" id="btn-floating-run" data-cmd-primary title="Delete small loose pieces that touch nothing"><i data-lucide="unlink"></i>Remove</button>
         <div class="field-help" id="fl-info"></div>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Remove</span><kbd class="kbd-chip">↵</kbd></button></div>
@@ -7273,8 +7276,8 @@ window.moSplash = function (msg, pct) {
           <span>Measured by</span>
           <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
             <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
-            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest</button>
-            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
+            <button type="button" data-metric="max" title="Use the part's longest side as its size">Longest</button>
+            <button type="button" data-metric="vol" title="Box volume; catches thin sheets and wires">Volume</button>
           </div>
           <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
         </div>
@@ -7282,8 +7285,8 @@ window.moSplash = function (msg, pct) {
         <div class="small-result">
           <div class="small-found" id="thr-found"><span class="small-n" id="thr-count" hidden></span><span id="thr-info">Load a model to see what would go.</span></div>
           <div class="btn-row">
-            <button class="btn" id="btn-isolate-small" aria-pressed="false" title="Show only the parts that would be deleted, to check them first. Press again to show everything"><i data-lucide="eye"></i>Isolate</button>
-            <button class="btn" id="tg-hilite" title="Colour the parts smaller than the threshold in the view and the tree, to see what would go"><i data-lucide="lightbulb-off"></i>Highlight</button>
+            <button class="btn" id="btn-isolate-small" aria-pressed="false" title="Show only the parts that would be deleted; press again for all"><i data-lucide="eye"></i>Isolate</button>
+            <button class="btn" id="tg-hilite" title="Colour parts under the threshold in the view and tree"><i data-lucide="lightbulb-off"></i>Highlight</button>
           </div>
         </div>
         <button class="btn danger" id="btn-delete-small" data-cmd-primary title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
@@ -7297,8 +7300,8 @@ window.moSplash = function (msg, pct) {
       <!-- Drawn only while Weld is open (.el-weld-on, the bar's Weld button): Weld and its distance. The rest of Edit mesh's tools are in the bar
            at the right of the view (#el-bar). Opening and closing this card is still what turns the mode on and off. -->
       <div class="section-b el-card" id="el-weld-pane" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="cmd-num" id="el-weld-row" hidden title="Weld: the points that are no further apart than this become one each, at their middle. 0: all the picked points become one."><span>Join within</span><label class="size-field"><input type="text" inputmode="decimal" id="el-weld" value="0" aria-label="Weld distance"><span>mm</span></label></div>
-        <button type="button" class="btn primary" id="btn-el-weld" title="Weld (points or edges): the picked points become one, at their middle; with a distance, the points that are that close become one each. Picked edges collapse to a point. The triangles that are left with two corners at one place go. One undo step" disabled><i data-lucide="merge"></i><span>Weld</span></button>
+        <div class="cmd-num" id="el-weld-row" hidden title="Merge points closer than this; 0 merges all picked"><span>Join within</span><label class="size-field"><input type="text" inputmode="decimal" id="el-weld" value="0" aria-label="Weld distance"><span>mm</span></label></div>
+        <button type="button" class="btn primary" id="btn-el-weld" title="Merge the picked points or edges into one point" disabled><i data-lucide="merge"></i><span>Weld</span></button>
       </div>
       <!-- Drawn while CAD edit is on (the CAD faces toggle in the bar, Polygons mode): what is picked, how a removal closes the gap and
            is remeshed, and the two steps, each when it is asked for: Remove (Delete) and Remesh. -->
@@ -7306,22 +7309,22 @@ window.moSplash = function (msg, pct) {
         <div class="cmd-lede" id="el-cad-info">Click the CAD faces to work on. Shift adds, Ctrl takes away.</div>
         <div class="sw-label">Close the gap</div>
         <div class="cmd-seg" id="el-cad-close" role="group" aria-label="Close the gap">
-          <button type="button" class="active" data-v="smooth" title="Smooth: each gap gets a patch that carries on the surface round it, curved on a curved face (a rim that lies flat is closed flat)">Smooth</button>
+          <button type="button" class="active" data-v="smooth" title="Close each gap with a patch that follows the surface">Smooth</button>
           <button type="button" data-v="flat" title="Flat: each gap is closed with a flat patch">Flat</button>
           <button type="button" data-v="open" title="Leave open: the faces go and the gaps stay open">Leave open</button>
         </div>
         <div class="sw-label">Remesh when removing</div>
         <div class="cmd-seg" id="el-cad-scope" role="group" aria-label="Remesh when removing">
-          <button type="button" class="active" data-v="local" title="Round the cut: the patches and the rings of triangles round them are made even; the rest of the part stays exactly as it was">Round the cut</button>
-          <button type="button" data-v="whole" title="Whole part: every triangle of the part is made even, with the CAD lines kept as sharp edges">Whole part</button>
-          <button type="button" data-v="none" title="Off: nothing is remeshed when faces are removed. Remesh does it when you ask, on the faces you pick">Off</button>
+          <button type="button" class="active" data-v="local" title="Make the patches and rings round them even">Round the cut</button>
+          <button type="button" data-v="whole" title="Remesh every triangle, keeping CAD lines sharp">Whole part</button>
+          <button type="button" data-v="none" title="Off: nothing is remeshed when faces are removed">Off</button>
         </div>
-        <div class="cmd-num" id="el-cad-rings-row" title="How many rings of triangles round each patch are remeshed with it. 0: the patch alone"><span>Rings round the cut</span><label class="size-field"><input type="text" inputmode="numeric" id="el-cad-rings" value="1" aria-label="Rings round the cut"></label></div>
-        <div class="cmd-num" title="How long the edges of the remesh are. 0: chosen for you (round the cut: as long as the edges of the gap's rim; picked faces or the whole part: about as many triangles as they had)"><span>Edge length</span><label class="size-field"><input type="text" inputmode="decimal" id="el-cad-len" value="0" aria-label="Edge length"><span>mm</span></label></div>
-        <div class="cmd-num" title="How many rounds the remesh makes (split, collapse, flip, relax). More: more even triangles, slower"><span>Smoothing rounds</span><label class="size-field"><input type="text" inputmode="numeric" id="el-cad-rounds" value="5" aria-label="Smoothing rounds"></label></div>
+        <div class="cmd-num" id="el-cad-rings-row" title="Rings of triangles round each patch remeshed with it"><span>Rings round the cut</span><label class="size-field"><input type="text" inputmode="numeric" id="el-cad-rings" value="1" aria-label="Rings round the cut"></label></div>
+        <div class="cmd-num" title="Edge length of the remesh; 0 picks one for you"><span>Edge length</span><label class="size-field"><input type="text" inputmode="decimal" id="el-cad-len" value="0" aria-label="Edge length"><span>mm</span></label></div>
+        <div class="cmd-num" title="Remesh rounds; more is more even but slower"><span>Smoothing rounds</span><label class="size-field"><input type="text" inputmode="numeric" id="el-cad-rounds" value="5" aria-label="Smoothing rounds"></label></div>
         <div class="btn-row">
-          <button type="button" class="btn" id="btn-el-cad-remesh" title="Remesh now, with the edge length and rounds above: the picked CAD faces (their outline stays where it is, so the faces round them do not change), or the whole part when nothing is picked. The CAD faces and lines stay. One undo step"><i data-lucide="grid-3x3"></i>Remesh</button>
-          <button type="button" class="btn primary" id="btn-el-cad-remove" title="Remove the picked CAD faces (Delete): the gap is closed and remeshed as set above. One undo step" disabled><i data-lucide="eraser"></i>Remove</button>
+          <button type="button" class="btn" id="btn-el-cad-remesh" title="Remesh the picked CAD faces, or the whole part"><i data-lucide="grid-3x3"></i>Remesh</button>
+          <button type="button" class="btn primary" id="btn-el-cad-remove" title="Remove the picked CAD faces (Delete) and remesh the gap" disabled><i data-lucide="eraser"></i>Remove</button>
         </div>
       </div>
     </div>
@@ -7332,27 +7335,27 @@ window.moSplash = function (msg, pct) {
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
 
         <div class="cmd-seg" id="remesh-mode" role="group" aria-label="Remesh action">
-          <button type="button" class="active" data-mode="ut" title="Join flat triangles into polygons (n-gons) and take away the vertices in the middle of each flat face. Works on the selection, or on every part when nothing is selected."><i data-lucide="hexagon"></i>Untriangulate</button>
-          <button type="button" data-mode="tr" title="Flat faces stop being polygons and show their triangles again. Works on the selection, or on every part when nothing is selected."><i data-lucide="triangle"></i>Triangulate</button>
+          <button type="button" class="active" data-mode="ut" title="Join flat triangles into polygons"><i data-lucide="hexagon"></i>Untriangulate</button>
+          <button type="button" data-mode="tr" title="Show flat faces as triangles again"><i data-lucide="triangle"></i>Triangulate</button>
         </div>
         <div class="remesh-pane" id="remesh-pane-ut" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="toggle" title="Instead of joining flat faces: pair neighbouring triangles into quads, the way Blender's Triangles to Quads does, on curved surfaces too. The best pairs go first, each triangle in one quad at most; never across a CAD face boundary or a UV seam. No point moves and no triangle goes: Keep quads in the OBJ or FBX export writes them."><span id="ut-quads-lbl">Pair into quads</span><label><input type="checkbox" id="ut-quads" aria-labelledby="ut-quads-lbl"><span class="switch"></span></label></div>
-        <div class="cmd-num" data-ut="quads" style="display:none" title="Two triangles are paired only if they are folded apart by no more than this (the angle between their faces). Blender's default is 40°."><span>Fold up to</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-qface" value="40"><span>°</span></label></div>
-        <div class="cmd-num" data-ut="quads" style="display:none" title="Every corner of the quad two triangles make must be within this of square. Blender's default is 40°."><span>Corners within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-qshape" value="40"><span>°</span></label></div>
-        <div class="cmd-num" data-ut="flat" title="How far neighbouring triangles may turn from each other and still count as one flat face. Strict 0.2°, Normal 1°, Loose 5°."><span>Flat faces within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-angle" value="1"><span>°</span></label></div>
-        <div class="toggle" data-ut="flat" title="Turn the edges inside each rebuilt face until the triangles are as even as its vertices allow, instead of long thin fans. No vertex is added or taken away."><span id="ut-even-lbl">Even triangles</span><label><input type="checkbox" id="ut-even" aria-labelledby="ut-even-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" data-ut="flat" title="Also take away the points that only sit on a straight line of a face's outline (a long edge cut into pieces). They go from every face that touches them at once, so nothing cracks, and the shape does not change."><span id="ut-straight-lbl">Points on straight lines</span><label><input type="checkbox" id="ut-straight" aria-labelledby="ut-straight-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" data-ut="flat" title="A vertex whose triangles all lie in one plane is shaded flat. This is what the rim of a hole you closed needs: it still carries the tilted normal it had against the hole's wall, and a face like that is not joined."><span id="ut-flatten-lbl">Flatten shading on flat faces</span><label><input type="checkbox" id="ut-flatten" aria-labelledby="ut-flatten-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" data-ut="flat" title="A flat face is left alone if its vertex normals differ from the face by more than this (smooth shading that would change). Raise it to 90 for a welded mesh."><span>Shading tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-normal" value="5"><span>°</span></label></div>
-        <div class="cmd-num" data-ut="flat" title="Limited dissolve, for faces that are only nearly flat (a panel with a little noise or a gentle bend): after the flat faces are joined, a point that is left goes if the triangles round it turn from each other by less than this, and the surface moves by less than 'Surface may move' where it was (a thousandth of the part's size when that is 0). A fold, a bump or a curve steeper than this stays. 0 turns it off."><span>Dissolve nearly flat within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-limit" value="3"><span>°</span></label></div>
-        <div class="cmd-num" data-ut="flat" title="Where a vertex is a little off the plane of its face (a gently curved panel) it may still go if the surface moves no more than this. 0: only vertices in the plane. Never more than 1% of the part's size."><span>Surface may move</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-tol" value="0"><span>mm</span></label></div>
+        <div class="toggle" title="Pair neighbouring triangles into quads"><span id="ut-quads-lbl">Pair into quads</span><label><input type="checkbox" id="ut-quads" aria-labelledby="ut-quads-lbl"><span class="switch"></span></label></div>
+        <div class="cmd-num" data-ut="quads" style="display:none" title="Largest fold angle between two triangles to pair"><span>Fold up to</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-qface" value="40"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="quads" style="display:none" title="Largest corner deviation from square for a quad"><span>Corners within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-qshape" value="40"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="flat" title="Largest angle still counted as one flat face"><span>Flat faces within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-angle" value="1"><span>°</span></label></div>
+        <div class="toggle" data-ut="flat" title="Even out the triangles inside each rebuilt face"><span id="ut-even-lbl">Even triangles</span><label><input type="checkbox" id="ut-even" aria-labelledby="ut-even-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" data-ut="flat" title="Also remove points on a straight line of the outline"><span id="ut-straight-lbl">Points on straight lines</span><label><input type="checkbox" id="ut-straight" aria-labelledby="ut-straight-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" data-ut="flat" title="Shade flat any vertex whose triangles lie in one plane"><span id="ut-flatten-lbl">Flatten shading on flat faces</span><label><input type="checkbox" id="ut-flatten" aria-labelledby="ut-flatten-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" data-ut="flat" title="Largest normal difference allowed for a flat face"><span>Shading tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-normal" value="5"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="flat" title="Also dissolve points on nearly flat faces"><span>Dissolve nearly flat within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-limit" value="3"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="flat" title="Surface movement allowed when dropping off-plane vertices"><span>Surface may move</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-tol" value="0"><span>mm</span></label></div>
         </div>
         <div class="remesh-pane" id="remesh-pane-tr" style="display:none;flex-direction:column;gap:var(--space-sm)">
-        <div class="toggle" title="Turn the edges inside each flat face until the triangles are as even as its vertices allow (fewer long thin ones). The number of triangles and the vertices do not change."><span id="tr-even-lbl">Even out the triangles</span><label><input type="checkbox" id="tr-even" aria-labelledby="tr-even-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Draw the triangle lines of these parts in the wireframe, whatever the Lines setting is."><span id="tr-lines-lbl">Show their triangle lines</span><label><input type="checkbox" id="tr-lines" aria-labelledby="tr-lines-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" title="How far neighbouring triangles may turn from each other and still count as one flat face when they are made more even."><span>Flat faces within</span><label class="size-field"><input type="text" inputmode="decimal" id="tr-angle" value="1"><span>°</span></label></div>
+        <div class="toggle" title="Even out the triangles inside each flat face"><span id="tr-even-lbl">Even out the triangles</span><label><input type="checkbox" id="tr-even" aria-labelledby="tr-even-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Draw these parts' triangle lines, whatever the Lines setting"><span id="tr-lines-lbl">Show their triangle lines</span><label><input type="checkbox" id="tr-lines" aria-labelledby="tr-lines-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" title="Angle for one flat face when evening out triangles"><span>Flat faces within</span><label class="size-field"><input type="text" inputmode="decimal" id="tr-angle" value="1"><span>°</span></label></div>
         </div>
-        <button class="btn primary" id="btn-remesh-run" data-cmd-primary title="Join flat triangles into polygons (n-gons) and take away the vertices in the middle of each flat face. Works on the selection, or on every part when nothing is selected."><i data-lucide="hexagon"></i><span>Untriangulate</span></button>
+        <button class="btn primary" id="btn-remesh-run" data-cmd-primary title="Join flat triangles into polygons"><i data-lucide="hexagon"></i><span>Untriangulate</span></button>
 
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span id="remesh-ok-lbl">Untriangulate</span><kbd class="kbd-chip">↵</kbd></button></div>
@@ -7370,17 +7373,17 @@ window.moSplash = function (msg, pct) {
           <button type="button" data-mode="boxes" data-desc="A handful of boxes, each sized and turned to one piece of the part: a foot becomes a slab and a bar, a frame four bars. Keeps the outline."><i data-lucide="boxes"></i><span>A few boxes</span></button>
           <button type="button" data-mode="blocks" data-desc="The part rebuilt from a coarse grid of boxes: boxy, but its steps, arms and openings stay where they are. Keeps the outline."><i data-lucide="blocks"></i><span>Blocks</span></button>
         </div>
-        <div class="cmd-num" id="fit-count-row" style="margin-top:var(--space-md)" hidden title="A few boxes: the most boxes a part may become. Simple parts use fewer. Each box is 12 triangles."><span>At most</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-count" value="6"><span>boxes</span></label></div>
-        <div class="cmd-num" id="fit-detail-row" style="margin-top:var(--space-md)" hidden title="Blocks: how many cells the part's longest side is cut into. More cells follow the outline more closely and cost more triangles. An opening narrower than a cell closes."><span>Blocks detail</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-detail" value="8"><span>cells</span></label></div>
+        <div class="cmd-num" id="fit-count-row" style="margin-top:var(--space-md)" hidden title="Most boxes a part may become; each box is 12 triangles"><span>At most</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-count" value="6"><span>boxes</span></label></div>
+        <div class="cmd-num" id="fit-detail-row" style="margin-top:var(--space-md)" hidden title="Cells along the part's longest side"><span>Blocks detail</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-detail" value="8"><span>cells</span></label></div>
         <button class="btn warn" id="btn-bbox-selected" data-cmd-primary style="margin-top:10px" title="Replace the selected parts with the shape chosen above. Undoable."><i data-lucide="wand-2"></i>Smart fit</button>
         <div class="field-help" id="smartfit-info">Select the parts to replace.</div>
         <details class="cmd-adv" id="fit-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
-            <div class="cmd-num" title="How round a part must be, looking down its axis, to become a cylinder. 1 is a perfect circle, a hexagon is 0.87, a square 0.71."><span>Cylinder roundness</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-circ" value="0.85"></label></div>
-            <div class="cmd-num" title="A cylinder is chosen only if its volume is at most this share of the best box's volume. A cylinder in its own box is 0.79."><span>Cylinder vs box volume</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-waste" value="0.82"><span>×</span></label></div>
-            <div class="cmd-num" title="How many times longer than it is wide a part must be to become a cylinder. 0 lets flat round parts (gears, washers) be cylinders too."><span>Length to width</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-aspect" value="0"><span>×</span></label></div>
-            <div class="toggle" title="Work out which way each part points from its mesh. Off: only the scene's axes and the axes stored with the part are tried."><span id="fit-pca-lbl">Use the part's axes</span><label><input type="checkbox" id="fit-pca" aria-labelledby="fit-pca-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="How round a part must be to become a cylinder"><span>Cylinder roundness</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-circ" value="0.85"></label></div>
+            <div class="cmd-num" title="Largest cylinder volume as a share of the best box"><span>Cylinder vs box volume</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-waste" value="0.82"><span>×</span></label></div>
+            <div class="cmd-num" title="How long versus wide a part must be to be a cylinder"><span>Length to width</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-aspect" value="0"><span>×</span></label></div>
+            <div class="toggle" title="Work out each part's direction from its mesh"><span id="fit-pca-lbl">Use the part's axes</span><label><input type="checkbox" id="fit-pca" aria-labelledby="fit-pca-lbl" checked><span class="switch"></span></label></div>
             <button type="button" class="cmd-link" id="fit-reset">Reset to defaults</button>
           </div>
         </details>
@@ -7393,9 +7396,9 @@ window.moSplash = function (msg, pct) {
       <div class="section-b">
         <div class="cmd-seg" id="sh-scope" role="group" aria-label="Look in">
           <button type="button" class="active" data-scope="all" title="Every visible part is checked">Whole scene</button>
-          <button type="button" data-scope="sel" title="Only the selected parts are checked; the rest of the scene still hides them">Selection only</button>
+          <button type="button" data-scope="sel" title="Check only the selected parts">Selection only</button>
         </div>
-        <button class="btn warn" id="btn-sh-run" data-cmd-primary style="margin-top:10px" title="Look at the scene from every side and select what never shows. Nothing is deleted."><i data-lucide="ghost"></i>Select hidden parts</button>
+        <button class="btn warn" id="btn-sh-run" data-cmd-primary style="margin-top:10px" title="Select what never shows from any side; nothing is deleted"><i data-lucide="ghost"></i>Select hidden parts</button>
         <div class="field-help" id="sh-info"></div>
         <div class="btn-row" id="sh-after" hidden>
           <button class="btn" id="btn-sh-isolate" title="Show only the selected parts, to check them (S)"><i data-lucide="focus"></i>Isolate</button>
@@ -7404,17 +7407,17 @@ window.moSplash = function (msg, pct) {
         <details class="cmd-adv" id="sh-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
-            <div class="cmd-num" title="How many directions the scene is looked at from. More directions find parts that show only through a narrow gap, and take longer.">
+            <div class="cmd-num" title="Directions the scene is viewed from; more is slower">
               <div class="cmd-seg" id="sh-views" role="group" aria-label="Accuracy">
                 <button type="button" data-views="26">Fast</button>
                 <button type="button" class="active" data-views="64">Normal</button>
                 <button type="button" data-views="160">Thorough</button>
               </div>
             </div>
-            <div class="toggle" title="Off: a see-through part (glass, a clear cover) hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part."><span id="sh-glass-lbl">Glass blocks the view</span><label><input type="checkbox" id="sh-glass" aria-labelledby="sh-glass-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Let see-through parts hide what is behind them"><span id="sh-glass-lbl">Glass blocks the view</span><label><input type="checkbox" id="sh-glass" aria-labelledby="sh-glass-lbl"><span class="switch"></span></label></div>
             <div class="toggle" title="Keep what is selected now and add the hidden parts to it"><span id="sh-add-lbl">Add to selection</span><label><input type="checkbox" id="sh-add" aria-labelledby="sh-add-lbl"><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Keep only hidden parts no larger than this share of the whole model's size. Empty: any size."><span>Max part size</span><label class="size-field"><input type="text" inputmode="decimal" id="sh-max" placeholder="any"><span>%</span></label></div>
-            <div class="cmd-num" title="Keep only hidden parts whose name contains this (screw, DIN, bearing…). Empty: any name."><span>Name contains</span><label class="size-field"><input type="text" id="sh-name" placeholder="any" spellcheck="false" autocomplete="off"></label></div>
+            <div class="cmd-num" title="Keep hidden parts no larger than this share of the model"><span>Max part size</span><label class="size-field"><input type="text" inputmode="decimal" id="sh-max" placeholder="any"><span>%</span></label></div>
+            <div class="cmd-num" title="Keep hidden parts whose name contains this; empty: any"><span>Name contains</span><label class="size-field"><input type="text" id="sh-name" placeholder="any" spellcheck="false" autocomplete="off"></label></div>
             <button type="button" class="cmd-link" id="sh-reset">Reset to defaults</button>
           </div>
         </details>
@@ -7428,11 +7431,11 @@ window.moSplash = function (msg, pct) {
         <div class="cmd-lede">
           Found by shape, whatever the parts are called.
         </div>
-        <div class="cmd-num" title="The largest thread to look for. A bolt, nut or washer for a bigger thread is left alone."><span>Thread size up to</span><label class="size-field"><span>M</span><input type="text" inputmode="decimal" id="fa-max" value="30"></label></div>
-        <button class="btn warn" id="btn-fa-run" data-cmd-primary title="Look at the shape of every visible part and select the fasteners. Nothing is deleted."><i data-lucide="bolt"></i>Select fasteners</button>
+        <div class="cmd-num" title="Largest thread to look for; bigger ones are left alone"><span>Thread size up to</span><label class="size-field"><span>M</span><input type="text" inputmode="decimal" id="fa-max" value="30"></label></div>
+        <button class="btn warn" id="btn-fa-run" data-cmd-primary title="Select the fasteners among the visible parts; nothing is deleted"><i data-lucide="bolt"></i>Select fasteners</button>
         <div class="fa-kinds">
-          <div class="toggle" title="Hex bolts, socket screws, countersunk, button and pan heads, set screws, rivets: a round shank with a head"><span id="fa-bolts-lbl">Bolts and screws</span><label><input type="checkbox" id="fa-bolts" aria-labelledby="fa-bolts-lbl" checked><span class="switch"></span></label></div>
-          <div class="toggle" title="Hex, flange, square, cap and coupling nuts: six or four flats around a threaded hole"><span id="fa-nuts-lbl">Nuts</span><label><input type="checkbox" id="fa-nuts" aria-labelledby="fa-nuts-lbl" checked><span class="switch"></span></label></div>
+          <div class="toggle" title="Fasteners with a round shank and a head"><span id="fa-bolts-lbl">Bolts and screws</span><label><input type="checkbox" id="fa-bolts" aria-labelledby="fa-bolts-lbl" checked><span class="switch"></span></label></div>
+          <div class="toggle" title="Hex, flange, square, cap and coupling nuts"><span id="fa-nuts-lbl">Nuts</span><label><input type="checkbox" id="fa-nuts" aria-labelledby="fa-nuts-lbl" checked><span class="switch"></span></label></div>
           <div class="toggle" title="Flat rings: plain, large and thick washers, shims"><span id="fa-washers-lbl">Washers</span><label><input type="checkbox" id="fa-washers" aria-labelledby="fa-washers-lbl" checked><span class="switch"></span></label></div>
         </div>
         <div class="field-help" id="fa-info"></div>
@@ -7450,15 +7453,15 @@ window.moSplash = function (msg, pct) {
                 <button type="button" data-scope="sel">Selection</button>
               </div>
             </div>
-            <div class="cmd-num" title="Certain: a hex head, a key socket, a hex nut, a washer of standard proportions. Likely too: also plain two-cylinder screws and headed pins, which have the proportions of a fastener and nothing else to show for it."><span>How sure</span>
+            <div class="cmd-num" title="Certain: clear fastener shapes. Likely: also plain screws and pins"><span>How sure</span>
               <div class="cmd-seg cmd-seg-sm" id="fa-sure" role="group" aria-label="How sure">
                 <button type="button" data-min="0.75">Certain</button>
                 <button type="button" class="active" data-min="0.6">Likely too</button>
               </div>
             </div>
-            <div class="toggle" title="Plain round bars up to the size limit: studs, dowel pins, threaded rods. Off by default, because a shaft and a roller are round bars too."><span id="fa-pins-lbl">Pins, studs and threaded rods</span><label><input type="checkbox" id="fa-pins" aria-labelledby="fa-pins-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Plain round bars: studs, dowel pins, threaded rods"><span id="fa-pins-lbl">Pins, studs and threaded rods</span><label><input type="checkbox" id="fa-pins" aria-labelledby="fa-pins-lbl"><span class="switch"></span></label></div>
             <div class="toggle" title="Keep what is selected now and add the fasteners to it"><span id="fa-add-lbl">Add to selection</span><label><input type="checkbox" id="fa-add" aria-labelledby="fa-add-lbl"><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Take a fastener only if the scene holds at least this many of the same shape and size. Fasteners come in sets; 1 takes single ones too."><span>Used at least</span><label class="size-field"><input type="text" inputmode="numeric" id="fa-uses" value="1"><span>times</span></label></div>
+            <div class="cmd-num" title="Fewest identical fasteners to take as a set"><span>Used at least</span><label class="size-field"><input type="text" inputmode="numeric" id="fa-uses" value="1"><span>times</span></label></div>
             <div class="cmd-num" title="Leave the fasteners for threads below this alone. 0: no lower limit."><span>Smallest thread</span><label class="size-field"><span>M</span><input type="text" inputmode="decimal" id="fa-min" value="0"></label></div>
             <button type="button" class="cmd-link" id="fa-reset">Reset to defaults</button>
           </div>
@@ -7471,30 +7474,30 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><span>Split</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-seg" role="group" aria-label="Detection sensitivity">
-          <button class="split-preset active" data-eps="1e-6" title="Default. Welds points within one millionth of the model's size: doubled points that drift by rounding are joined, and no two separate solids are that close.">Normal</button>
-          <button class="split-preset" data-eps="1e-9" title="Welds only points that are exact duplicates. Use it when Normal joins solids that should stay apart.">Tight</button>
-          <button class="split-preset" data-eps="1e-3" title="Welds points within 0.1% of the model's size, so solids that touch are joined on purpose. Use it when you want fewer, larger parts.">Loose</button>
-          <button class="split-preset" data-eps="0" title="Nothing is welded: the index is trusted exactly. A CAD mesh, which keeps a point per face corner, falls into its faces. Only for a file you know has shared points.">Exact</button>
+          <button class="split-preset active" data-eps="1e-6" title="Weld points within a millionth of the model's size">Normal</button>
+          <button class="split-preset" data-eps="1e-9" title="Weld only exact duplicate points">Tight</button>
+          <button class="split-preset" data-eps="1e-3" title="Weld points within 0.1% of the model's size">Loose</button>
+          <button class="split-preset" data-eps="0" title="Weld nothing; trust the index exactly">Exact</button>
         </div>
         <div class="field" style="margin:var(--space-md) 0 0"><div id="split-eps-scrub"></div></div>
         <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:var(--fs-11);margin:var(--space-md) 0 var(--space-xl)">at this model size</div>
         <div class="field" style="margin-bottom:var(--space-xl)">
           <label id="split-method-lbl" style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:var(--space-md)">Algorithm</label>
           <select id="split-method" aria-labelledby="split-method-lbl" class="mac-sel" style="width:100%">
-            <option value="bodies" title="Default. A body is a closed surface. Solids that touch at a point, along an edge or on a face come apart, each keeping its own surface; a T-junction in one solid does not cut it.">Bodies</option>
-            <option value="vertex" title="Triangles that share a point belong together: everything that touches stays one part.">Vertex connectivity</option>
-            <option value="edge" title="Triangles belong together only when they share a whole edge — solids meeting at a point stay separate, solids sharing an edge or a face are joined.">Edge connectivity</option>
-            <option value="spatial" title="Group by triangle bbox overlap on a 3D grid. Doesn't read the index buffer at all — useful when topology is fused but solids are still spatially separate.">Spatial proximity (AABB)</option>
-            <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
-            <option value="material" title="One part for each material of a mesh: a mesh that was imported with several materials (or given several colours) comes apart into a part for each, each wearing its own. A mesh with one material is left as it is.">Material</option>
-            <option value="faces" title="Every face becomes a part: triangles that share an edge and lie within the face angle of each other stay together, every crease starts another. A flat face or a smooth curved one is one part.">Faces (split at creases)</option>
+            <option value="bodies" title="A body is a closed surface; touching solids come apart">Bodies</option>
+            <option value="vertex" title="Triangles sharing a point stay one part">Vertex connectivity</option>
+            <option value="edge" title="Triangles join only when they share a whole edge">Edge connectivity</option>
+            <option value="spatial" title="Group by overlapping triangle bounding boxes">Spatial proximity (AABB)</option>
+            <option value="hybrid" title="Vertex connectivity first, then split big components by proximity">Hybrid (vertex + spatial)</option>
+            <option value="material" title="One part for each material of a mesh">Material</option>
+            <option value="faces" title="Every face becomes a part">Faces (split at creases)</option>
           </select>
         </div>
-        <div class="cmd-num" id="split-face-row" hidden title="Faces: two neighbouring triangles are one face if the angle between them is no more than this. 5° follows every facet of a curve, 20° keeps a smooth curve as one face, 60° keeps only the sharp creases."><span>Face angle</span><label class="size-field"><input type="text" inputmode="decimal" id="split-face-angle" value="20"><span>°</span></label></div>
-        <div class="cmd-num" title="Pieces smaller than this are not parts of their own: together they make one more part. 0: every piece is a part. Raise it to go from thousands of parts to a few."><span>Smallest part</span><label class="size-field"><input type="text" inputmode="numeric" id="split-min-tris" value="0"><span>triangles</span></label></div>
+        <div class="cmd-num" id="split-face-row" hidden title="Largest angle between triangles in one face"><span>Face angle</span><label class="size-field"><input type="text" inputmode="decimal" id="split-face-angle" value="20"><span>°</span></label></div>
+        <div class="cmd-num" title="Pieces smaller than this merge into one part"><span>Smallest part</span><label class="size-field"><input type="text" inputmode="numeric" id="split-min-tris" value="0"><span>triangles</span></label></div>
         <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-12);line-height:var(--lh-body);margin:var(--space-xl) 0;min-height:16px">Select a mesh to preview the split.</div>
         <button class="btn" id="btn-split-selected" data-cmd-primary title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
-        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="radar"></i>Scan whole model</button>
+        <button class="btn" id="btn-split-all" title="Split disconnected components of every mesh into parts"><i data-lucide="radar"></i>Scan whole model</button>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Split selected</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
@@ -7598,7 +7601,7 @@ window.moSplash = function (msg, pct) {
       <div class="sel-bar-grid is-icons">
         <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)" aria-label="All"><i data-lucide="square-check"></i></button>
         <button class="btn" id="sel-invert" title="Invert the current selection (Ctrl+I)" aria-label="Invert"><i data-lucide="arrow-left-right"></i></button>
-        <button class="btn" id="sel-similar" title="Select similar: add parts that share geometry with the current selection" aria-label="Similar"><i data-lucide="copy"></i></button>
+        <button class="btn" id="sel-similar" title="Select similar: add parts sharing geometry with the selection" aria-label="Similar"><i data-lucide="copy"></i></button>
         <button class="btn is-edit" id="sel-hide" title="Hide the selection (H)" aria-label="Hide"><i data-lucide="eye-off"></i></button>
         <button class="btn is-edit" id="sel-isolate" title="Isolate: show only the selection (S)" aria-label="Isolate"><i data-lucide="focus"></i></button>
         <button class="btn danger is-edit" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)" aria-label="Delete"><i data-lucide="trash-2"></i><span class="sel-del-n"><span id="del-sel-count">0</span></span></button>
@@ -7623,7 +7626,7 @@ window.moSplash = function (msg, pct) {
           <div class="shade-fam" id="vw-clay" data-mode="clay"></div>
           <div class="shade-fam" id="vw-cad" data-mode="cad"></div>
         </div>
-        <div class="toggle shade-outlines"><span id="shade-outlines-lbl" title="A fine dark line on the edges of every part, in every view. A part from a STEP file opened with its CAD data draws the file's own edges; any other part draws the sharp edges found by the angle between its faces. The line under the switch says which.">CAD lines</span><label><input type="checkbox" id="shade-outlines" aria-labelledby="shade-outlines-lbl" aria-describedby="shade-lines-status" checked><span class="switch"></span></label></div>
+        <div class="toggle shade-outlines"><span id="shade-outlines-lbl" title="A fine dark line on the edges of every part">CAD lines</span><label><input type="checkbox" id="shade-outlines" aria-labelledby="shade-outlines-lbl" aria-describedby="shade-lines-status" checked><span class="switch"></span></label></div>
         <div class="shade-lines-status" id="shade-lines-status" role="status" aria-live="polite"></div>
       </div>
     </div>
@@ -7637,16 +7640,16 @@ window.moSplash = function (msg, pct) {
           <button class="btn" data-act="merge" title="Merge: join the selected parts into one (Ctrl+M)" aria-label="Merge"><i data-lucide="merge"></i></button>
           <button class="btn" data-act="mergeColour" title="Merge by colour: one mesh for the parts of each colour" aria-label="Merge by colour"><i data-lucide="palette"></i></button>
           <button class="btn" data-act="decimate" title="Decimate: fewer triangles on the selected parts" aria-label="Decimate"><i data-lucide="shrink"></i></button>
-          <button class="btn" data-act="normalsReverse" title="Reverse normals: turn the faces of the selected parts round, for parts that came in inside out" aria-label="Reverse normals"><i data-lucide="unfold-vertical"></i></button>
+          <button class="btn" data-act="normalsReverse" title="Reverse normals: turn the faces of the selected parts round" aria-label="Reverse normals"><i data-lucide="unfold-vertical"></i></button>
           <button class="btn" data-act="recenter" style="display:none" title="Recentre model: move the middle of the model to the origin" aria-label="Recentre model"><i data-lucide="axis-3d"></i></button>
           <button class="btn" data-act="alignFloor" title="Align to the floor: stand the model on the floor… (opens its panel)" aria-label="Align to the floor"><i data-lucide="arrow-down-to-line"></i></button>
           <button class="btn" id="btn-clean-empty" title="Empty parts: delete parts that contain zero triangles" aria-label="Empty parts"><i data-lucide="circle-minus"></i></button>
-          <button class="btn" id="btn-clean-dupes" title="Duplicates: collapse parts that share identical vertex data into one geometry" aria-label="Duplicates"><i data-lucide="copy-check"></i></button>
-          <button class="btn" id="btn-clean-degenerate" title="Degenerate faces: strip zero-area triangles that confuse renderers and shaders" aria-label="Degenerate faces"><i data-lucide="eraser"></i></button>
-          <button class="btn" id="btn-floating" title="Floating pieces: delete the small loose pieces of a part that touch nothing (plugs, shavings, dots). Opens its panel" aria-label="Floating pieces"><i data-lucide="unlink"></i></button>
-          <button class="btn" data-act="smallParts" title="Delete small parts: delete the parts under a size threshold… (opens its panel)" aria-label="Delete small parts"><i data-lucide="trash-2"></i></button>
+          <button class="btn" id="btn-clean-dupes" title="Duplicates: merge parts with identical vertex data into one" aria-label="Duplicates"><i data-lucide="copy-check"></i></button>
+          <button class="btn" id="btn-clean-degenerate" title="Degenerate faces: strip zero-area triangles" aria-label="Degenerate faces"><i data-lucide="eraser"></i></button>
+          <button class="btn" id="btn-floating" title="Delete small loose pieces; opens its panel" aria-label="Floating pieces"><i data-lucide="unlink"></i></button>
+          <button class="btn" data-act="smallParts" title="Delete small parts under a size threshold; opens its panel" aria-label="Delete small parts"><i data-lucide="trash-2"></i></button>
           <button class="btn" id="btn-clean-empty-groups" title="Empty groups: remove groups whose members are all deleted or empty" aria-label="Empty groups"><i data-lucide="folder-x"></i></button>
-          <button class="btn" data-act="hiddenFaces" title="Remove hidden faces: delete the faces nobody can see, inside the parts… (opens its panel)" aria-label="Remove hidden faces"><i data-lucide="scan-eye"></i></button>
+          <button class="btn" data-act="hiddenFaces" title="Remove hidden faces nobody can see; opens its panel" aria-label="Remove hidden faces"><i data-lucide="scan-eye"></i></button>
         </div>
       </div>
     </div>
@@ -7657,7 +7660,7 @@ window.moSplash = function (msg, pct) {
         <div class="field"><div id="explode-all-scrub"></div></div>
         <div class="cmd-seg ex-mode" id="explode-mode" role="group" aria-label="How the parts move apart">
           <button type="button" class="active" data-mode="world" aria-pressed="true" title="Move the parts apart along the scene's X, Y and Z">Scene axes</button>
-          <button type="button" data-mode="part" aria-pressed="false" title="Each part goes out along its own axis: a bolt at an angle travels along that angle, a flat part along its normal">Part axis</button>
+          <button type="button" data-mode="part" aria-pressed="false" title="Each part goes out along its own axis">Part axis</button>
         </div>
         <div class="ex-row ex-along">
           <span class="ex-l">Along</span>
@@ -7682,7 +7685,7 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><i class="sec-ico" data-lucide="ruler"></i><span>Measurements</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div class="btn-row">
-          <button class="btn" id="msr-add" title="Toggle measure mode (M) — pick two points in the viewport to measure distance"><i data-lucide="ruler"></i>Measure</button>
+          <button class="btn" id="msr-add" title="Toggle measure mode (M)"><i data-lucide="ruler"></i>Measure</button>
           <button class="btn warn" id="msr-clear" title="Delete every measurement">Clear all</button>
         </div>
         <div class="field-help" id="msr-info" style="margin-top:var(--space-md)">Click Measure or press <kbd class="kbd">M</kbd>, then click two points on geometry. Drag still orbits.</div>
@@ -7728,16 +7731,16 @@ window.moSplash = function (msg, pct) {
     <div class="section" id="photo-section">
       <div class="section-h"><i class="sec-ico" data-lucide="camera"></i><span>Photo mode</span><span class="chev">▾</span></div>
       <div class="section-b">
-        <div class="prim-row" title="Draws the model the slow, pretty way, for pictures rather than for working: studio light, soft shadows with a floor shadow, and the effects below. The grid is hidden while it is on. Not saved with the scene.">
+        <div class="prim-row" title="Draw the slow, pretty way, for pictures">
           <label class="prim-label" for="toggle-photo" id="toggle-photo-lbl">Photo mode</label>
           <label class="prim-toggle"><input type="checkbox" id="toggle-photo"><span></span></label>
         </div>
         <div id="photo-fx" class="is-off" inert style="display:flex;flex-direction:column">
-        <div class="prim-row" title="The round, softly lit disc under the model that catches its shadow. Off: the model hangs in the studio light with no floor and no floor shadow.">
+        <div class="prim-row" title="The soft disc under the model that catches its shadow">
           <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
           <label class="prim-toggle"><input type="checkbox" id="photo-stage" checked><span></span></label>
         </div>
-        <div class="prim-row" title="How smooth the edges are and how many samples the occlusion and the glow take. Lower it if the viewport is slow with Photo mode on.">
+        <div class="prim-row" title="Edge smoothness and samples for occlusion and glow">
           <label class="prim-label" for="photo-quality">Quality</label>
           <select id="photo-quality" class="mac-sel"><option value="draft">Draft (fastest)</option><option value="good">Good</option><option value="best" selected>Best</option><option value="max">Maximum</option></select>
         </div>
@@ -7766,12 +7769,22 @@ window.moSplash = function (msg, pct) {
           <label class="prim-label" for="photo-grain" style="grid-column:2">Film grain</label>
           <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-grain" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
         </div>
-        <div class="prim-row" title="The pixel density of the saved PNG, as a multiple of the viewport's size (kept under 8192 pixels on the long side)">
+        <div class="prim-row photo-fx-row" id="photo-row-dof" title="What is nearer or further than the focus goes soft, as through a camera lens" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-dof" aria-label="Depth of field on or off"><span></span></label>
+          <label class="prim-label" for="photo-dof" style="grid-column:2" title="Depth of field: how soft what is out of focus gets">Depth of field</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-dof" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-focus" title="Where the picture is sharp. Alt+click a point of the model in the view to focus there" style="grid-template-columns:minmax(0,1fr) auto auto;gap:var(--space-sm)">
+          <span class="prim-label" id="photo-focus-val" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Orbit pivot</span>
+          <button id="photo-focus-pick" type="button" class="btn-sm" title="Click a point of the model in the view to focus there (Alt+click does it at any time; Esc gives up)">Pick</button>
+          <button id="photo-focus-reset" type="button" class="btn-sm" title="Focus on the point the camera turns round again" disabled>Pivot</button>
+        </div>
+        <div class="prim-row" title="Pixel density of the saved PNG, as a multiple of the view">
           <label class="prim-label" for="photo-scale">Saved size</label>
           <select id="photo-scale" class="mac-sel"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select>
         </div>
         <button id="photo-save" type="button" class="btn-sm" style="margin-top:var(--space-md)" title="Save the picture as a PNG">Save photo…</button>
-        <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:16px;padding:var(--space-md) 0 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows.</div>
+        <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:16px;padding:var(--space-md) 0 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows. With Depth of field on, Alt+click a point of the model to focus there.</div>
         </div>
       </div>
     </div>
@@ -7796,7 +7809,7 @@ window.moSplash = function (msg, pct) {
             <option value="y">Y-up (Maya, glTF, Unity)</option>
           </select>
         </div>
-        <div class="field"><label for="scene-scale"><span>Scene scale (×)</span></label><input class="mac-input" type="number" id="scene-scale" step="any" value="1" min="0" title="Multiplier applied to the whole scene. 0.001 turns mm → m; 1000 turns m → mm."></div>
+        <div class="field"><label for="scene-scale"><span>Scene scale (×)</span></label><input class="mac-input" type="number" id="scene-scale" step="any" value="1" min="0" title="Scale the whole scene; 0.001 turns mm to m"></div>
         <div class="field"><label id="grid-cell-lbl"><span>Grid cell size</span></label>
           <select id="grid-cell" aria-labelledby="grid-cell-lbl" class="mac-sel">
             <option value="auto" selected>Auto (fit to model)</option>
@@ -7824,13 +7837,13 @@ window.moSplash = function (msg, pct) {
                 <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-photo" data-hdri-file="overcast_soil_puresky_1k.hdr" title="Flat overcast sky"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/overcast-sky.webp" alt="" draggable="false"></span><span class="prop-mat-name">Grey sky</span></button>
               </div></div>
               <div style="font-size:var(--fs-xs);color:var(--tx3)">Photo environments: Poly Haven, CC0.</div>
-              <div class="toggle" style="padding:0;border-top:0;min-height:0" title="Off: the environment still lights and reflects in the model, but the background is the plain default colour"><span id="hdri-show-bg-lbl">Show as background</span><label><input type="checkbox" id="hdri-show-bg" aria-labelledby="hdri-show-bg-lbl" checked><span class="switch"></span></label></div>
+              <div class="toggle" style="padding:0;border-top:0;min-height:0" title="Show the environment image as the background"><span id="hdri-show-bg-lbl">Show as background</span><label><input type="checkbox" id="hdri-show-bg" aria-labelledby="hdri-show-bg-lbl" checked><span class="switch"></span></label></div>
               <div style="display:flex;gap:var(--space-sm)">
                 <button id="hdri-load-btn" type="button" class="btn-sm" style="flex:1" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
                 <button id="hdri-default-btn" type="button" class="btn-sm" title="Reset to the built-in studio environment">Default</button>
               </div>
               <div id="hdri-current" style="font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
-              <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter environment light on every PBR material."><label class="prim-label" for="hdri-int">Intensity</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="hdri-int" min="0" max="4" step="0.05" value="1"><span class="prim-unit">×</span></span></div>
+              <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto" title="Brightness of the HDRI light and reflections"><label class="prim-label" for="hdri-int">Intensity</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="hdri-int" min="0" max="4" step="0.05" value="1"><span class="prim-unit">×</span></span></div>
               <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
             </div>
       </div>
@@ -7890,7 +7903,7 @@ window.moSplash = function (msg, pct) {
     <div class="mat-actions">
       <div class="mat-actions-icons">
         <span class="mat-split">
-          <button class="mat-act mat-act-icon mat-act-new" id="mat-act-add" title="New material (assigned to the selected parts, if any) · hold for the presets"><i data-lucide="plus"></i></button>
+          <button class="mat-act mat-act-icon mat-act-new" id="mat-act-add" title="New material for the selected parts; hold for presets"><i data-lucide="plus"></i></button>
           <button class="mat-act mat-act-new mat-act-arrow" id="mat-act-add-more" title="New material from a preset…" aria-haspopup="menu" aria-label="New material from a preset"><i data-lucide="chevron-down"></i></button>
         </span>
         <button class="mat-act mat-act-icon" id="mat-act-duplicate" title="Duplicate the picked material" disabled><i data-lucide="copy"></i></button>
@@ -8047,9 +8060,9 @@ window.moSplash = function (msg, pct) {
           <summary><span>Tessellation</span><em id="imp-tess-sum"></em></summary>
           <div class="imp-grp">
             <div class="imp-tess-row" id="imp-tess-one">
-              <label class="imp-f" title="How far a triangle may stand off the true surface. Smaller is smoother."><span>Sag</span><span class="imp-num"><input type="number" id="imp-step-sag" min="0.001" max="100" step="0.05" value="0.5"><i>mm</i></span></label>
-              <label class="imp-f" title="The most a curve may turn from one triangle to the next. Smaller means rounder holes and fillets."><span>Angle</span><span class="imp-num"><input type="number" id="imp-step-angle" min="1" max="90" step="1" value="30"><i>°</i></span></label>
-              <label class="imp-f" title="The smallest triangle edge allowed. Keeps tiny fillets and threads from filling up with slivers. 0 is no limit."><span>Min edge</span><span class="imp-num"><input type="number" id="imp-step-min-edge" min="0" max="1000" step="0.1" value="0"><i>mm</i></span></label>
+              <label class="imp-f" title="How far a triangle may stand off the true surface"><span>Sag</span><span class="imp-num"><input type="number" id="imp-step-sag" min="0.001" max="100" step="0.05" value="0.5"><i>mm</i></span></label>
+              <label class="imp-f" title="Largest turn between neighbouring triangles on a curve"><span>Angle</span><span class="imp-num"><input type="number" id="imp-step-angle" min="1" max="90" step="1" value="30"><i>°</i></span></label>
+              <label class="imp-f" title="Smallest triangle edge allowed; 0 is no limit"><span>Min edge</span><span class="imp-num"><input type="number" id="imp-step-min-edge" min="0" max="1000" step="0.1" value="0"><i>mm</i></span></label>
             </div>
             <div class="toggle imp-row"><span id="imp-step-tiered-lbl" class="imp-t"><b>By part size</b><small>Fine on the large parts, coarse on the small ones</small></span><label><input type="checkbox" id="imp-step-tiered" aria-labelledby="imp-step-tiered-lbl"><span class="switch"></span></label></div>
             <div class="imp-tiers" id="imp-tiers" hidden>
@@ -8171,10 +8184,10 @@ window.moSplash = function (msg, pct) {
       </div>
       <div class="sv-opts">
         <div class="toggle" title="Off: only the selected parts are written. On: the whole scene."><span id="save-scene-all-lbl">Whole scene<span class="sv-note" id="save-scene-sel-note"></span></span><label><input type="checkbox" id="save-scene-all" aria-labelledby="save-scene-all-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Hidden parts are written too, and come back hidden when the scene is opened again"><span id="save-scene-hidden-lbl">Include hidden parts<span class="sv-note" id="save-scene-hid-note"></span></span><label><input type="checkbox" id="save-scene-hidden" aria-labelledby="save-scene-hidden-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="The camera, the display settings, flags and measurements are stored in the file and restored when it is opened here again. Other apps ignore them."><span id="save-scene-view-lbl">Remember the view and settings</span><label><input type="checkbox" id="save-scene-view" aria-labelledby="save-scene-view-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="The notes people left on the model go in the file: who wrote what, the replies and every edit. Other apps ignore them." style="display:none"><span id="save-scene-notes-lbl">Include the notes</span><label><input type="checkbox" id="save-scene-notes" aria-labelledby="save-scene-notes-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Write the file without making it this scene's file: the scene keeps its unsaved mark, and the next Save goes where it went before."><span id="save-scene-copy-lbl">Save as a copy</span><label><input type="checkbox" id="save-scene-copy" aria-labelledby="save-scene-copy-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Write hidden parts too; they come back hidden"><span id="save-scene-hidden-lbl">Include hidden parts<span class="sv-note" id="save-scene-hid-note"></span></span><label><input type="checkbox" id="save-scene-hidden" aria-labelledby="save-scene-hidden-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Store camera, display settings, flags and measurements in the file"><span id="save-scene-view-lbl">Remember the view and settings</span><label><input type="checkbox" id="save-scene-view" aria-labelledby="save-scene-view-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Store the notes people left on the model in the file" style="display:none"><span id="save-scene-notes-lbl">Include the notes</span><label><input type="checkbox" id="save-scene-notes" aria-labelledby="save-scene-notes-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Write the file without making it this scene's file"><span id="save-scene-copy-lbl">Save as a copy</span><label><input type="checkbox" id="save-scene-copy" aria-labelledby="save-scene-copy-lbl"><span class="switch"></span></label></div>
       </div>
     </div>
     <div class="modal-f"><button class="btn" id="save-scene-cancel" title="Close without saving (Esc)">Cancel</button><button class="tbtn primary" id="save-scene-confirm" title="Write the .glb">Save…</button></div>
@@ -8241,7 +8254,7 @@ window.moSplash = function (msg, pct) {
 
         <div class="exp-group-title">Parts</div>
         <div class="toggle exp-row"><span class="exp-row-l" id="exp-visible-lbl"><b>Visible parts only</b><small>Leave out the parts that are hidden</small></span><label><input type="checkbox" id="exp-visible" aria-labelledby="exp-visible-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle exp-row" title="Export only the parts you've currently selected. Overrides 'Visible parts only' when both are set."><span class="exp-row-l" id="exp-selected-lbl"><b>Selected parts only</b><small>Only what is selected now, shown or not</small></span><label><input type="checkbox" id="exp-selected" aria-labelledby="exp-selected-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" title="Export only the parts you've selected"><span class="exp-row-l" id="exp-selected-lbl"><b>Selected parts only</b><small>Only what is selected now, shown or not</small></span><label><input type="checkbox" id="exp-selected" aria-labelledby="exp-selected-lbl"><span class="switch"></span></label></div>
 
         <details class="exp-adv" id="exp-adv">
           <summary>Advanced</summary>
@@ -8286,16 +8299,16 @@ window.moSplash = function (msg, pct) {
 
         <div class="exp-group-title">Structure</div>
         <div class="toggle exp-row"><span class="exp-row-l" id="exp-merge-lbl"><b>Merge into one mesh</b><small>One object in the file; the group tree is lost</small></span><label><input type="checkbox" id="exp-merge" aria-labelledby="exp-merge-lbl"><span class="switch"></span></label></div>
-        <div class="toggle exp-row" id="exp-flat-row" title="Write every part at the top level, without the group folders. Handy for tools that stumble on nested groups."><span class="exp-row-l" id="exp-flat-lbl"><b>Flatten groups</b><small>Every part at the top level, no group folders</small></span><label><input type="checkbox" id="exp-flat" aria-labelledby="exp-flat-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-flat-row" title="Write every part at the top level, without group folders"><span class="exp-row-l" id="exp-flat-lbl"><b>Flatten groups</b><small>Every part at the top level, no group folders</small></span><label><input type="checkbox" id="exp-flat" aria-labelledby="exp-flat-lbl"><span class="switch"></span></label></div>
 
         <div class="exp-group-title" id="exp-fmt-group">Format options</div>
-        <div class="toggle exp-row" id="exp-anim-row" style="display:none" title="Write the Animate timeline into the file as glTF animation: every part that moves gets its motion as keyframes (30 per second). Looks, camera and explode keys are not included."><span class="exp-row-l" id="exp-anim-lbl"><b>Include animation</b><small>The Animate timeline, as keyframes · GLB and glTF</small></span><label><input type="checkbox" id="exp-anim" aria-labelledby="exp-anim-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle exp-row" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only."><span class="exp-row-l" id="exp-draco-lbl"><b>Draco compression</b><small>Shrinks the file 5–20× · slower to write</small></span><label><input type="checkbox" id="exp-draco" aria-labelledby="exp-draco-lbl"><span class="switch"></span></label></div>
-        <div class="toggle exp-row" id="exp-meshopt-row" title="Compress the vertex data with Meshopt (EXT_meshopt_compression) and round positions, normals and UVs to a fixed number of bits. Quick to decode and streams well, but larger than Draco on disk (about a quarter of the plain size against Draco's fifth, measured on a CAD assembly; the gap narrows once the server compresses it with gzip or brotli). The viewer must read it: three.js, Babylon.js and model-viewer do, some others do not (Draco is the safer choice for those). GLB only."><span class="exp-row-l" id="exp-meshopt-lbl"><b>Meshopt compression</b><small>Quick to decode · larger than Draco · the viewer must read it</small></span><label><input type="checkbox" id="exp-meshopt" aria-labelledby="exp-meshopt-lbl"><span class="switch"></span></label></div>
-        <div class="toggle exp-row" id="exp-reorder-row" title="Put the triangles and vertices in the order the graphics card likes, so the model draws faster. The shape and every attribute stay exactly as they are, and any viewer opens it. Meshopt compression does this too. GLB only."><span class="exp-row-l" id="exp-reorder-lbl"><b>Faster to draw</b><small>Reorders for the GPU · the shape does not change · any viewer</small></span><label><input type="checkbox" id="exp-reorder" aria-labelledby="exp-reorder-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-anim-row" style="display:none" title="Write the Animate timeline as glTF animation"><span class="exp-row-l" id="exp-anim-lbl"><b>Include animation</b><small>The Animate timeline, as keyframes · GLB and glTF</small></span><label><input type="checkbox" id="exp-anim" aria-labelledby="exp-anim-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-draco-row" title="Compress vertex data with Draco; GLB only"><span class="exp-row-l" id="exp-draco-lbl"><b>Draco compression</b><small>Shrinks the file 5–20× · slower to write</small></span><label><input type="checkbox" id="exp-draco" aria-labelledby="exp-draco-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-meshopt-row" title="Compress vertex data with Meshopt; GLB only"><span class="exp-row-l" id="exp-meshopt-lbl"><b>Meshopt compression</b><small>Quick to decode · larger than Draco · the viewer must read it</small></span><label><input type="checkbox" id="exp-meshopt" aria-labelledby="exp-meshopt-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-reorder-row" title="Reorder triangles and vertices so the model draws faster"><span class="exp-row-l" id="exp-reorder-lbl"><b>Faster to draw</b><small>Reorders for the GPU · the shape does not change · any viewer</small></span><label><input type="checkbox" id="exp-reorder" aria-labelledby="exp-reorder-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII format instead of binary."><span class="exp-row-l" id="exp-fbx-ascii-lbl"><b>ASCII FBX</b><small>Readable text · try it if binary fails</small></span><label><input type="checkbox" id="exp-fbx-ascii" aria-labelledby="exp-fbx-ascii-lbl"><span class="switch"></span></label></div>
-        <div class="toggle exp-row" id="exp-quads-row" title="Write the faces as quads and n-gons, not triangles: the polygons of an OBJ or FBX file as they came, the four-sided pairs of triangles found in anything else (as the Wireframe view shows them). Off: every face is a triangle."><span class="exp-row-l" id="exp-quads-lbl"><b>Keep quads</b><small>Four-sided faces stay one face · off: triangles only</small></span><label><input type="checkbox" id="exp-quads" aria-labelledby="exp-quads-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle exp-row" id="exp-stl-ascii-row"title="Write STL as readable text instead of binary. Much larger; only for tools that cannot read binary STL."><span class="exp-row-l" id="exp-stl-ascii-lbl"><b>ASCII STL</b><small>Readable text · much larger than binary</small></span><label><input type="checkbox" id="exp-stl-ascii" aria-labelledby="exp-stl-ascii-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-quads-row" title="Write quads and n-gons instead of triangles"><span class="exp-row-l" id="exp-quads-lbl"><b>Keep quads</b><small>Four-sided faces stay one face · off: triangles only</small></span><label><input type="checkbox" id="exp-quads" aria-labelledby="exp-quads-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-stl-ascii-row"title="Write STL as readable text instead of binary"><span class="exp-row-l" id="exp-stl-ascii-lbl"><b>ASCII STL</b><small>Readable text · much larger than binary</small></span><label><input type="checkbox" id="exp-stl-ascii" aria-labelledby="exp-stl-ascii-lbl"><span class="switch"></span></label></div>
         <div class="exp-group-title" id="exp-target-title">Check the size</div>
         <div class="field exp-row" id="exp-target-row"><span class="exp-row-l" id="exp-target-lbl"><b>Check against</b><small>Compares the scene with the published guidance for a place</small></span>
           <select id="exp-target" aria-labelledby="exp-target-lbl" class="mac-sel">
@@ -8314,7 +8327,7 @@ window.moSplash = function (msg, pct) {
         <span class="exp-foot-note" id="exp-foot-note"></span>
         <div class="exp-foot-act">
           <div class="exp-share" id="exp-share">
-            <button class="tbtn" id="exp-share-btn" aria-haspopup="true" aria-expanded="false" aria-label="Share to…" title="Share to…: export in the right format, then open the site's upload page"><i data-lucide="share-2"></i></button>
+            <button class="tbtn" id="exp-share-btn" aria-haspopup="true" aria-expanded="false" aria-label="Share to…" title="Share to…: export, then open the site's upload page"><i data-lucide="share-2"></i></button>
             <div class="exp-share-menu" id="exp-share-menu" role="menu" hidden>
               <button type="button" role="menuitem" data-site="grabcad"><span>GrabCAD</span><small>STL</small></button>
               <button type="button" role="menuitem" data-site="sketchfab"><span>Sketchfab</span><small>GLB</small></button>
@@ -8921,7 +8934,7 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=115"></script>
-<script type="module" src="js/app.js?v=20261118-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4"></script>
+<script type="module" src="js/app.js?v=20261147-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

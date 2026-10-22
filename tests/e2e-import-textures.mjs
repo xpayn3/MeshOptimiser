@@ -99,7 +99,9 @@ try {
   await evalJS(`(() => { const p = window.state.parts.find(q => q.name === 'plainA'); return true; })()`);
   r = await evalJS(`(async () => { const ids = window.state.parts.filter(p => !p.deleted).map(p => p.partId); await window.__moBridgeTools.duplicate_parts?.({ ids }); return window.state.parts.filter(p => !p.deleted).length; })()`);
   r = await merge(['plainA', ...(await evalJS("window.state.parts.filter(p => !p.deleted && p.name !== 'plainA').map(p => p.name)"))]);
-  check('merging plain parts is still one material with the colours on the vertices', r.mats === 1 && r.vertexColors, r);
+  // (a part and its copy share one material: the merge keeps that material, with no colours on the vertices and no groups. Merge used to
+  // swap the parts' materials for one white one with the colours on the vertices, which a GLB of it lost when it was opened again.)
+  check('merging plain parts of one material keeps that material', r.mats === 1 && !r.vertexColors && r.groups === 0, r);
   if (errors.length) console.log('page errors:', errors.slice(0, 5));
 } catch (e) { console.log('HARNESS ERROR:', e.message); fail++; }
 try { ws && ws.close(); } catch (_) {}

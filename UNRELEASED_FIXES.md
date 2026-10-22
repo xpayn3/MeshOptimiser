@@ -7,11 +7,17 @@ wrong and why. When a version is released, its entries move into the changelog a
 Entry format: the changelog's own (`![fix][fix] **What was wrong, in the user's words.** What now happens.`), written as one person
 ("I"), never "we". Under each entry, a line for the maintainer: `Cause:` and `Where:` (and `Test:` if one covers it).
 
-Last release in the changelog: **v0.35.4**.
+Last release in the changelog: **v0.35.5**.
 
 ## New
 
 ## Fixed
 
 ## Found, not fixed yet
+
+- **A STEP whose name is about 190 characters long fails late on Windows without long paths** (Settings › long paths off, the default):
+  it uploads and converts, then fails writing its B-rep file with "step2glb.py exited with code 1". Where: `app/serve.py`,
+  `_sanitize_filename` (a cap of 200 characters that does not count the folder). Found in the review of 2026-10-21; not seen here, where
+  long paths are on.
+
 

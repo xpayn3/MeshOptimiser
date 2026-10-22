@@ -440,6 +440,13 @@ def _restore(meta: dict) -> None:
             tmp = dst.with_name(dst.name + ".old")
             _retry(shutil.copy2, src, tmp); _retry(os.replace, tmp, dst)
     _write_json(VERSION_FILE, {"version": meta.get("from") or current_version(), "launcher": int(meta.get("launcher") or launcher_level())})
+    # The bundled runtime's MANIFEST.json names the requirements it was last installed for. An update that installed packages wrote the new
+    # file's hash there; with the old requirements.txt back, start.bat read the runtime as built for another one and would not start it
+    # (it asked for a system Python and a full install). It names the requirements.txt that is back now.
+    try:
+        req = ROOT / "requirements.txt"
+        if req.is_file(): _runtime_manifest_note(req)
+    except Exception: pass
 
 
 def rollback(reason: str = "") -> dict:

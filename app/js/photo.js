@@ -7,6 +7,7 @@
 //   lens fringe        a trace of colour split towards the corners
 //   vignette           the edges fall off
 //   film grain         a little noise takes the digital edge off the gradients
+//   depth of field     what is nearer or further than the focus goes soft (off at first; the focus is a point in the scene)
 // three.js r172 ships none of these as ready nodes in the bundle this app vendors, so they are written here in its shader language
 // (TSL). Nothing here touches the scene: app.js decides when to call render() instead of renderer.render(), and sets the lighting.
 //
@@ -22,21 +23,28 @@ export const PHOTO_DEFAULTS = Object.freeze({
   fringe: 0.25,      // 0..1   colour split towards the corners
   vignette: 0.35,    // 0..1   darkening of the edges
   grain: 0.25,       // 0..1   film grain
+  dof: 0.5,          // 0..1   how soft what is out of focus gets (the size of the lens opening)
 });
 export const PHOTO_EFFECTS = Object.freeze(Object.keys(PHOTO_DEFAULTS));
 
-// msaa: samples of the multisampled picture; ao: samples of the occlusion; glow: half-width of the blur (taps = 2 x glow + 1)
+// msaa: samples of the multisampled picture; ao: samples of the occlusion; glow: half-width of the blur (taps = 2 x glow + 1);
+// dof: samples of the out-of-focus blur
 export const PHOTO_QUALITY = Object.freeze({
-  draft: Object.freeze({ msaa: 0, ao: 8, glow: 2 }),
-  good: Object.freeze({ msaa: 2, ao: 12, glow: 3 }),
-  best: Object.freeze({ msaa: 4, ao: 16, glow: 4 }),
-  max: Object.freeze({ msaa: 4, ao: 24, glow: 6 }),
+  draft: Object.freeze({ msaa: 0, ao: 8, glow: 2, dof: 16 }),
+  good: Object.freeze({ msaa: 2, ao: 12, glow: 3, dof: 28 }),
+  best: Object.freeze({ msaa: 4, ao: 16, glow: 4, dof: 40 }),
+  max: Object.freeze({ msaa: 4, ao: 24, glow: 6, dof: 64 }),
 });
+// The widest blur, at 100 %, as a share of the picture's height.
+const DOF_MAX = 0.028;
+// How fast the blur grows away from the focus: a point this share of its own distance nearer or further is fully soft. (Relative,
+// so it reads the same for a watch and for a car: depth of field is a matter of how far apart things are compared with how far away.)
+const DOF_SPAN = 0.35;
 
-export function createPhoto({ THREE, getRenderer, getScene, getCamera }) {
+export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus }) {
   const T = THREE.TSL;
   const opts = { ...PHOTO_DEFAULTS };
-  const enabledFx = Object.fromEntries(PHOTO_EFFECTS.map((k) => [k, true]));
+  const enabledFx = Object.fromEntries(PHOTO_EFFECTS.map((k) => [k, k !== 'dof']));      // (depth of field starts off: it hides detail)
   let qualityName = 'best';
   let post = null, built = null, on = false, builtCamera = null, dirty = true;
 
@@ -47,6 +55,8 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera }) {
     fringe: T.uniform(opts.fringe),
     vignette: T.uniform(opts.vignette),
     grain: T.uniform(opts.grain),
+    dof: T.uniform(opts.dof),
+    focus: T.uniform(1),             // distance of the focus in front of the camera (world units, positive)
     radius: T.uniform(1),            // occlusion reach in world units (a few percent of the model)
     projY: T.uniform(1),             // camera.projectionMatrix[5]: how big a world length is on screen
     ortho: T.uniform(0),             // 1 when the camera is orthographic
@@ -174,7 +184,37 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera }) {
       glow = narrow.sample(screenUV).rgb.mul(0.5).add(wide.rgb.mul(0.5)).mul(u.glow);
     }
 
-    let col = base.mul(ao).add(glow);
+    let col = base.mul(ao);
+    // Depth of field: each pixel gathers the pixels round it on a spiral, out to the widest blur. A neighbour counts when its own blur is
+    // wide enough to reach this pixel (so a soft background does not spread over a sharp part in front of it: a neighbour further away is
+    // let reach no further than twice this pixel's own blur), the gather after D. Gustafsson's single-pass bokeh. The blur of a pixel is
+    // its distance from the focus, relative to its distance from the camera.
+    if (fx.dof) {
+      const preTex = convertToTexture(vec4(col, 1));
+      const n = q.dof, maxR = u.dof.mul(DOF_MAX);
+      const cocAt = (z) => {
+        const dist = z.negate();
+        return clamp(abs(dist.sub(u.focus)).div(max(mix(dist, u.focus, u.ortho), 1e-6)).div(DOF_SPAN), 0, 1).mul(maxR);
+      };
+      col = Fn(() => {
+        const z0 = viewZAt(screenUV), c0 = cocAt(z0);
+        const sum = preTex.sample(screenUV).rgb.toVar(), tot = float(1).toVar();
+        const edge = u.texel.y;                                    // (a tap's edge softened over a pixel)
+        for (let i = 0; i < n; i++) {
+          const a = i * 2.39996323, r = Math.sqrt((i + 0.5) / n);
+          const rr = maxR.mul(r);
+          const off = vec2(Math.cos(a) * r, Math.sin(a) * r).mul(maxR).mul(vec2(float(1).div(u.aspect), 1));
+          const uv = screenUV.add(off), z = viewZAt(uv);
+          const cs = cocAt(z);
+          const reach = mix(cs, min(cs, c0.mul(2)), step(z, z0));        // (z <= z0: that point is further away than this pixel)
+          const m = smoothstep(rr.sub(edge), rr.add(edge), reach);
+          sum.addAssign(mix(sum.div(tot), preTex.sample(uv).rgb, m));
+          tot.addAssign(1);
+        }
+        return sum.div(tot);
+      })();
+    }
+    col = col.add(glow);
     // Vignette (in the aspect of the picture, so it is round, not squashed to the window)
     if (fx.vignette) {
       const vc = fromC.mul(vec2(u.aspect, 1)).mul(1.15);
@@ -231,6 +271,11 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera }) {
     u.ortho.value = camera._isOrtho || camera.isOrthographicCamera ? 1 : 0;
     u.radius.value = Math.max(1e-6, (reach || 1) * 0.045);
     u.seed.value = Math.random() * 100;
+    {
+      // the focus: a point in the scene, measured along the camera's view each frame (so it stays on that point as the camera turns)
+      const p = getFocus && getFocus();
+      if (p) { camera.updateMatrixWorld(); const v = p.clone().applyMatrix4(camera.matrixWorldInverse); u.focus.value = Math.max(1e-6, -v.z); }
+    }
     post.render();
     return true;
   }

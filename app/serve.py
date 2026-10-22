@@ -271,7 +271,7 @@ def _prune_jobs() -> None:
         if len(JOBS) <= MAX_JOBS_RETAINED: return
         # Sort by start time; finished jobs evict before running ones.
         finished = [(jid, j) for jid, j in JOBS.items()
-                    if j.get("status") in ("done", "error", "cancelled")]
+                    if j.get("status") in ("done", "error", "cancelled") and jid not in PROCS]      # (a cancelled converter still being stopped: its thread still needs the job)
         finished.sort(key=lambda kv: kv[1].get("started_at", 0))
         excess = len(JOBS) - MAX_JOBS_RETAINED
         for jid, _ in finished[:excess]:
@@ -370,9 +370,10 @@ def _sweep_stale_inbox() -> None:
             name = p.name.lower()
             is_job_file = (
                 _JOB_PREFIX_RE.match(p.name) is not None
-                and name.endswith(CAD_EXTS + (".glb", ".glb.params.json", ".glb.brep.json", ".glb.brep.bin"))
+                and name.endswith(CAD_EXTS + (".glb", ".glb.params.json", ".glb.brep.json", ".glb.brep.bin",
+                                              ".glb.tmp", ".tmp.glb", ".glb.brep.json.tmp", ".glb.brep.bin.tmp"))      # (the converter's temporary files)
             )
-            is_orphan_cache = name.endswith(".xcaf-cache.xbf")
+            is_orphan_cache = name.endswith((".xcaf-cache.xbf", ".xcaf-cache.xbf.src"))
             if is_job_file or is_orphan_cache:
                 p.unlink()
                 deleted += 1
@@ -667,6 +668,15 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
         _CONVERT_SLOTS.release()
 
 
+def _conv_leftovers(src: Path, dst: Path) -> list:
+    """What a conversion that failed or was cancelled can leave in inbox/: the upload, its XCAF cache, the GLB and what goes with it, and
+    the converter's temporary files (step2glb.py writes <name>.glb.tmp and <name>.glb.brep.*.tmp before it renames them)."""
+    out = [src, src.with_suffix(".xcaf-cache.xbf"), src.with_name(src.with_suffix(".xcaf-cache.xbf").name + ".src"),
+           dst, dst.with_suffix(".tmp.glb"), dst.with_name(dst.name + ".tmp"), dst.with_name(dst.name + ".params.json")]
+    for e in _BREP_EXTS: out += [dst.with_name(dst.name + e), dst.with_name(dst.name + e + ".tmp")]
+    return out
+
+
 def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
                         quality: float, min_size: float,
                         opts: dict | None = None) -> None:
@@ -681,7 +691,7 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
     with JOBS_LOCK:
         # Cancel can arrive before this thread gets going. Then there is
         # nothing to start, and the job must stay "cancelled".
-        cancelled = JOBS[job_id].get("status") == "cancelled"
+        cancelled = JOBS.get(job_id, {"status": "cancelled"}).get("status") == "cancelled"
         if not cancelled:
             JOBS[job_id]["status"] = "running"
             JOBS[job_id]["log"] = []
@@ -700,7 +710,7 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
         # depend on that.
         cmd = [PYTHON_BIN, str(ROOT / "step2glb.py"), str(src_path),
                "--out", str(dst_path), "--quality", str(quality),
-               "--no-meshopt"]
+               "--no-meshopt", "--no-xcaf-cache"]      # (an upload's name is new each time: its XCAF cache was written and never read)
         if colors == "on":   cmd += ["--force-colors"]
         elif colors == "off": cmd += ["--no-colors"]
         # XCAF read-mode toggles — only meaningful when colors != 'off'.
@@ -728,8 +738,10 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
         # browser conversion log when a stale serve.py is still using the
         # global Python instead of the venv one.
         with JOBS_LOCK:
-            JOBS[job_id]["log"].append(f"using Python: {PYTHON_BIN}")
-            JOBS[job_id]["message"] = f"using Python: {PYTHON_BIN}"
+            j = JOBS.get(job_id)
+            if j is not None:
+                j["log"].append(f"using Python: {PYTHON_BIN}")
+                j["message"] = f"using Python: {PYTHON_BIN}"
         # The converter prints UTF-8. Decoding with the Windows code page
         # garbled its log and could raise on a path with accented letters.
         # Away from Windows the converter gets a session of its own, so that
@@ -743,14 +755,15 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
             _contain(proc)
             with JOBS_LOCK:
                 PROCS[job_id] = proc
-                cancelled = JOBS[job_id].get("status") == "cancelled"
+                cancelled = JOBS.get(job_id, {"status": "cancelled"}).get("status") == "cancelled"
             # Cancelled while the process was starting: /api/cancel found nothing
             # to stop then, so it is stopped here.
             if cancelled: _kill_tree(proc)
             for line in proc.stdout:
                 line = line.rstrip()
                 with JOBS_LOCK:
-                    job = JOBS[job_id]
+                    job = JOBS.get(job_id)
+                    if job is None: continue      # (pruned: the output is read to the end all the same)
                     job["log"].append(line)
                     dropped = len(job["log"]) - MAX_LOG_LINES
                     if dropped > 0:
@@ -782,12 +795,12 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
                 opts = {**opts, "_ckey": None}       # (not kept: it was asked for with colours, and has none)
         with JOBS_LOCK:
             PROCS.pop(job_id, None)
-            cancelled = JOBS[job_id].get("status") == "cancelled"
+            cancelled = JOBS.get(job_id, {"status": "cancelled"}).get("status") == "cancelled"
             # the converter's last error line, for the message below
             said = next((l.strip()[1:].strip() for l in reversed(JOBS[job_id]["log"])
                          if l.strip().startswith("✗")), "")
         if cancelled:
-            for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf"), dst_path, dst_path.with_suffix(".tmp.glb")):
+            for stale in _conv_leftovers(src_path, dst_path):
                 try: stale.unlink(missing_ok=True)
                 except OSError: pass
             return
@@ -796,7 +809,12 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
         if rc == 3:
             raise RuntimeError("Nothing to convert: " + (said or f"this {cad_name} file has no solid bodies in it"))
         if rc != 0:
-            raise RuntimeError(f"step2glb.py exited with code {rc}")
+            # A reader that still dies on the plain retry (OpenCascade crashing on references to things the file does not hold) is
+            # nearly always a damaged or cut-off file.
+            if rc < 0 or rc >= 0xC0000000:
+                raise RuntimeError(f"The {cad_name} reader crashed on this file. It is probably damaged or incomplete: export it from the CAD program again.")
+            # (the converter's own last error line says what is wrong with the file; the bare exit code told the user nothing)
+            raise RuntimeError(f"Could not convert this {cad_name} file: {said}" if said else f"step2glb.py exited with code {rc}")
         # The converter can finish without an error and without a file: a STEP
         # that holds only surfaces or wires has no solid for it to mesh.
         if not dst_path.exists():
@@ -819,11 +837,12 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
     except Exception as e:
         with JOBS_LOCK:
             PROCS.pop(job_id, None)
-            if JOBS[job_id].get("status") != "cancelled":
+            if JOBS.get(job_id, {"status": "cancelled"}).get("status") != "cancelled":
                 JOBS[job_id]["status"] = "error"
                 JOBS[job_id]["message"] = str(e)
-        # A failed job leaves nothing worth keeping; don't let uploads pile up.
-        for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf"), dst_path.with_suffix(".tmp.glb")):
+        # A failed job leaves nothing worth keeping; don't let uploads pile up. (The half-written GLB and the converter's own temporary
+        # files went too: they were left in inbox/, and on a full disk the next try was refused for the space they took.)
+        for stale in _conv_leftovers(src_path, dst_path):
             try: stale.unlink(missing_ok=True)
             except OSError: pass
 
@@ -1021,7 +1040,7 @@ MCP_TOOLS += [
                           "remove_enclosed": {"type": "boolean", "description": "Also remove pieces of a mesh that end up sealed inside the closed part (the balls of a valve, a pin in a bore): never visible again. Default: the card's own switch, which is on."},
                           "ids": _IDS, "name_contains": _NAME})},
     {"name": "remove_small_parts", "description": "Delete every part whose longest side is below a size, in the scene's units (usually mm). The user is asked to allow it.", "inputSchema": _obj({"max_size": {"type": "number", "description": "Parts shorter than this are removed."}}, ["max_size"])},
-    {"name": "clean_up", "description": "Tidy the scene. The user is asked to allow it. Choose what to do: remove empty parts, share the geometry of identical parts (duplicates), and repair degenerate triangles.",
+    {"name": "clean_up", "description": "Tidy the scene by deleting parts; it counts as a delete in Settings › Claude and the user is asked to allow it. Choose what to delete: empty parts (no triangles), exact copies stacked in one place (duplicates: one of each is kept), and parts with no area (degenerate). One undo takes all of it back.",
      "inputSchema": _obj({"empty": {"type": "boolean"}, "duplicates": {"type": "boolean"}, "degenerate": {"type": "boolean"}})},
     {"name": "export_model", "description": "Export the open scene to a file in MeshOptimiser's exports folder and return its path. Use a preset for where the file is going (web: GLB with Draco; ar: USDZ; unreal and unity: FBX; print: STL) or give a format. Without a preset each format is written in its own convention: GLB, glTF and USDZ Y up in metres, OBJ Y up in millimetres, FBX Z up in millimetres (its header says so), STL and PLY Z up in millimetres. The scene itself is Z up in millimetres; files from other programs are brought into it when opened.",
      "inputSchema": _obj({"preset": {"type": "string", "enum": ["web", "ar", "unreal", "unity", "print"]},
@@ -1031,7 +1050,7 @@ MCP_TOOLS += [
          "faster_to_draw": {"type": "boolean", "description": "For a GLB without compression: reorder the triangles and vertices for the graphics card. The shape does not change; any viewer opens it. Meshopt already does this."},
          "animation": {"type": "boolean", "description": "For a GLB or glTF: write what animate_parts (or the Animate window) animates as a clip in the file. Default true; false leaves it out."}})},
     {"name": "turntable_video", "description": "Render a video of the model turning once (WebM) into the exports folder and return its path. The animations set with animate_parts (or in the Animate window) play in it, each frame at its own time.",
-     "inputSchema": _obj({"seconds": {"type": "integer", "description": "4 to 12 (default 6)."}, "width": {"type": "integer", "description": "Default 1280."}, "height": {"type": "integer", "description": "Default 720."}, "fps": {"type": "integer", "description": "24, 30 or 60 (default 30)."},
+     "inputSchema": _obj({"seconds": {"type": "integer", "description": "2 to 12 (default 6)."}, "width": {"type": "integer", "description": "320 to 2560 (default 1920)."}, "height": {"type": "integer", "description": "180 to 1440 (default 1080)."}, "fps": {"type": "integer", "description": "24, 30 or 60 (default 30)."},
                           "animations": {"type": "boolean", "description": "Play what animate_parts animates while the view turns. Default true; false records the model standing still."}})},
     {"name": "animate_parts", "description": "Choose which parts or groups MOVE in the video (and in the app), and how. Each gets animation layers that run until removed; turntable_video plays them (set animations false there to leave them out). Kinds: spin (turns a minute round an axis, with loop mode, repeats, delay and loop points), swing (to and fro by an angle), noise (a smooth random shake of the position and the turn) and path (a trip along a circle, figure of eight, square, wave or line). A part moves about the middle of its own geometry in its own axes; a group moves every part inside it together. A part or group has at most one layer of each kind, and the layers add up. Nothing in the model is changed: exports and saved scenes see the parts where they started. Use action list to see what is animated, remove for some parts, clear for everything. Look at the model first (list_parts, list_groups): pick the parts that really move (a fan, a pulley, a wheel), not the whole assembly.",
      "inputSchema": _obj({
@@ -2061,6 +2080,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # step2glb.py reads (it picks its reader by the extension).
         if not name.lower().endswith(CAD_EXTS):
             return self._refuse_upload({"error": "filename must end in .step, .stp, .iges, .igs, .brep or .brp"}, 400)
+        # An update being installed restarts the server when it is done, and that stops a conversion half way ("lost track of this job").
+        if updater.busy():
+            return self._refuse_upload({"error": "An update of MeshOptimiser is being installed. Open the file again when it has finished."}, 409)
 
         try:
             quality = float(q.get("quality", ["0.5"])[0])

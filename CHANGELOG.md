@@ -4,6 +4,57 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.35.5
+
+Released 22 Oct 2026.
+
+v0.35.4 made Edit mesh keep up with big models. v0.35.5 brings depth of field to Photo mode, a *Visible* switch to Edit mesh and status pills that slide, and then a long list of fixes from a review of the whole app: a merge keeps its parts' materials, a mirrored part stays the right way out through every tool, the STEP converter cleans up after itself and says what went wrong, Claude's tools leave locked parts alone, and the app does no work at all while nothing happens.
+
+**New and changed**
+
+- ![new][new] **Photo mode: depth of field, focused with Alt+click.** A new *Depth of field* row on the Photo mode card (off at first) softens what is nearer or further than the focus, as a camera lens does; its percentage sets how soft. Alt+click a point of the model, or press *Pick* on the new *Focus* row and click, to focus there; *Pivot* goes back. The focus stays on that point as the camera moves, it works at every Quality, and Save photo keeps it. Tried in a test browser only, not by hand.
+- ![new][new] **Edit mesh: a *Visible* switch in the bar over the view.** On (as before), a box takes only what you can see; off, it takes everything inside it, back sides and parts hidden behind others too. The Brush follows the switch. The choice is kept between sessions.
+- ![polish][polish] **The status pills beside the camera pill slide instead of popping.** A mode that comes on (*Isolated*, *Exploded*, *Measure*, *Notes*, *Animate*, *CAD edges*, *CAD edit*) slides its pill out; one that goes off tucks back in and its gap closes; the pills beside it glide. *Snap* and reduced motion stay instant.
+
+**Edit mesh**
+
+- ![fix][fix] **The dots were cut by the mesh they stand on** on steep faces, corners and rims. A dot is drawn whole or not at all, and a part in front still hides it.
+- ![fix][fix] **On an open sheet (a panel of a cab) the dots, picked lines and a box worked from one side only.** They work from either side; a closed part still keeps its far side out.
+- ![fix][fix] **On a merged part a box seemed to pick some lines and drop others, and Select all lit only some points.** Everything was picked; only the first 40,000 were drawn. Picked points are now all drawn (up to 2,000,000), picked edges up to 300,000 a part.
+- ![fix][fix] **After a long session Ctrl+Z went back through old picks instead of undoing a Delete or a move.** It undoes the last edit, however long the history.
+- ![fix][fix] **Ctrl+Z while a gizmo handle was held undid under the drag;** a redo of a Weld picked the wrong points; Reverse normals dropped the pick on a big part; the Points brush picked hidden points inside polygons; Close open edges said "No open edges" on a big part the first time; Extract polygons could take two undos.
+
+**Merging, mirrored parts and the mesh tools**
+
+- ![fix][fix] **Merging parts turned their materials white, and the model did not remember its colours.** A merged part keeps each part's own material (colour, finish, name, texture), and a GLB of it opens again with them; a part merged before this fix opens with its colours too.
+- ![fix][fix] **Bake transforms, Set transform and the booleans turned a mirrored part inside out.** A part with a scale of -1 keeps facing out, and undo puts it back.
+- ![fix][fix] **The mesh tools threw away vertex colours and the second and later UV sets.** Close cracks, Remesh evenly, Smooth surface, the booleans, Voxel remesh, Repair mesh and the rest carry them.
+- ![fix][fix] **Shading angle and Fix normals › Reverse took away a STEP part's CAD faces;** Decimate and the like turned a one-colour part on a second material to the main colour; a copy made unique showed its quads as triangles; Remove holes and Remove floating pieces drew some parts twice; hidden copies showed again when an exploded view was put back together.
+
+**STEP files**
+
+- ![fix][fix] **A damaged or cut-off STEP said only "step2glb.py exited with code 1".** The message says what the converter found, or that the file is probably damaged and should be exported again.
+- ![fix][fix] **The converter could read an older revision of a file from its cache.** The cache names the file it was made from; conversions through the app no longer write one at all.
+- ![fix][fix] **A failed or cancelled conversion left files in inbox/ for good,** and a cancel could crash its server thread. They are removed. A STEP opened while an update installs is refused with the reason.
+- ![fix][fix] **The times while a STEP converts read "94.4s".** Whole seconds, and minutes from one minute on ("1m 34s").
+
+**Claude**
+
+- ![fix][fix] **Remove small parts, Remove fillets, Simplify round faces and Merge by colour changed locked parts;** Merge by colour with no parts named merged the whole scene, not the selection.
+- ![fix][fix] **Clean up was blocked as a geometry change** and took two undos; it counts as a delete and is one step. Redo is asked or blocked like the step it does again.
+- ![fix][fix] **compare_images left an exploded view put together;** options of one Smart optimise call stayed on the card; the turntable video's size and length were described wrong.
+
+**Around the app**
+
+- ![perf][perf] **The app worked out its page styles 60 times a second while nothing happened.** Left alone it now does no style or layout work at all (about 180 recalculations in three seconds to 0, measured in 25 states), and the Transform panel no longer runs a loop of its own.
+- ![polish][polish] **Tooltips were far too long.** 232 of them are one short line now, with their shortcuts kept.
+- ![fix][fix] **The same "Select a part first" pill piled up** when a key was held; it shows once. Scroll to top on the parts tree jumps at once.
+- ![fix][fix] **A command card opened behind a window already open,** such as the material editor; it comes to the front. *Edit…* in a material's right-click menu did nothing when the Materials panel was shut.
+- ![fix][fix] **Undo and redo:** a paste of a model folder could leave an empty "copy" folder; a redo after Smart fit could reuse a part's id; a quick second change in the transform fields was undone by Redo.
+- ![fix][fix] **After a rolled-back update that installed new Python packages, the app would not start from its own Python.**
+
+Most of these fixes were checked by tests in a test browser (`tests/e2e-review-fixes.mjs` and others) and not yet by hand in the app; the entries in the repository's history say which.
+
 ## v0.35.4
 
 Released 21 Oct 2026.
