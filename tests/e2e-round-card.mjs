@@ -73,7 +73,7 @@ try {
   const o = await evalJS(`window.__moAgent.roundCard({ ids: [${pid}], mode: 'exact', width_mm: 7 })`);
   await sleep(400);
   check('the card opens on Remove ridges', o && o.ok && await evalJS("!document.querySelector('.section-cmd[data-cmd=\"round\"]').hidden") && /remove ridges/.test(await evalJS("document.getElementById('rc-title').textContent")), o);
-  check('the preview draws the profile before and after', await evalJS("document.querySelectorAll('#rc-svg path').length === 3 && document.querySelector('#rc-svg .pf-was').getAttribute('d').length > 20 && document.querySelector('#rc-svg .pf-now').getAttribute('d').length > 20"));
+  check('the preview draws the profile before and after', await evalJS("document.querySelectorAll('#rc-svg path:not(.pf-grid)').length === 3 && !!document.querySelector('#rc-svg .pf-grid') && document.querySelector('#rc-svg .pf-was').getAttribute('d').length > 20 && document.querySelector('#rc-svg .pf-now').getAttribute('d').length > 20"));
   const txt = await evalJS("document.getElementById('rc-stats').textContent");
   check('the readout: the axis, the grooves filled, the segments it had', /Axis[XYZ]/.test(txt) && /Grooves filled[4-6]/.test(txt) && /the part had 48/.test(txt), txt);
   check('nothing changed before Apply', (await sum()).triangles === s0.triangles);
@@ -82,8 +82,17 @@ try {
   await evalJS("document.querySelector('#rc-mode button[data-m=\"outline\"]').click()"); await sleep(300);
   const dSo = await evalJS("document.querySelector('#rc-svg .pf-now').getAttribute('d')");
   check('Solid: the title and the preview change', dSo !== dEx && /make solid/.test(await evalJS("document.getElementById('rc-title').textContent")));
+  // Make solid's axis: shown in Solid only; another axis is another profile; Auto gives the first one back
+  const axis = await evalJS(`(async () => {
+    const wait = () => new Promise(r => setTimeout(r, 250)), d = () => document.querySelector('#rc-svg .pf-now').getAttribute('d');
+    const shown = !document.getElementById('rc-axis-row').hidden, auto = d(), out = {};
+    for (const a of ['x', 'y', 'z']) { document.querySelector('#rc-axis button[data-a="' + a + '"]').click(); await wait(); out[a] = { d: d(), on: document.querySelector('#rc-axis button.active').dataset.a, st: window.__moAgent.roundCardState() }; }
+    document.querySelector('#rc-axis button[data-a="auto"]').click(); await wait();
+    return { shown, autoBack: d() === auto, differ: new Set(['x', 'y', 'z'].map(a => out[a].d)).size > 1, active: ['x', 'y', 'z'].every(a => out[a].on === a), axes: ['x', 'y', 'z'].map(a => out[a].st && out[a].st.options.axis) };
+  })()`);
+  check('Solid: the axis row shows, each axis is picked and changes the profile, and Auto gives it back', axis.shown && axis.active && axis.differ && axis.autoBack && axis.axes.join() === 'x,y,z', axis);
   await evalJS("document.querySelector('#rc-mode button[data-m=\"exact\"]').click()"); await sleep(300);
-  check('and back to Ridges', (await evalJS("document.querySelector('#rc-svg .pf-now').getAttribute('d')")) === dEx);
+  check('and back to Ridges', (await evalJS("document.querySelector('#rc-svg .pf-now').getAttribute('d')")) === dEx && await evalJS("document.getElementById('rc-axis-row').hidden"));
   // Segments around: 16 and the estimate drops
   const est48 = (await evalJS('window.__moAgent.roundCardState().summary')).triangles_after;
   await evalJS("window.__moAgent.roundCardSet('segments', 16)"); await sleep(200);
@@ -98,12 +107,29 @@ try {
     const at = (x, y) => { const p = svg.createSVGPoint(); p.x = x; p.y = -y; const q = p.matrixTransform(M); return [q.x, q.y]; };
     const r = c.getBoundingClientRect(), from = [r.left + r.width / 2, r.top + r.height / 2], to = at(${corner[0]}, ${corner[1]});
     const ev = (type, x, y, el) => (el || svg).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, clientX: x, clientY: y, button: 0, buttons: 1 }));
-    ev('pointerdown', from[0], from[1], c); ev('pointermove', to[0] + 3, to[1] - 2); const mark = !!svg.querySelector('.pf-snap'); ev('pointerup', to[0] + 3, to[1] - 2);
+    ev('pointerdown', from[0], from[1], c); ev('pointermove', to[0] + 3, to[1] - 2); await new Promise(r => requestAnimationFrame(() => r())); const mark = !!svg.querySelector('.pf-snap'); ev('pointerup', to[0] + 3, to[1] - 2);
     await new Promise(r => setTimeout(r, 300));
     return { p: window.__moAgent.roundCardSection()[0][0], mark };
   })()`);
   check('a dragged point snaps onto a corner of the profile as it was', drag.mark && Math.abs(drag.p[0] - corner[0]) < 1e-3 && Math.abs(drag.p[1] - corner[1]) < 1e-3, drag);
   check('the readout says the profile is edited', /as edited/.test(await evalJS("document.getElementById('rc-stats').textContent")));
+  // several points: a box over the whole view picks them all, and a drag on one moves them all as far
+  const multi = await evalJS(`(async () => {
+    const svg = document.getElementById('rc-svg'), frame = () => new Promise(r => requestAnimationFrame(() => r()));
+    const ev = (type, x, y, el, o) => (el || svg).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 8, clientX: x, clientY: y, button: 0, buttons: 1, ...(o || {}) }));
+    const R = svg.getBoundingClientRect();
+    ev('pointerdown', R.left - 40, R.top - 40, svg); ev('pointermove', R.right + 40, R.bottom + 40); await frame(); ev('pointerup', R.right + 40, R.bottom + 40);
+    const all = svg.querySelectorAll('.pf-pt').length, picked = svg.querySelectorAll('.pf-pt.is-sel').length;
+    const before = JSON.parse(JSON.stringify(window.__moAgent.roundCardSection()));
+    const c = svg.querySelector('.pf-pt.is-sel'), r = c.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    ev('pointerdown', x, y, c, { shiftKey: false }); ev('pointermove', x + 7, y - 9); await frame(); ev('pointerup', x + 7, y - 9);
+    await new Promise(r => setTimeout(r, 300));
+    const after = window.__moAgent.roundCardSection();
+    const d = before[0].map((p, i) => [after[0][i][0] - p[0], after[0][i][1] - p[1]]);
+    const same = d.every(v => Math.abs(v[0] - d[0][0]) < 1e-6 && Math.abs(v[1] - d[0][1]) < 1e-6) && Math.hypot(d[0][0], d[0][1]) > 0;
+    return { all, picked, same, n0: before[0].length, n1: after[0].length, d0: d[0] };
+  })()`);
+  check('a box over the view picks every point, and a drag moves them all as far', multi.all > 3 && multi.picked === multi.all && multi.same && multi.n0 === multi.n1, multi);
   await evalJS("document.getElementById('rc-edit-reset').click()"); await sleep(300);
   if (SHOT) await shot(SHOT.replace(/\.png$/, '-card.png'));
   // Apply

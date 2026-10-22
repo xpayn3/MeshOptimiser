@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=34';
 import { installHoleFillCard } from './holefill-card.js?v=1';
-import { installProfileCard } from './profile-card.js?v=7';
-import { installRoundCard } from './round-card.js?v=3';
+import { installProfileCard } from './profile-card.js?v=13';
+import { installRoundCard } from './round-card.js?v=11';
 import { installDecimateCard } from './decimate-card.js?v=2';
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
@@ -62691,7 +62691,8 @@ function _underPointer(x, y) {
       if (!mouse) return;
       const el = document.activeElement;
       if (!el || el === document.body || el === document.documentElement) return;
-      if (el !== ringless) { off(); ringless = el; el.classList.add('no-mod-ring'); }
+      // (one that has the class in the page itself keeps it: only a class put on here is taken off again)
+      if (el !== ringless) { off(); if (el.classList.contains('no-mod-ring')) return; ringless = el; el.classList.add('no-mod-ring'); }
       return;
     }
     mouse = false; off();

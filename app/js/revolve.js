@@ -493,7 +493,8 @@ function profileDistance(A, B) {
 // part keeps its size), the edge of the solid is traced (material on the left), straightened, and then handled as in
 // Fill grooves: narrow gaps filled, loops that do nothing dropped, spun round the axis.
 // opts: cells (grid cells along the larger of length and radius, default 900), gap (cells of gap to seal, default 2),
-// segments (around the axis, default 64), width (as fillRoundGrooves; 0 = do not fill grooves), dryRun.
+// segments (around the axis, default 64), width (as fillRoundGrooves; 0 = do not fill grooves), dryRun, axis ('x', 'y', 'z' or a
+// direction, in the part's own coordinates: spun round that one through the middle of the surface, round enough or not).
 export function outlineRevolve(positions, index, opts = {}) {
   const P = positions, I = index || Uint32Array.from({ length: P.length / 3 }, (_, i) => i);
   const mo = moments(P, I);
@@ -501,7 +502,9 @@ export function outlineRevolve(positions, index, opts = {}) {
   // the axis: the principal direction whose other two moments are the most nearly equal
   const ev = eigen3(mo.cov);
   let pick = null;
-  for (let i = 0; i < 3; i++) {
+  const given = typeof opts.axis === 'string' ? ({ x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] })[opts.axis.toLowerCase()] : opts.axis;
+  if (Array.isArray(given) && given.length === 3 && Math.hypot(...given) > 0) { const l = Math.hypot(...given); pick = { a: given.map(v => v / l), spread: 0 }; }
+  else for (let i = 0; i < 3; i++) {
     const o = [0, 1, 2].filter(k => k !== i).map(k => ev[k].val), spread = Math.abs(o[0] - o[1]) / (Math.max(o[0], o[1]) || 1);
     if (!pick || spread < pick.spread) pick = { a: snapAxis(ev[i].vec), spread };
   }

@@ -84,7 +84,7 @@ try {
   const o = await evalJS(`(() => { const r = window.__moAgent.cleanProfile({ ids: [${pid}], width_mm: 5, keep_chambers: false }); return r; })()`);
   await sleep(400);
   check('the card opens on a profile', o && o.ok && await evalJS("!document.querySelector('.section-cmd[data-cmd=\"profile\"]').hidden"), o);
-  check('the preview draws the section before and after', await evalJS("document.querySelectorAll('#pf-svg path').length === 3 && document.querySelector('#pf-svg .pf-now').getAttribute('d').length > 20"));
+  check('the preview draws the section before and after', await evalJS("document.querySelectorAll('#pf-svg path:not(.pf-grid)').length === 3 && !!document.querySelector('#pf-svg .pf-grid') && document.querySelector('#pf-svg .pf-now').getAttribute('d').length > 20"));
   const st = await evalJS("document.getElementById('pf-stats').textContent");
   check('the readout: the mitred end, two chambers, six gaps', /26.6°/.test(st) && /2 filled/.test(st) && /Gaps closed6/.test(st), st);
   { const fit = await evalJS("(() => { const s = document.getElementById('pf-svg').getBoundingClientRect(), b = document.querySelector('#pf-svg .pf-was').getBoundingClientRect(); return { sw: s.width, sh: s.height, bw: b.width, bh: b.height, inside: b.left >= s.left - 1 && b.right <= s.right + 1 && b.top >= s.top - 1 && b.bottom <= s.bottom + 1 }; })()");

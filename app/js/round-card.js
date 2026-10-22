@@ -12,9 +12,9 @@
 // remembered as a share of the part's size; Segments around as a number; the Shading angle is the part's own (as in Properties).
 // Once applied, the view is Wireframe with the lines on the parts in work only, so each change of Segments around shows; closing
 // the card puts the view back as it was, unless it was changed by hand meanwhile.
-import { fillRoundGrooves, outlineRevolve, sweepBelt, revolveLoops, sweepLoops } from './revolve.js?v=8';
+import { fillRoundGrooves, outlineRevolve, sweepBelt, revolveLoops, sweepLoops } from './revolve.js?v=9';
 import { withUvs } from './meshops.js?v=18';
-import { sectionView } from './section-view.js?v=1';
+import { sectionView } from './section-view.js?v=7';
 
 export function installRoundCard(app) {
   const {
@@ -40,11 +40,18 @@ export function installRoundCard(app) {
     };
   };
   const itNow = () => cur && cur.items[cur.at];
+  // the largest extent of a part (a part that is not found round has no width of its own to size the options by)
+  const sizeOf = (P) => { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], P[i + k]); hi[k] = Math.max(hi[k], P[i + k]); } return Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1; };
   const FN = { exact: fillRoundGrooves, outline: outlineRevolve, belt: sweepBelt };
   // the profile of one part for the options as they are (cheap enough to run at every change: only the part shown)
   function profileOf(it) {
     const o = cur.o, mode = cur.mode;
-    let r; try { r = FN[mode](it.P, it.I, { width: o.width / it.scale, segments: o.segments > 2 ? o.segments : undefined, dryRun: true }); } catch (e) { r = { ok: false, why: e.message }; }
+    // (kept for the options it was made with: an edit by hand, or another look at the same part, does not cut it again)
+    // (Make solid: the axis chosen, or the one the part is roundest round)
+    const axis = mode === 'outline' && o.axis && o.axis !== 'auto' ? o.axis : undefined;
+    const key = mode + '|' + o.width + '|' + o.segments + '|' + (axis || '');
+    let r = it.dry && it.dry.key === key ? it.dry.r : null;
+    if (!r) { try { r = FN[mode](it.P, it.I, { width: o.width / it.scale, segments: o.segments > 2 ? o.segments : undefined, axis, dryRun: true }); } catch (e) { r = { ok: false, why: e.message }; } it.dry = { key, r }; }
     if (!r || !r.ok) return r || { ok: false, why: 'nothing came back' };
     // what it was: the exact cut (Make solid has none of its own: the exact one when the part is round enough to have it)
     if (!it.before || it.before.mode !== mode) {
@@ -65,10 +72,13 @@ export function installRoundCard(app) {
   // ── the preview ──
   const viewOf = () => view || (view = sectionView($i('rc-svg'), {
     clampY: 0,
-    onEdit(shapes, fast) {
+    onEdit(shapes, fast, crossed) {
       const it = itNow(); if (!it) return;
-      it.shapes = shapes; preview(fast);
-      if (!fast && cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
+      it.shapes = shapes || null; it.crossed = !!(shapes && crossed); preview(fast);
+      if (fast) return;
+      if (it.crossed) { clearTimeout(timer); say('An edge of the profile crosses another (drawn red): move a point so it does not, and it is built.'); cur.crossSaid = true; return; }
+      if (cur.crossSaid) { say(''); cur.crossSaid = false; }
+      if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
     },
   }));
   const mm = (v) => fmtNum(v >= 100 ? Math.round(v) : v >= 10 ? Math.round(v * 10) / 10 : Math.round(v * 100) / 100) + ' mm';
@@ -81,6 +91,8 @@ export function installRoundCard(app) {
     if (fast) return;
     if (r && r.ok) { try { it.trisEst = meshOf(it, r).index.length / 3; } catch (_) { it.trisEst = 0; } }
     const box = $i('rc-stats');
+    // (the readout is kept for Claude and the tests, and shown only when the part cannot be done this way: it says why)
+    if (box) box.hidden = !!(r && r.ok);
     if (box) {
       const row = (k, v) => '<dt>' + k + '</dt><dd>' + v + '</dd>';
       box.innerHTML = !r || !r.ok ? row('Not this way', r && r.why ? r.why : 'it could not be done') : (cur.items.length > 1 || cur.skipped.length ? row('Parts', fmtNum(cur.items.length) + (cur.skipped.length ? ' · ' + fmtNum(cur.skipped.length) + ' other ' + (cur.skipped.length === 1 ? 'part' : 'parts') + ' left as they are' : '')) : '')
@@ -93,15 +105,17 @@ export function installRoundCard(app) {
     const pos = $i('rc-pos'); if (pos) pos.textContent = (cur.at + 1) + ' of ' + cur.items.length;
     const st = $i('rc-step'); if (st) st.hidden = cur.items.length < 2;
     const seg = $i('rc-seg-row'); if (seg) seg.hidden = cur.mode === 'belt';
+    const ax = $i('rc-axis-row'); if (ax) ax.hidden = cur.mode !== 'outline';
     marks();
   }
   const axisName = (a) => (!a ? 'tilted' : Math.abs(Math.abs(a[0]) - 1) < 1e-9 ? 'X' : Math.abs(Math.abs(a[1]) - 1) < 1e-9 ? 'Y' : Math.abs(Math.abs(a[2]) - 1) < 1e-9 ? 'Z' : 'tilted');
   function marks() {
     const it = itNow(), on = !!(it && it.shapes), ed = !!(view && view.editing);
     const r = $i('rc-edit-reset'); if (r) r.hidden = !on;
-    const h = $i('rc-edit-hint'); if (h) h.textContent = ed ? 'Drag a point (it snaps to the profile as it was; Shift: free) · double-click an edge to add one · Delete or Alt-click takes one out' + (on ? ' · this part is built from the profile as edited' : '') : (on ? 'Built from the profile as edited by hand.' : '');
+    const h = $i('rc-edit-hint'); if (h) h.textContent = on ? 'Built from the profile as edited by hand.' : '';      // (how to edit: the view's label)
     const b = $i('rc-edit'); if (b) b.classList.toggle('is-on', ed);
     for (const m of document.querySelectorAll('#rc-mode button')) m.classList.toggle('active', m.dataset.m === cur.mode);
+    for (const b of document.querySelectorAll('#rc-axis button')) b.classList.toggle('active', b.dataset.a === (cur.o.axis || 'auto'));
     const t = $i('rc-title'); if (t) t.textContent = NAMES[cur.mode];
   }
   function step(d) {
@@ -125,6 +139,7 @@ export function installRoundCard(app) {
       for (const it of cur.items) {
         if (cur.items.length > 4) say('Building ' + (++n) + ' of ' + cur.items.length + '…');
         const p = getPart(it.partId); if (!p || p.deleted || !p.mesh) continue;
+        if (it.crossed) { bad.push(it.name + ': its profile as edited crosses itself'); continue; }
         const r = it === itNow() && it.last && it.last.ok ? it.last : profileOf(it);
         if (!r || !r.ok) { bad.push(it.name + ': ' + ((r && r.why) || 'it could not be done')); continue; }
         let g; try { g = meshOf(it, r); } catch (e) { bad.push(it.name + ': ' + e.message); continue; }
@@ -156,7 +171,7 @@ export function installRoundCard(app) {
     (async () => { await _nextFrame(); await _nextFrame(); for (const g of freed) { try { _disposeEdgesFor(g, false); } catch (_) {} try { _safeDispose(g); } catch (_) {} } })();
     if (cur && cur.op) {
       const tb = cur.items.reduce((s, x) => s + x.tris0, 0), ta = cur.items.reduce((s, x) => s + (x.trisAfter || x.tris0), 0);
-      say('Built · ' + fmtNum(tb) + ' → ' + fmtNum(ta) + ' triangles. The options now build ' + (cur.items.length > 1 ? 'them' : 'it') + ' again; Ctrl+Z takes the whole step back.');
+      say('');                                                         // (no readout of the build under the view)
       const lbl = $i('rc-run-lbl'); if (lbl) lbl.textContent = 'Done';
       const fl = document.querySelector('.section-cmd[data-cmd="round"] .cmd-ok span'); if (fl) fl.textContent = 'Done';
     }
@@ -175,10 +190,19 @@ export function installRoundCard(app) {
     preview();
     if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
   }
+  // Make solid's axis: another axis is another profile, so an edit by hand is dropped and the view fitted again
+  function setAxis(a) {
+    if (!cur || !['auto', 'x', 'y', 'z'].includes(a) || (cur.o.axis || 'auto') === a) return;
+    if (cur.op && !alive()) return;
+    cur.o.axis = a;
+    for (const it of cur.items) { it.shapes = null; it.crossed = false; }
+    viewOf().reset(null); cur.fit = true; preview();
+    if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
+  }
   function setMode(m) {
     if (!cur || cur.mode === m || cur.op) return;
     cur.mode = m; _Prefs.set('round.mode', m);
-    for (const it of cur.items) { it.shapes = null; it.before = null; }
+    for (const it of cur.items) { it.shapes = null; it.before = null; it.crossed = false; }
     viewOf().reset(null); cur.fit = true; preview();
   }
 
@@ -198,11 +222,12 @@ export function installRoundCard(app) {
     if (wired) return; wired = true;
     const sec = document.querySelector('.section-cmd[data-cmd="round"]');
     for (const b of document.querySelectorAll('#rc-mode button')) b.addEventListener('click', () => setMode(b.dataset.m));
+    for (const b of document.querySelectorAll('#rc-axis button')) b.addEventListener('click', () => setAxis(b.dataset.a));
     $i('rc-run')?.addEventListener('click', () => { if (cur && cur.op) _CmdCards.close('round'); else build(); });
     $i('rc-prev')?.addEventListener('click', () => step(-1));
     $i('rc-next')?.addEventListener('click', () => step(1));
     $i('rc-edit')?.addEventListener('click', () => { if (!cur) return; viewOf().setEdit(!view.editing); marks(); });
-    $i('rc-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
+    $i('rc-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.crossed = false; viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
     sec?.addEventListener('cmd-close', () => {
       clearTimeout(timer); scanSeq++;
       try { _wireLimit(null); } catch (_) {}
@@ -212,7 +237,8 @@ export function installRoundCard(app) {
   }
 
   // ── open ──
-  // o: { mode, ids, width_mm, segments, smooth_deg, apply, quiet }. Nothing selected: every part shown is looked at.
+  // o: { mode, ids, width_mm, segments, smooth_deg, axis ('auto', 'x', 'y', 'z': Make solid), apply, quiet }. Nothing selected: every
+  // part shown is looked at.
   async function open(o = {}) {
     const mode = o.mode || pref('mode');
     const picked = o.ids && o.ids.length ? o.ids : [...state.selected], whole = !picked.length;
@@ -225,8 +251,12 @@ export function installRoundCard(app) {
     for (let i = 0; i < parts.length; i++) {
       if (seq !== scanSeq) return { ok: false, why: 'stopped' };
       const it = sourceOf(parts[i]);
-      let r; try { r = FN[mode](it.P, it.I, { dryRun: true }); } catch (e) { r = { ok: false, why: e.message }; }
-      if (r && r.ok) { it.sizeMm = (mode === 'belt' ? r.width / 0.25 : r.width / 0.15) * it.scale || 1; items.push(it); } else skipped.push({ name: parts[i].name, why: r && r.why });
+      const axis = mode === 'outline' && ['x', 'y', 'z'].includes(o.axis) ? o.axis : undefined;
+      let r; try { r = FN[mode](it.P, it.I, { dryRun: true, axis }); } catch (e) { r = { ok: false, why: e.message }; }
+      if (r && r.ok) { it.sizeMm = (mode === 'belt' ? r.width / 0.25 : r.width / 0.15) * it.scale || 1; items.push(it); }
+      // (Make solid on a part that is not round round any axis of its own: kept, so an axis can be chosen for it)
+      else if (mode === 'outline' && r && /not round enough/.test(r.why || '')) { it.sizeMm = sizeOf(it.P) * it.scale || 1; items.push(it); }
+      else skipped.push({ name: parts[i].name, why: r && r.why });
       if (!o.quiet && parts.length > 6 && i % 6 === 5) await _nextFrame();
     }
     if (!items.length) { if (!o.quiet) toast(NAMES[mode], (skipped.length === 1 ? skipped[0].name + ' was left as it was: ' : 'None of the ' + skipped.length + ' parts fits: ') + (skipped[0].why || 'it could not be done'), 'warn', 7000); return { ok: false, why: skipped[0].why, skipped }; }
@@ -236,6 +266,7 @@ export function installRoundCard(app) {
       items, skipped, whole, mode, at: 0, op: null, fit: true,
       o: {
         width: o.width_mm >= 0 ? o.width_mm : round(pref('widthShare') * lead.sizeMm, wStep),
+        axis: ['x', 'y', 'z'].includes(o.axis) ? o.axis : 'auto',
         segments: o.segments > 2 ? Math.round(o.segments) : (_Prefs.get('roundSegments') > 2 ? Math.round(_Prefs.get('roundSegments')) : 0),
         smooth: o.smooth_deg >= 0 ? o.smooth_deg : (() => { const a = items.map(it => getPart(it.partId)?.shadeAngle); return a.every(x => Number.isFinite(x) && x === a[0]) ? a[0] : DEF.smooth; })(),
       },
@@ -261,13 +292,13 @@ export function installRoundCard(app) {
   }
   function summary() {
     const it = itNow(), r = it && it.last; if (!r || !r.ok) return null;
-    return { mode: cur.mode, parts: cur.items.length, left_out: cur.skipped.length, name: it.name, grooves: r.grooves || 0, segments: r.N, edited: !!it.shapes,
+    return { mode: cur.mode, axis: cur.mode === 'outline' ? (cur.o.axis || 'auto') : undefined, parts: cur.items.length, left_out: cur.skipped.length, name: it.name, grooves: r.grooves || 0, segments: r.N, edited: !!it.shapes,
       width_mm: cur.o.width, triangles_before: it.tris0, triangles_after: it.trisAfter || it.trisEst || undefined };
   }
 
   window.__moAgent = Object.assign(window.__moAgent || {}, {
     roundCard: (o) => open(o || {}),
-    roundCardSet: (k, v) => (k === 'mode' ? setMode(v) : changed(k, v, false)),
+    roundCardSet: (k, v) => (k === 'mode' ? setMode(v) : k === 'axis' ? setAxis(v) : changed(k, v, false)),
     roundCardState: () => (cur ? { mode: cur.mode, options: { ...cur.o }, applied: !!cur.op, edit: !!(view && view.editing), summary: summary() } : null),
     roundCardSection: () => { const it = itNow(); return it && it.last && it.last.ok ? it.last.after : null; },
   });

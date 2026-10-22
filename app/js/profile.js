@@ -581,9 +581,19 @@ export function sweepOpen(shapes, path, frames) {
 // opts.dryRun: find and measure only.
 // Returns { ok, why?, axis, axisName, length, chambers (filled), chambersFound, notches, machined, width, sectionSize, endAngles,
 // mitred, profileBefore, profileAfter (loops), shapesAfter ([{ outer, holes }]), positions, index }.
+// The slow half (the axis, the ends, the cut through the middle) is the same for every width, straightening and section edited by
+// hand: it is kept for the arrays it was found on, so a card that asks again at each step of a scrubber or each move of a point only
+// pays for the fast half. (The arrays must not be changed in place after; the card's are not, and the worker gets copies.)
+const _analysed = new WeakMap();
 export function cleanProfile(positions, index, opts = {}) {
-  const P = positions, I = index || Uint32Array.from({ length: P.length / 3 }, (_, i) => i);
-  if (!P || P.length < 9 || I.length < 3) return { ok: false, why: 'the part has no surface' };
+  const P = positions, I = index || (P ? Uint32Array.from({ length: P.length / 3 }, (_, i) => i) : null);
+  if (!P || !I || P.length < 9 || I.length < 3) return { ok: false, why: 'the part has no surface' };
+  const key = !!opts.fillMachining + '|' + opts.tolerance + '|' + (opts.curved !== false);
+  let per = _analysed.get(P); if (!per || per.I !== I) { per = { I, by: new Map() }; _analysed.set(P, per); }
+  let an = per.by.get(key); if (!an) per.by.set(key, an = analyse(P, I, opts));
+  return an.found ? shapeProfile(P, I, opts, an) : an;
+}
+function analyse(P, I, opts) {
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], P[i + k]); hi[k] = Math.max(hi[k], P[i + k]); }
   const size = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
@@ -642,10 +652,14 @@ export function cleanProfile(positions, index, opts = {}) {
   // outer loops (counter-clockwise, not inside another one): the rest are chambers, or what sits in them
   const outer = sec.loops.filter(L => area2(L) > 0).filter((L, _, all) => !all.some(M => M !== L && Math.abs(area2(M)) > Math.abs(area2(L)) && inside(L[0], M)));
   if (!outer.length) return { ok: false, why: 'the cross-section has no outside (the faces may point inwards)' };
-  const chambersFound = sec.loops.filter(L => area2(L) < 0).length, keep = !!opts.keepChambers;
+  const chambersFound = sec.loops.filter(L => area2(L) < 0).length;
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const L of outer) for (const p of L) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
   const secSize = Math.hypot(x1 - x0, y1 - y0);
+  return { found, outer, chambersFound, secSize };
+}
+function shapeProfile(P, I, opts, { found, outer, chambersFound, secSize }) {
+  const { a, h0, h1, ends, sec } = found, len = found.curved ? found.length : h1 - h0, keep = !!opts.keepChambers;
   const W = opts.widthAbs >= 0 ? opts.widthAbs : (opts.width ?? 0.04) * secSize;
   const tol = opts.simplifyAbs >= 0 ? opts.simplifyAbs : secSize * 2e-4;
   let notches = 0, kept;
