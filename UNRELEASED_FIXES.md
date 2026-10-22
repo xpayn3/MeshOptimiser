@@ -13,6 +13,18 @@ Last release in the changelog: **v0.35.5**.
 
 ## Fixed
 
+- ![fix][fix] **Remove holes opened the part instead of closing it: polygons went missing on the far side.** With a large size, an
+  opening that is not a hole (a bore that runs on into other geometry) is sealed from outside, and the wall under it is taken out.
+  On a plate no thicker than the opening is wide, that column reached the face on the other side of the plate and took its triangles
+  too, so the plate came out with a hole in its back (a 25 mm plate with a 25 mm stepped bore: 27 open edges and five loose triangles
+  from 30 mm up). Such an opening is now left as it is and counted as an opening into a cavity; the rest of the part is filled as before.
+  Cause: the seal took every triangle in the column under the opening, including ones that face away from it (the part's far side), and
+  did not check what it left bare.
+  Where: `trySeal` in `app/js/holefill.js`: it gives up when the column holds a triangle facing away from the opening, or when what it
+  takes out borders one.
+  Test: `tests/holefill.test.mjs` section 8 (a hole into a slot cut from the underside: 28 open edges before, none now). Checked on the
+  model in Node at 12 to 12 000 mm: closed every time. Not yet checked in the app itself.
+
 ## Refactor
 
 - ![refactor][refactor] **Remove holes has a file of its own.** Its card (the size, the Advanced options and their saved values, the run

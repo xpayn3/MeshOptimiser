@@ -1,6 +1,6 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=32';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=33';
 import { installHoleFillCard } from './holefill-card.js?v=1';
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
@@ -1612,7 +1612,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=71', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=72', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;

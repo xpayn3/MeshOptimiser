@@ -770,10 +770,15 @@ export function fillFlatHoles(positions, index, opts = {}) {
       const d = fx * P[v * 3] + fy * P[v * 3 + 1] + fz * P[v * 3 + 2] - pd;
       return x >= x0 - pad && x <= x1 + pad && y >= y0 - pad && y <= y1 + pad && d <= tol && d >= -deep;
     };
+    // A triangle that faces away from the opening is not the hole's wall but the far side of the part (the column ran through a
+    // thin plate): taking it out would open the part where it can be seen. Then the opening is not sealed at all.
+    const away = (t) => ok[t] && nx[t] * fx + ny[t] * fy + nz[t] * fz < -0.5;
     const seen = new Set(), S2 = [];
+    let back = false;
     const take = (t) => {
       if (seen.has(t) || removed[t]) return;
       seen.add(t);
+      if (away(t)) { back = true; return; }
       let below = false;
       for (let c = 0; c < 3; c++) {
         const v = I[t * 3 + c];
@@ -784,7 +789,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
     };
     for (const h of lp.hes) for (const o of twins(h)) take((o / 3) | 0);
     for (let q = 0; q < S2.length; q++) {
-      if (S2.length > maxComponentTris) return false;
+      if (S2.length > maxComponentTris || back) return false;
       const t = S2[q];
       for (let e = 0; e < 3; e++) {
         const h = t * 3 + e;
@@ -792,7 +797,15 @@ export function fillFlatHoles(positions, index, opts = {}) {
         for (const o of twins(h)) if (loopOfHe[o] < 0) take((o / 3) | 0);
       }
     }
-    if (!S2.length) return false;
+    if (back || !S2.length) return false;
+    // What stays bare once S2 is out (an edge of S2 whose other side stays) is hidden behind the cap only while it does not border
+    // a surface that faces away: there the far side of the part would be left open.
+    const inS2 = new Set(S2), onLoop = new Set(lp.hes);
+    for (const t of S2) for (let e = 0; e < 3; e++) {
+      const h = t * 3 + e;
+      if (onLoop.has(h)) continue;
+      for (const o of twins(h)) { const u = (o / 3) | 0; if (!inS2.has(u) && !removed[u] && away(u)) return false; }
+    }
     const capMark = caps.length, ownerMark = capOwner.length, addedMark = result.addedTris;
     if (capLoop(lp) !== lp.hes.length - 2) { caps.length = capMark; capOwner.length = ownerMark; result.addedTris = addedMark; return false; }
     for (const t of S2) removed[t] = 1;

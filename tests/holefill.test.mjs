@@ -572,5 +572,38 @@ function plateThrough(r = 5, n = N) {
   check('a sheet beside the boss stays', b.res.removedTris === plain.res.removedTris, 'removed ' + b.res.removedTris + ' vs ' + plain.res.removedTris);
 }
 
+// 8. an opening that runs into a slot cut from the other side (it is not a hole: the slot leads to the plate's edge). Sealing it
+// from outside takes out the wall under the opening, and only that: before, the column under it reached the bottom face around
+// the slot and took those triangles too, so the plate came out with a hole in its underside.
+{
+  // a solid of 1 mm cells, with a face wherever a filled cell meets an empty one (outward, shared corners)
+  const blocks = (X, Y, Z, filled) => {
+    const m = mesh();
+    const at = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < X && y < Y && z < Z && filled(x, y, z);
+    for (let x = 0; x < X; x++) for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) {
+      if (!at(x, y, z)) continue;
+      const c = (i, j, k) => [x + i, y + j, z + k];
+      if (!at(x + 1, y, z)) m.quad(c(1, 0, 0), c(1, 1, 0), c(1, 1, 1), c(1, 0, 1));
+      if (!at(x - 1, y, z)) m.quad(c(0, 0, 0), c(0, 0, 1), c(0, 1, 1), c(0, 1, 0));
+      if (!at(x, y + 1, z)) m.quad(c(0, 1, 0), c(0, 1, 1), c(1, 1, 1), c(1, 1, 0));
+      if (!at(x, y - 1, z)) m.quad(c(0, 0, 0), c(1, 0, 0), c(1, 0, 1), c(0, 0, 1));
+      if (!at(x, y, z + 1)) m.quad(c(0, 0, 1), c(1, 0, 1), c(1, 1, 1), c(0, 1, 1));
+      if (!at(x, y, z - 1)) m.quad(c(0, 0, 0), c(0, 1, 0), c(1, 1, 0), c(1, 0, 0));
+    }
+    return m.done();
+  };
+  // plate 20 x 20 x 4; a 4 x 4 hole from the top, 2 mm deep, into a 4 mm wide slot along the underside out to the edge
+  const g = blocks(20, 20, 4, (x, y, z) => {
+    const inHole = x >= 8 && x < 12 && y >= 8 && y < 12;
+    if (inHole && z >= 2) return false;
+    if (z < 2 && x >= 8 && x < 12 && y >= 8) return false;
+    return true;
+  });
+  console.log('hole into a slot cut from the underside');
+  check('input is watertight', watertight(g.positions, g.index) === 0);
+  const a = run(g, 6, { seal: true });
+  check('the underside is not opened', a.open === 0, a.open + ' open edges, ' + brief(a.res));
+}
+
 console.log(failed ? '\n' + failed + ' check(s) failed' : '\nall checks passed');
 process.exit(failed ? 1 : 0);
