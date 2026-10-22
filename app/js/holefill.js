@@ -445,6 +445,8 @@ export function fillFlatHoles(positions, index, opts = {}) {
     }
   }
   const removed = new Uint8Array(T);
+  const holeOf = new Int32Array(T).fill(-1);            // triangle → the hole whose surface took it out
+  const metBy = new Map();                              // loop → the loops left alone whose surface ran up to it (see "the same hole" below)
   const caps = [], capOwner = [];
   if (!loops.length && !(opts.floating === true && bigLoops.length)) {
     // nothing to close: with opts.cleanup, still take out what an earlier fill left behind
@@ -487,10 +489,14 @@ export function fillFlatHoles(positions, index, opts = {}) {
     }
     let q = 0;
     const pending = [];
+    let metHole = false;                                // the surface ran into one a hole already took out
     for (;;) {
       for (; q < S.length && !reason; q++) {
         const t = S[q];
-        if (removed[t]) { reason = 'leaking'; break; }
+        if (removed[t]) {
+          if (holeOf[t] < 0) { reason = 'leaking'; break; }
+          metHole = true; continue;                     // (the cap of that hole closes the surface there)
+        }
         for (let c = 0; c < 3; c++) {
           const v = I[t * 3 + c];
           const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
@@ -518,6 +524,11 @@ export function fillFlatHoles(positions, index, opts = {}) {
       if (reason || !pending.length) break;
       seed(pending.pop());                              // carry on behind a loop that was swallowed
     }
+    // The same hole, seen from its other side. A plunged or flow-drilled hole is a cone into a bore whose collar stands under the
+    // sheet: from the top face it is a hole and is closed (the cone and the bore go, the collar's end is capped), and the loop round
+    // the collar's root on the underside then leads into what that fill took out. Nothing is left open there (the collar is a closed
+    // stub now), so the loop is settled with its hole and not counted as left alone.
+    if (!reason && metHole) { loops[L].state = 1; continue; }
     // A loop whose own face AND far side are both in the surface is interior
     // to the hole (the step of a counterbore): no cap there. If that happens
     // to the loop we started from, the surface has wrapped round onto the
@@ -672,6 +683,10 @@ export function fillFlatHoles(positions, index, opts = {}) {
       if ((reason === 'leaking' || reason === 'tooDeep') && opts.seal === true && !loops[L].big && loops[L].island === undefined && trySeal(L)) continue;
       loops[L].state = 2;
       result.skipped[reason] = (result.skipped[reason] || 0) + 1;
+      if (reason !== 'tooSmall' && reason !== 'kind') {
+        loops[L].skip = reason; loops[L].absorbed = absorbed;
+        for (const id of bounding) if (id !== L) { const l = metBy.get(id); if (l) l.push(L); else metBy.set(id, [L]); }
+      }
       if (opts.debug) (result.skippedList = result.skippedList || []).push({ reason, size: loops[L].size, tris: S.length, caps: capLoops.length, ext: [bx1 - bx0, by1 - by0, bz1 - bz0] });
       continue;
     }
@@ -690,8 +705,17 @@ export function fillFlatHoles(positions, index, opts = {}) {
       result.skipped.uncappable++;
       continue;
     }
-    for (const t of S) removed[t] = 1;
+    for (const t of S) { removed[t] = 1; holeOf[t] = L; }
     for (const id of all) loops[id].state = 1;
+    // The same hole met from the other side first (the collar side of a flow-drilled hole, which stands on its face and was left
+    // alone as raised): that loop's surface ran through this hole, up to one of its caps and across another. It is closed now.
+    for (const id of capLoops) {
+      for (const k of metBy.get(id) || NONE) {
+        const lk = loops[k];
+        if (lk.state !== 2 || !lk.skip || !capLoops.some(c => c !== id && lk.absorbed.has(c))) continue;
+        result.skipped[lk.skip]--; lk.skip = null; lk.state = 1;
+      }
+    }
     result.holes++;
     result.loops += nCaps;
     result.removedTris += S.length;

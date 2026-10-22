@@ -13,6 +13,20 @@ Last release in the changelog: **v0.35.5**.
 
 ## Fixed
 
+- ![fix][fix] **Remove holes said half the holes of a sheet-metal part were left alone, though they were closed.** A flow-drilled
+  (plunged) hole is a cone from the outer face into a bore whose collar hangs inside the sheet. The hole was filled from the outer
+  face, and then the loop round the collar's root on the inner face, the same hole seen from the other side, was counted again as
+  "an opening into a cavity" (or as "a raised feature" when the inner face came first). A hollow profile with 40 such holes reported
+  44 filled and 40 left alone. It now reports 44 filled and none left alone; what is built is the same as before (the cone and the
+  bore go, both ends are capped, the collar stays as a closed stub out of sight), and the part stays watertight.
+  Cause: once a hole was filled, its other loop was still looked at on its own: the surface behind it ran into the triangles the
+  fill had taken out, which counted as a leak; met from the collar side first, it stood on its face and counted as raised.
+  Where: `fillFlatHoles` in `app/js/holefill.js`: a loop whose surface runs into a filled hole is settled with that hole
+  (`holeOf`), and a loop left alone earlier whose surface ran through a hole that is then filled is taken off the count (`metBy`).
+  Test: `tests/holefill.test.mjs` section 15 (a plate with a cone, bore and collar, built with either face met first: one hole, none
+  left alone, watertight; before: one opening into a cavity, or one raised feature). Checked in Node on the customer's part
+  (`__0_1_1_57_000129__geom`, 41 872 triangles) at 50 to 1000 mm: watertight every time, nothing counted as a cavity any more. Not yet checked in the app itself.
+
 - ![fix][fix] **Ctrl+Z did nothing for a while after a model opened ("Wait until the running step has finished").** While the loader
   said "Preparing the view" (up to 12 seconds on a slow graphics card), undo and redo were refused, Claude's undo too, though other
   edits such as Duplicate went through. They work during it now; the view is still prepared the same way.

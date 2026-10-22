@@ -605,5 +605,34 @@ function plateThrough(r = 5, n = N) {
   check('the underside is not opened', a.open === 0, a.open + ' open edges, ' + brief(a.res));
 }
 
+// 15. a flow-drilled hole: a cone from the top face into a bore whose collar hangs under the plate (sheet-metal profiles are full of
+// them). Filled from the top, the cone and the bore go and the collar's end is capped; the loop round the collar's root on the
+// underside is the same hole seen from below and must not be counted as an opening left alone, whichever face is met first.
+// (Before: 1 filled and 1 "opening into a cavity" from the top, 1 filled and 1 "raised feature" from below.)
+function plateCollar(bottomFirst) {
+  const m = mesh(), n = 24;
+  const top = () => band(m, square(n, 20, 10), ring(n, 2.7, 10), true);
+  const bot = () => band(m, square(n, 20, 8), ring(n, 2.7, 8), false);
+  if (bottomFirst) { bot(); top(); } else { top(); bot(); }
+  wall(m, square(n, 20, 10), square(n, 20, 8), true);
+  wall(m, ring(n, 2.7, 10), ring(n, 1.5, 8.8), false);   // cone from the top face into the bore
+  wall(m, ring(n, 1.5, 8.8), ring(n, 1.5, 6.5), false);  // bore
+  band(m, ring(n, 2.5, 6.5), ring(n, 1.5, 6.5), false);  // the collar's end, facing down
+  wall(m, ring(n, 2.5, 7.8), ring(n, 2.5, 6.5), true);   // the collar's outside
+  wall(m, ring(n, 2.7, 8), ring(n, 2.5, 7.8), true);     // its root on the underside of the plate
+  return m.done();
+}
+for (const bottomFirst of [false, true]) {
+  const g = plateCollar(bottomFirst);
+  console.log('flow-drilled hole with a collar under the plate (' + (bottomFirst ? 'underside' : 'top') + ' met first)');
+  check('input is watertight', watertight(g.positions, g.index) === 0);
+  const a = run(g, 10, { seal: true });
+  const left = Object.values(a.res.skipped).reduce((x, y) => x + y, 0);
+  check('the hole is filled, once', a.res.holes === 1 && a.res.through === 1, brief(a.res));
+  check('nothing is counted as left alone', left === 0, brief(a.res));
+  check('watertight after', a.open === 0, a.open + ' open edges');
+  check('the cone and the bore are gone', a.res.removedTris >= 2 * 2 * 24, brief(a.res));
+}
+
 console.log(failed ? '\n' + failed + ' check(s) failed' : '\nall checks passed');
 process.exit(failed ? 1 : 0);
