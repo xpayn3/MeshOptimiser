@@ -1,8 +1,9 @@
 // node tests/e2e-load-settle.mjs [model]
 //
-// A model is shown only when it turns smoothly (_settleView in app.js). Opens a model and checks that the loader said "Preparing the
-// view", that when it went away the picking trees were built, and that the frames drawn in the first two seconds after it are even
-// (the longest no more than three times the middle one, or 150 ms). Needs the app served on APP_PORT (default 4242), Chrome and
+// A model is shown only when it turns smoothly (_settleView in app.js). Opens a model from the start screen, as a person does, and
+// checks that its loader said "Preparing the view" and was the only one (the separate loader card never came up over it), that when the
+// start screen went away the picking trees were built, and that the frames drawn in the first two seconds after it are even (the
+// longest no more than three times the middle one, or 150 ms). Needs the app served on APP_PORT (default 4242), Chrome and
 // Node 22+. GPU=1 uses the real graphics card (WebGPU); without it, Chrome's software WebGL2.
 import { spawn } from 'child_process';
 import path from 'path';
@@ -34,14 +35,16 @@ const attach = async () => {
   await send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 950, deviceScaleFactor: 1, mobile: false });
 };
 
-// Watches the loader: every message it shows, and the moment it goes away (with what was still going on then).
+// Watches the start screen's loader: every line under its heading, whether the separate loader card ever came up, and the moment the
+// screen goes away (with what was still going on then).
 const WATCH = `(() => {
-  const W = window.__settle = { msgs: [], hiddenAt: 0, bvhAtHide: null };
+  const W = window.__settle = { msgs: [], hiddenAt: 0, bvhAtHide: null, cardShown: false };
   let shown = false;
   const look = () => {
-    const l = document.getElementById('loader'), m = document.getElementById('loader-msg')?.textContent || '';
+    const l = document.getElementById('welcome-modal'), m = document.getElementById('wl-sub')?.textContent || '';
     const on = !!l && l.classList.contains('show');
-    if (on && W.msgs[W.msgs.length - 1] !== m) W.msgs.push(m);
+    if (document.getElementById('loader')?.classList.contains('show')) W.cardShown = true;
+    if (on && m && W.msgs[W.msgs.length - 1] !== m) W.msgs.push(m);
     if (shown && !on && window.state && window.state.parts.some(p => !p.deleted) && !W.hiddenAt) { W.hiddenAt = performance.now(); W.bvhAtHide = !!window.state._bvhBuilding; }
     shown = on;
   };
@@ -53,16 +56,15 @@ try {
   await send('Page.navigate', { url: URL + '?t=' + Date.now() });
   for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
   await sleep(1500);
-  await evalJS("document.getElementById('welcome-close')?.click()");
-  await sleep(500);
   await evalJS(WATCH);
   const t0 = Date.now();
   await evalJS(`(async () => { const r = await fetch(${JSON.stringify(encodeURI(MODEL))}); const b = await r.blob(); const f = new File([b], ${JSON.stringify(path.basename(MODEL))}); const dt = new DataTransfer(); dt.items.add(f); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
   if (await until("document.getElementById('import-modal').classList.contains('show')", 20)) await evalJS("document.querySelector('#import-modal-confirm')?.click()");
-  check('the model opened and the loader went away', await until('window.__settle.hiddenAt > 0', 240, 250));
+  check('the model opened and the start screen went away', await until('window.__settle.hiddenAt > 0', 240, 250));
   console.log('  loaded and shown in', ((Date.now() - t0) / 1000).toFixed(1), 's');
   const w = await evalJS('window.__settle');
-  check('the loader said it was preparing the view', w.msgs.includes('Preparing the view'), w.msgs);
+  check('the loader of the start screen said it was preparing the view', w.msgs.includes('Preparing the view'), w.msgs);
+  check('no separate loader card came up', w.cardShown === false, w);
   check('the picking trees were built before it went away', w.bvhAtHide === false, w);
   // The first two seconds after it, the view drawn on every frame, as while a person turns it.
   const f = await evalJS(`new Promise(res => {

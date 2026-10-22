@@ -1160,10 +1160,10 @@ function setLoader(show, msg='Loading', sub='') {
     setLoaderProgress(null);
     setLoaderSteps(null);
     _publishTask();
-    // Failure / cancel path: load is over but onModelLoaded was never
-    // called (it would have hidden the welcome modal already). Bring the
-    // user back to the picker pane so they can try a different file.
-    if (_welcomeActive()) { try { _Welcome?.enterPick(); } catch (_) {} }
+    // A model came in from the start screen: the screen closes now. Otherwise (a failure, a cancel: nothing came in) the user is
+    // brought back to the picker pane to try another file.
+    if (state._welcomeCloseAfterLoad) { state._welcomeCloseAfterLoad = false; try { _Welcome?.hide(); } catch (_) {} }
+    else if (_welcomeActive()) { try { _Welcome?.enterPick(); } catch (_) {} }
   }
 }
 function setLoaderProgress(pct) {
@@ -10868,7 +10868,10 @@ function onSceneActivated() {
   const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = false;
   // Export still requires geometry — re-evaluated on every part add/remove.
   const _exp = $('btn-export'); if (_exp) _exp.disabled = state.parts.length === 0;
-  try { _Welcome?.hide(); } catch (_) {}
+  // (a file opened from the start screen: the screen stays up with its loader until the view is ready, and setLoader(false) closes it;
+  // closing it here made the warm-up after the load open a second, separate loader)
+  if (_loaderStart && _welcomeActive()) state._welcomeCloseAfterLoad = true;
+  else { try { _Welcome?.hide(); } catch (_) {} }
   state._sceneActive = true;
   try { _refitGridSoon(); } catch (_) {}      // (every way of getting something into the scene ends here: a file, an import into the scene, a shape, a library part)
 }
@@ -10947,7 +10950,7 @@ async function _settleView(stillMine = () => true, capMs = 12000) {
   const nextFrame = () => new Promise(r => { const t = setTimeout(r, 250); requestAnimationFrame(() => { clearTimeout(t); r(); }); });
   let frames = 0, compiled = false;
   try {
-    setLoader(true, 'Preparing the view', 'Getting the model ready to turn smoothly');
+    setLoader(true, String(document.getElementById('loader-msg')?.textContent || 'Loading'), 'Preparing the view');
     setLoaderProgress(null);
     await new Promise(r => setTimeout(r, 0));          // (what the load queued for right after it: the shadows, the counts)
     // every shader program the scene needs, built without blocking the page
