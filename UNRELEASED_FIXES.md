@@ -74,6 +74,13 @@ Last release in the changelog: **v0.36.0**.
 
 ## Fixed
 
+- ![fix][fix] **A glTF with KTX2 textures fetched an old decoder from the internet.** The decoder for KTX2 (Basis Universal)
+  textures was taken from unpkg.com at three.js r172, while the loader that drives it is r186, and it needed a connection. It is now
+  three r186's own, shipped with the app in `vendor/three/examples/jsm/libs/basis/`, and Basis Universal is in the credits (Settings ›
+  About, the README and the site).
+  Cause: the transcoder path was left at the old version in the upgrade to r186. Where: `app/js/app.js` (the KTX2 setup in the glTF
+  loader, `_CREDITS`). Not yet tried with a KTX2 file.
+
 - ![fix][fix] **The blue focus ring came back round a view after Shift and a click.** An element that is never to show the ring
   when only a modifier is pressed (the section view of the Profile and Round cards) lost that after Shift was pressed and then let go
   and clicked: from then on the ring showed at every key. Now it keeps it.

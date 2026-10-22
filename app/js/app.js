@@ -3964,6 +3964,7 @@ const _Settings = (() => {
     ['three-mesh-bvh', 'Garrett Johnson', 'MIT', 'https://github.com/gkjohnson/three-mesh-bvh', 'Fast picking on big meshes.'],
     ['meshoptimizer', 'Arseny Kapoulkine', 'MIT', 'https://github.com/zeux/meshoptimizer', 'The simplifier behind Decimate and Smart Fit, and Meshopt compression.'],
     ['Draco', 'Google', 'Apache 2.0', 'https://github.com/google/draco', 'Reads and writes Draco-compressed GLB.'],
+    ['Basis Universal', 'Binomial LLC', 'Apache 2.0', 'https://github.com/BinomialLLC/basis_universal', 'Reads KTX2-compressed textures in glTF.'],
     ['Open Asset Import Library (assimpjs)', 'the assimp team and Viktor Kovacs', 'BSD 3-Clause; MIT', 'https://github.com/assimp/assimp', 'Opens other 3D formats.'],
     ['CadQuery OCP', 'the CadQuery contributors', 'Apache 2.0', 'https://github.com/CadQuery/OCP', 'Reads STEP files.'],
     ['Open CASCADE Technology', 'Open Cascade SAS', 'LGPL 2.1 with exception', 'https://dev.opencascade.org', 'The geometry kernel under OCP.'],
@@ -32305,7 +32306,7 @@ function _getGlbLoader(manager) {
   try {
     if (!_gltfKtx2) {
       _gltfKtx2 = new KTX2Loader();
-      _gltfKtx2.setTranscoderPath('https://unpkg.com/three@0.172.0/examples/jsm/libs/basis/');
+      _gltfKtx2.setTranscoderPath('./vendor/three/examples/jsm/libs/basis/');      // (three r186's own, shipped with the app: no fetch from the internet)
       if (renderer && typeof _gltfKtx2.detectSupport === 'function') _gltfKtx2.detectSupport(renderer);
     }
     loader.setKTX2Loader(_gltfKtx2);

@@ -573,6 +573,7 @@ MeshOptimiser is built on open source. Thank you to everyone who made these. The
 | [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) | Garrett Johnson | MIT | Fast picking on very large meshes |
 | [meshoptimizer](https://github.com/zeux/meshoptimizer) | Arseny Kapoulkine | MIT | The simplifier behind Decimate and Smart Fit, and Meshopt compression (gltfpack too, when installed) |
 | [Draco](https://github.com/google/draco) | Google | Apache 2.0 | Reads and writes Draco-compressed GLB |
+| [Basis Universal](https://github.com/BinomialLLC/basis_universal) | Binomial LLC | Apache 2.0 | Reads KTX2-compressed textures in glTF |
 | [Open Asset Import Library](https://github.com/assimp/assimp) (assimpjs) | the assimp team; Viktor Kovacs | BSD 3-Clause; MIT | Opens other 3D formats in the browser |
 | [CadQuery OCP](https://github.com/CadQuery/OCP) | the CadQuery contributors | Apache 2.0 | The Python bindings that read STEP files |
 | [Open CASCADE Technology](https://dev.opencascade.org) | Open Cascade SAS | LGPL 2.1 with exception | The geometry kernel under OCP |

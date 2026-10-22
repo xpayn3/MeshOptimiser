@@ -34,6 +34,7 @@ window.labApps = [
         { title: 'Mesh processing', items: [
           ['meshoptimizer', 'Arseny Kapoulkine', 'MIT', 'https://github.com/zeux/meshoptimizer', 'The simplifier behind Decimate and Smart Fit, and Meshopt compression on export (gltfpack too, when it is installed).'],
           ['Draco', 'Google', 'Apache 2.0', 'https://github.com/google/draco', 'Reads and writes Draco-compressed GLB files.'],
+          ['Basis Universal', 'Binomial LLC', 'Apache 2.0', 'https://github.com/BinomialLLC/basis_universal', 'Reads KTX2-compressed textures in glTF files.'],
           ['Open Asset Import Library (assimp), as assimpjs', 'The assimp team; assimpjs by Viktor Kovacs', 'BSD 3-Clause; MIT', 'https://github.com/assimp/assimp', 'Opens other 3D formats in the browser.'],
         ] },
         { title: 'Reading CAD', items: [
