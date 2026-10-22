@@ -1269,7 +1269,7 @@
 try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelectorAll('.hero-peek video').forEach(v => { v.removeAttribute('autoplay'); v.pause(); }); } catch (_) {}
 
 // The words over the timelapse: the video stays put and one word at a time comes up over it. --o (opacity), --y (a rise) and --b (a little blur)
-// on each word follow the scroll.
+// on each letter and --z (a zoom) on each word follow the scroll.
 try {
   const sec = document.querySelector('[data-words]');
   const still = window.matchMedia('(prefers-reduced-motion: reduce), (max-width: 760px)');
@@ -1290,6 +1290,10 @@ try {
       words.forEach((w, i) => {
         const x = p * n - i - 0.5;                        // 0 in the middle of this word's turn, -0.5 / 0.5 at its edges
         const into = i ? 0.56 : 0.5;                      // (a word comes in a little before the one before it has gone)
+        // and the whole word zooms: it grows into place from 72 % as it comes in, and keeps growing (to about 150 %) as it goes, so the scroll
+        // seems to fly through the words (--z, the scale of the h2)
+        const zi = eo(cl((x + into) / 0.42)), zo = cl((x - 0.1) / 0.36);
+        w.style.setProperty('--z', (0.72 + 0.28 * zi + 0.5 * zo * zo).toFixed(4));
         const chs = w.querySelectorAll('.ch');
         chs.forEach((ch, k) => {
           const d = chs.length > 1 ? (k / (chs.length - 1)) * 0.1 : 0;

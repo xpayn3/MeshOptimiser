@@ -579,7 +579,7 @@ window.labApps = [
       // The words that scroll past, one by one, after the timelapse (the page stays put while they change; Apple's way). Each is a big word and a
       // line under it. Only what the app does: no figures that are not measured.
       words: [
-        ['Light.', 'Fewer triangles, the same shape. It runs in your browser.'],
+        ['Fast.', 'Fewer triangles, the same shape. It runs in your browser.'],
         ['Free.', 'MIT licence. No account, no subscription.'],
         ['Powerful.', 'A thousand parts and millions of triangles.'],
       ],
