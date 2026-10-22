@@ -12,11 +12,27 @@ import { studioEnvironment, kindOfMesh, settleKinds } from './axle-look.js?v=5';
 
 const MAX_EXPLODE = 1.65;                                 // the app's exploded view at 165 %; the offsets in the file are for 100 %
 
+// The GLB goes out gzipped (axle-web.glb.gz, 0.8 MB instead of 1.4: GitHub Pages does not compress .glb) and is unpacked here. A browser
+// without DecompressionStream, or any failure, falls back to the plain file. (A server that already unpacked it: the gzip magic is checked.)
+async function loadAxle(loader, base) {
+  try {
+    if (typeof DecompressionStream !== 'function') throw 0;
+    const res = await fetch(base + 'axle-web.glb.gz?v=1');
+    if (!res.ok) throw 0;
+    let buf = await res.arrayBuffer();
+    const head = new Uint8Array(buf, 0, 2);
+    if (head[0] === 0x1f && head[1] === 0x8b) buf = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    return await loader.parseAsync(buf, base);
+  } catch (e) {
+    return loader.loadAsync(base + 'axle-web.glb?v=1');
+  }
+}
+
 export async function start(pop, base) {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const [gltf, table] = await Promise.all([
-    loader.loadAsync(base + 'axle-web.glb?v=1'),
+    loadAxle(loader, base),
     fetch(base + 'axle-offsets.json?v=1').then(r => r.json()),
   ]);
   const pin = pop.querySelector('.pop-pin');
