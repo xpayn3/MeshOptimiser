@@ -1,32 +1,31 @@
 {
  "schema": 1,
  "stable": {
-  "version": "0.35.5",
+  "version": "0.36.0",
   "date": "2026-10-22",
-  "headline": "Depth of field, a Visible switch and 42 fixes",
+  "headline": "The biggest update so far: three.js r186 under the view, USD and Collada files, a Profile tool, a still view refined in Photo mode, and 27 fixes.",
   "notes": [
-   "Photo mode has depth of field: Alt+click a point to focus on it.",
-   "Edit mesh has a Visible switch: off, a box or the Brush also takes back sides and hidden parts.",
-   "The status pills beside the camera pill slide in and out.",
-   "A merge keeps each part's own material, and a merged model keeps its colours.",
-   "Mirrored parts stay the right way out through Bake transforms and the booleans.",
-   "A damaged STEP file says what is wrong, and failed conversions leave nothing behind.",
-   "The app does no work while nothing happens, and tooltips are one short line."
+   "three.js r186 under the 3D view: models ready sooner, GPU memory given back",
+   "Opens USD and Collada files",
+   "Profile: clean outline, with a live cross-section",
+   "Photo mode refines a still view, and offers three looks",
+   "Focal length in mm, and textures on the material balls",
+   "27 fixes: Ctrl+Z right after opening, Remesh after Decimate, Remove holes"
   ],
   "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
   "archive": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.5/meshoptimiser-app-0.35.5.zip",
-   "sha256": "fc4238708b57e4e21e4579f705a5ab857894289b651e17f9ba044997de4f1b44",
-   "size": 12000111
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.36.0/meshoptimiser-app-0.36.0.zip",
+   "sha256": "33e9c7a636bbdb73869216a29a092fc723f825780f550687f1dc9ad54d21ffbc",
+   "size": 12479436
   },
   "requirements_sha256": "e3af5e22260095931b56d0d0d5c9215cd98b7540739be7eda417276748a7a322",
   "requirements_changed": false,
   "launcher": 4,
   "min_from": "",
   "installer": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.35.5/MeshOptimiser-v0.35.5.zip",
-   "sha256": "a2f26803670c621eb1ae029265e7596769499d509db14bf45084d148ec3794a5",
-   "size": 12043572
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.36.0/MeshOptimiser-v0.36.0.zip",
+   "sha256": "8fe41cc27b7a65c42c4c2e571f6a53c7f95dc7275d7d5fe4105a8128dc6f9862",
+   "size": 12522485
   }
  }
 }

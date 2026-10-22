@@ -5,7 +5,8 @@
 //                                              convexHull | convexPieces | mergeBodies | removeBlends (fillets and chamfers off: defeature.js) |
 //                                              roundFaces (fewer facets on the round faces: roundfaces.js) |
 //                                              removeCadFaces (whole CAD faces out, the gap patched and remeshed: cadcut.js) |
-//                                              remeshCadFaces (CAD faces remeshed, nothing taken out: cadcut.js)
+//                                              remeshCadFaces (CAD faces remeshed, nothing taken out: cadcut.js) |
+//                                              cleanProfile (a straight profile made solid, its narrow gaps filled: profile.js)
 //   runBoolean(kind, a, b)                    kind: union | subtract | intersect; a, b: { positions, index } in the same space
 // Both resolve with { ok, why?, positions, normals, index, ...the tool's own numbers }.
 // opts.uv: the part's UV sets ({ uv: Float32Array, uv1: ... }, one pair per vertex of `positions`; for a boolean, of a.positions): the
@@ -18,11 +19,12 @@ import { smoothSurface } from './smooth.js?v=3';
 import { convexHull, convexPieces } from './convex.js?v=2';
 import { removeBlends } from './defeature.js?v=4';
 import { simplifyRoundFaces } from './roundfaces.js?v=1';
+import { cleanProfile } from './profile.js?v=5';
 import { manifoldReady, mergeBodies, booleanOf } from './booleans.js?v=2';
 import { creasedNormals } from './voxel.js?v=2';
 import { carryUvs } from './uvcarry.js?v=2';
 
-const TOOLS = { closeCracks, removeSlivers, patchHoles, remeshEvenly, smoothSurface, convexHull, convexPieces, removeBlends, roundFaces: simplifyRoundFaces, removeCadFaces, remeshCadFaces };
+const TOOLS = { closeCracks, removeSlivers, patchHoles, remeshEvenly, smoothSurface, convexHull, convexPieces, removeBlends, roundFaces: simplifyRoundFaces, removeCadFaces, remeshCadFaces, cleanProfile };
 
 function shade(r, deg) {
   if (!r || r.ok === false) return r || { ok: false, why: 'nothing came back' };

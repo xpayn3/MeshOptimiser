@@ -342,6 +342,18 @@
           }
         }
         grp.updateMatrixWorld(true);
+        // The cloner's box is the whole array, not the source alone. The near
+        // and far planes, framing and measuring read p.bbox, and with the box
+        // of the source only, the copies nearer the camera than the source
+        // were cut away by the near plane while the view was panned.
+        try {
+          const b = new THREE.Box3().setFromObject(grp);
+          if (!b.isEmpty()) {
+            if (p.bbox) p.bbox.copy(b); else p.bbox = b;
+            const sz = b.getSize(new THREE.Vector3());
+            p.sizeMetrics = { diag: sz.length(), vol: 0, max: Math.max(sz.x, sz.y, sz.z) };
+          }
+        } catch (_) {}
         try { window._clayRefresh && window._clayRefresh(); } catch (_) {}     // new copies wear the Clay view too, if it is on
       } finally {
         state.renderPaused = _wasPaused;
@@ -716,14 +728,16 @@
       // `whole` marks a field that only takes whole numbers (the counts). The
       // others move in steps of `step` on the slider but take any number
       // typed into the box: a distance of 12.5 or an angle of 22.5.
-      const slider = (label, key, val, min, max, step, suffix='', whole=false) => `
-        <div class="prim-row" data-cln-field="${key}"${whole ? ' data-cln-int="1"' : ''}>
+      // `open` lifts the limits of what can be typed: 'both' (distances, any
+      // size either way) or 'hi' (the radius: no upper limit).
+      const slider = (label, key, val, min, max, step, suffix='', whole=false, open='') => `
+        <div class="prim-row" data-cln-field="${key}"${whole ? ' data-cln-int="1"' : ''}${open ? ` data-cln-open="${open}"` : ''}>
           <label class="prim-label">${escapeHtml(label)}</label>
           <input type="range" data-cln-input min="${min}" max="${max}" step="${step}" value="${val}" class="prim-slider">
-          <span class="prim-val-wrap"><input type="number" class="prim-value" data-cln-value min="${min}" max="${max}" step="${whole ? step : 'any'}" value="${val}">${suffix ? `<span class="prim-unit">${escapeHtml(suffix)}</span>` : ''}</span>
+          <span class="prim-val-wrap"><input type="number" class="prim-value" data-cln-value${open === 'both' ? '' : ` min="${min}"`}${open ? '' : ` max="${max}"`} step="${whole ? step : 'any'}" value="${val}">${suffix ? `<span class="prim-unit">${escapeHtml(suffix)}</span>` : ''}</span>
         </div>`;
       const intSlider = (label, key, val, min, max) => slider(label, key, val, min, max, 1, '', true);
-      const distSlider = (label, key, val) => slider(label, key, val, -500, 500, 1, u);
+      const distSlider = (label, key, val) => slider(label, key, val, -500, 500, 1, u, false, 'both');
       const angSlider = (label, key, val, min=-360, max=360) => slider(label, key, val, min, max, 1, '°');
       const scaleSlider = (label, key, val) => slider(label, key, val, 0.1, 3, 0.05, '×');
       const axisSel = (val) => `
@@ -736,8 +750,8 @@
           </select>
         </div>`;
       const toggle = (label, key, val, hint='') => `
-        <div class="prim-row cln-toggle-row" data-cln-toggle-row="${key}">
-          <label class="prim-label">${escapeHtml(label)}${hint ? `<span class="cln-hint">${escapeHtml(hint)}</span>` : ''}</label>
+        <div class="prim-row cln-toggle-row" data-cln-toggle-row="${key}"${hint ? ` title="${escapeHtml(hint)}"` : ''}>
+          <label class="prim-label">${escapeHtml(label)}</label>
           <label class="prim-toggle"><input type="checkbox" data-cln-toggle="${key}" ${val ? 'checked' : ''}><span></span></label>
         </div>`;
       const subhead = (label) => `<div class="cln-subhead">${escapeHtml(label)}</div>`;
@@ -763,7 +777,7 @@
         const R = c.radial;
         modeBody =
           intSlider('Count', 'radial.count', R.count, 1, 200) +
-          slider('Radius', 'radial.radius', R.radius, 0, 1000, 1, u) +
+          slider('Radius', 'radial.radius', R.radius, 0, 1000, 1, u, false, 'hi') +
           axisSel(R.axis) +
           subhead('Sweep') +
           angSlider('Start', 'radial.startDeg', R.startDeg) +
@@ -912,7 +926,8 @@
           valEl.addEventListener('focus', _beginGesture);
           valEl.addEventListener('change', () => {
             const v = parse(valEl.value);
-            const lo = parse(input.min), hi = parse(input.max);
+            const open = row.dataset.clnOpen || '';
+            const lo = open === 'both' ? -Infinity : parse(input.min), hi = open ? Infinity : parse(input.max);
             if (Number.isNaN(v)) { valEl.value = getField(fId); return; }
             const clamped = Math.max(lo, Math.min(hi, v));
             valEl.value = clamped;
@@ -1498,7 +1513,7 @@
         .cln-card{display:flex;flex-direction:column;padding:0}
 
         /* ── Card header ── accent strip + icon tile + title + count chips */
-        .cln-card-head{padding:var(--space-lg) var(--space-md) var(--space-md);background:linear-gradient(180deg,var(--ac-tint-08) 0%,transparent 100%);border-bottom:1px solid var(--bd)}
+        .cln-card-head{padding:var(--space-md) 0 var(--space-xl);border-bottom:1px solid var(--surface-line)}
         .cln-card-head-row{display:flex;align-items:center;gap:10px}
         .cln-card-icon{flex:0 0 36px;width:36px;height:36px;border-radius:var(--r-md);background:linear-gradient(135deg,var(--ac),var(--ac-active));display:grid;place-items:center;color:#fff;box-shadow:0 6px 18px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.18)}
         .cln-card-icon svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
@@ -1510,7 +1525,7 @@
         .cln-source-chip svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
 
         /* ── Mode picker — three icon cards with a clear active state. */
-        .cln-mode-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:var(--space-md) var(--space-md) var(--space-sm)}
+        .cln-mode-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-md);padding:var(--space-xl) 0 var(--space-md)}
         .cln-mode-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:9px 6px;background:var(--bg2);color:var(--tx3);border:1px solid var(--bd);border-radius:var(--r-md);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);font:inherit}
         .cln-mode-card svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;transition:transform var(--dur-fast) var(--ease-out)}
         .cln-mode-card span{font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:.01em}
@@ -1520,32 +1535,28 @@
         .cln-mode-card.active svg{stroke-width:2}
 
         /* ── Section bodies — wrap sliders / toggles with consistent padding. */
-        .cln-section-body{padding:0 var(--space-md);display:flex;flex-direction:column}
-        .cln-section-body .prim-row{padding:5px 0}
+        .cln-section-body{padding:0;display:flex;flex-direction:column}
 
         /* ── Section subheads — small caps to group Pos/Rot/Scale clusters. */
-        .cln-subhead{font-size:var(--fs-10);font-weight:var(--fw-semibold);color:var(--tx3);text-transform:uppercase;letter-spacing:var(--tracking-wide);margin:10px 0 2px;padding-top:8px;border-top:1px solid var(--s2)}
-        .cln-subhead:first-child{margin-top:2px;padding-top:0;border-top:0}
+        .cln-subhead{font-size:var(--fs-11);font-weight:var(--fw-regular);color:var(--tx3);text-transform:uppercase;letter-spacing:var(--tracking-wide);margin:var(--space-xl) 0 var(--space-xs);padding-top:var(--space-xl);border-top:1px solid var(--surface-line)}
+        .cln-subhead:first-child{margin-top:var(--space-xs);padding-top:0;border-top:0}
 
-        /* ── Inline secondary hint (sits under the toggle label). */
-        .cln-hint{display:block;font-size:var(--fs-10);color:var(--tx3);font-weight:var(--fw-regular);margin-top:2px;line-height:var(--lh-base);max-width:200px;white-space:normal}
-
-        /* ── Toggle row — overrides .prim-row defaults to give the label
-              breathing room when it carries a hint underneath. */
-        .cln-toggle-row{padding:7px 0!important;align-items:start!important}
+        /* ── Toggle row — the switch at the right edge, in line with the
+              number fields (its description is the row's tooltip). */
+        .cln-toggle-row .prim-toggle{justify-self:end}
 
         /* ── Divider between sections inside the card. */
-        .cln-divider{height:1px;background:var(--bd);margin:var(--space-md) var(--space-md) 0;opacity:.6}
+        .cln-divider{height:1px;background:var(--surface-line);margin:var(--space-xl) 0 var(--space-md)}
 
         /* ── Empty state — pop-out invite to drag a part in. */
-        .cln-empty{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 12px;margin:var(--space-md);font-size:var(--fs-11);color:var(--tx3);background:var(--ac-tint-04);border:1px dashed var(--ac-line);border-radius:var(--r-md);text-align:center;line-height:var(--lh-base)}
+        .cln-empty{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 12px;margin:var(--space-xl) 0 0;font-size:var(--fs-11);color:var(--tx3);background:var(--ac-tint-04);border:1px dashed var(--ac-line);border-radius:var(--r-md);text-align:center;line-height:var(--lh-base)}
         .cln-empty-icon{width:22px;height:22px;color:var(--ac-text);stroke:currentColor;fill:none;stroke-width:1.6;margin-bottom:2px}
         .cln-empty-text{font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx2)}
         .cln-empty-sub{font-size:var(--fs-11);color:var(--tx3)}
         .cln-empty strong{color:var(--ac-text);font-weight:var(--fw-semibold)}
 
         /* ── Foot — Reset + Dissolve, right-aligned. */
-        .cln-foot{display:flex;gap:8px;padding:var(--space-md);justify-content:flex-end;border-top:1px solid var(--bd);margin-top:var(--space-md)}
+        .cln-foot{display:flex;gap:var(--space-md);padding:var(--space-xl) 0;justify-content:flex-end;border-top:1px solid var(--surface-line);margin-top:var(--space-md)}
         .cln-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);background:var(--bg2);border:1px solid var(--bd);color:var(--tx2);border-radius:var(--r-sm);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
         .cln-btn:hover{background:var(--bg3);color:var(--tx);border-color:var(--bd2)}
         .cln-btn-warn:hover{background:var(--er-soft);border-color:var(--er-line);color:var(--er)}

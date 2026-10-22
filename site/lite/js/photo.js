@@ -8,14 +8,23 @@
 //   vignette           the edges fall off
 //   film grain         a little noise takes the digital edge off the gradients
 //   depth of field     what is nearer or further than the focus goes soft (off at first; the focus is a point in the scene)
-// three.js r172 ships none of these as ready nodes in the bundle this app vendors, so they are written here in its shader language
-// (TSL). Nothing here touches the scene: app.js decides when to call render() instead of renderer.render(), and sets the lighting.
+// While the view is still, the picture is drawn again and again and the frames are averaged (the quality preset says how many): each
+// frame is moved by a fraction of a pixel (edges come out smooth), the occlusion and the depth of field take their samples at a
+// different turn (their noise averages away), and onSample may move the sun a little (its shadow gets a soft edge, as from a sun of
+// real size). Anything that moves or changes starts the average again. The film grain is put on after the average.
+// The look is the tone curve the picture is finished with: Neutral (colours as they are, for products), AgX (soft, film-like highlights)
+// or ACES (contrasty, the look photo mode had before).
+// They were written here in three's shader language (TSL) when the app was on three r172, whose bundle had none of them as ready
+// nodes. Nothing here touches the scene: app.js decides when to call render() instead of renderer.render(), and sets the lighting.
 //
 // Each effect can be switched off (it is then not in the chain at all, so it costs nothing) and has a strength; the quality preset
 // sets the multisampling and how many samples the occlusion and the glow take. Strengths are uniforms (moving a slider never rebuilds the
 // chain); an effect switch or the quality preset rebuilds it, on the next frame.
 //
-// createPhoto({ THREE, getRenderer, getScene, getCamera }) -> { enable, disable, render, set, get, setOn, isOn, setQuality, quality, enabled, dispose }
+// createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus, onSample })
+//   -> { enable, disable, render, restart, refining, frames, set, get, setOn, isOn, setQuality, quality, setLook, look, enabled, dispose }
+// render(reach) draws one frame and adds it to the average; refining is true while the average wants more frames.
+// onSample(i) is called before frame i (from 1) of an average and may return a function that undoes what it changed.
 
 export const PHOTO_DEFAULTS = Object.freeze({
   ao: 0.65,          // 0..1   strength of the ambient occlusion
@@ -28,25 +37,38 @@ export const PHOTO_DEFAULTS = Object.freeze({
 export const PHOTO_EFFECTS = Object.freeze(Object.keys(PHOTO_DEFAULTS));
 
 // msaa: samples of the multisampled picture; ao: samples of the occlusion; glow: half-width of the blur (taps = 2 x glow + 1);
-// dof: samples of the out-of-focus blur
+// dof: samples of the out-of-focus blur; frames: how many frames a still view is averaged over (1: none)
 export const PHOTO_QUALITY = Object.freeze({
-  draft: Object.freeze({ msaa: 0, ao: 8, glow: 2, dof: 16 }),
-  good: Object.freeze({ msaa: 2, ao: 12, glow: 3, dof: 28 }),
-  best: Object.freeze({ msaa: 4, ao: 16, glow: 4, dof: 40 }),
-  max: Object.freeze({ msaa: 4, ao: 24, glow: 6, dof: 64 }),
+  draft: Object.freeze({ msaa: 0, ao: 8, glow: 2, dof: 16, frames: 1 }),
+  good: Object.freeze({ msaa: 2, ao: 12, glow: 3, dof: 28, frames: 16 }),
+  best: Object.freeze({ msaa: 4, ao: 16, glow: 4, dof: 40, frames: 32 }),
+  max: Object.freeze({ msaa: 4, ao: 24, glow: 6, dof: 64, frames: 64 }),
 });
+// The tone curves the picture can be finished with (names of three's constants).
+export const PHOTO_LOOKS = Object.freeze({ neutral: 'NeutralToneMapping', agx: 'AgXToneMapping', aces: 'ACESFilmicToneMapping' });
+// The sub-pixel shift of frame i of an average, in pixels (-0.5..0.5): the Halton sequence in bases 2 and 3, so any number of frames
+// covers the pixel evenly. Frame 0 is not moved (a single frame is the picture as it always was).
+const halton = (i, b) => { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
+export const photoJitter = (i) => (i <= 0 ? [0, 0] : [halton(i, 2) - 0.5, halton(i, 3) - 0.5]);
 // The widest blur, at 100 %, as a share of the picture's height.
 const DOF_MAX = 0.028;
 // How fast the blur grows away from the focus: a point this share of its own distance nearer or further is fully soft. (Relative,
 // so it reads the same for a watch and for a car: depth of field is a matter of how far apart things are compared with how far away.)
 const DOF_SPAN = 0.35;
 
-export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus }) {
+export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus, onSample }) {
   const T = THREE.TSL;
   const opts = { ...PHOTO_DEFAULTS };
   const enabledFx = Object.fromEntries(PHOTO_EFFECTS.map((k) => [k, k !== 'dof']));      // (depth of field starts off: it hides detail)
-  let qualityName = 'best';
+  let qualityName = 'best', lookName = 'neutral';
   let post = null, built = null, on = false, builtCamera = null, dirty = true;
+  // The average: two half-float targets, one read while the other is written (the newest is `read`); `count` frames are in it.
+  // `accIn` is what the averaging pass reads, `accOut` what the finishing pass shows (both swapped to the right target each frame).
+  let rts = null, read = 0, count = 0, lastView = null, restartAsked = true, finish = null, accIn = null, accOut = null;
+  // The view an average was made for: the size, the reach and the camera's two matrices. The same view when every number is within a
+  // millionth of what it was (relative; rounding of a camera worked out again every frame is not a move).
+  const viewOf = (size, camera) => [size.x, size.y, u.radius.value, ...camera.matrixWorld.elements, ...camera.projectionMatrix.elements];
+  const sameView = (a, b) => !!a && !!b && a.length === b.length && a.every((x, i) => Math.abs(x - b[i]) <= 1e-6 * (1 + Math.abs(b[i])));
 
   // Everything the user can move is a uniform: changing a slider never rebuilds the chain.
   const u = {
@@ -63,6 +85,9 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
     aspect: T.uniform(1),
     seed: T.uniform(0),
     texel: T.uniform(new THREE.Vector2(1 / 1920, 1 / 1080)),
+    frame: T.uniform(0),             // frame of the average (0: the first): turns the occlusion's noise
+    rot: T.uniform(0),               // turn of the depth of field's spiral for this frame (radians)
+    blend: T.uniform(1),             // share of the new frame in the average (1 / frames so far)
   };
 
   // n taps on a spiral (golden angle), spread over the disc: the same set for every pixel, turned by a per-pixel angle in the shader.
@@ -121,7 +146,7 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
         const sky = step(0.99999, depthTex.sample(screenUV).r);
         // how far, in uv, a world length of `radius` reaches at this depth (perspective: shrinks with distance)
         const reach = mix(u.radius.mul(u.projY).mul(0.5).div(max(z0.negate(), 1e-4)), u.radius.mul(u.projY).mul(0.5), u.ortho);
-        const ang = noise(1.0).mul(6.2831853);
+        const ang = T.fract(noise(1.0).add(u.frame.mul(0.618034))).mul(6.2831853);      // (frame 0: the pattern as it always was)
         const ca = cos(ang), sa = sin(ang);
         let occ = float(0);
         for (const [tx, ty] of taps) {
@@ -196,6 +221,7 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
         const dist = z.negate();
         return clamp(abs(dist.sub(u.focus)).div(max(mix(dist, u.focus, u.ortho), 1e-6)).div(DOF_SPAN), 0, 1).mul(maxR);
       };
+      const rc = cos(u.rot), rs = sin(u.rot);
       col = Fn(() => {
         const z0 = viewZAt(screenUV), c0 = cocAt(z0);
         const sum = preTex.sample(screenUV).rgb.toVar(), tot = float(1).toVar();
@@ -203,7 +229,8 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
         for (let i = 0; i < n; i++) {
           const a = i * 2.39996323, r = Math.sqrt((i + 0.5) / n);
           const rr = maxR.mul(r);
-          const off = vec2(Math.cos(a) * r, Math.sin(a) * r).mul(maxR).mul(vec2(float(1).div(u.aspect), 1));
+          const cx = Math.cos(a) * r, cy = Math.sin(a) * r;
+          const off = vec2(rc.mul(cx).sub(rs.mul(cy)), rs.mul(cx).add(rc.mul(cy))).mul(maxR).mul(vec2(float(1).div(u.aspect), 1));
           const uv = screenUV.add(off), z = viewZAt(uv);
           const cs = cocAt(z);
           const reach = mix(cs, min(cs, c0.mul(2)), step(z, z0));        // (z <= z0: that point is further away than this pixel)
@@ -220,33 +247,43 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
       const vc = fromC.mul(vec2(u.aspect, 1)).mul(1.15);
       col = col.mul(float(1).sub(smoothstep(0.35, 1.1, length(vc)).mul(u.vignette)));
     }
-    // Film grain, by luminance so that dark areas are not lit up by it
+    // The average: this frame mixed into what the earlier ones made (blend is 1 on the first frame, so the old content does not count).
+    const avg = mix(accIn.sample(screenUV).rgb, col, u.blend);
+    // Film grain, by luminance so that dark areas are not lit up by it. Put on the average (averaged, it would be gone).
+    let shown = accOut.sample(screenUV).rgb;
     if (fx.grain) {
       const g = noise(7.0, true).sub(0.5).mul(u.grain).mul(0.08);
-      col = col.add(g.mul(clamp(luminance(col).add(0.15), 0, 1)));
+      shown = shown.add(g.mul(clamp(luminance(shown).add(0.15), 0, 1)));
     }
-    return { scenePass, node: vec4(col, 1) };
+    return { scenePass, node: vec4(avg, 1), shown: vec4(shown, 1) };
   }
 
-  // (Re)builds the chain when it is missing, the camera changed or a switch or the quality changed. The output transform of the chain
-  // reads the renderer's tone mapping once, when it is built: ACES gives a photograph's shoulder on the highlights (the viewport's
-  // neutral curve is made for colour accuracy), so the renderer is borrowed for that moment and given back. Screenshots and everything
-  // else that draws straight to the canvas keep the viewport's own curve.
+  // (Re)builds the chain when it is missing, the camera changed or a switch, the quality or the look changed.
+  // Two passes: `post` draws a frame of the chain and mixes it into the average (linear light, no tone curve: it writes a half-float
+  // target); `finish` puts the grain on the average and finishes it with the look's tone curve (at exposure 1) onto the canvas. The
+  // curve is applied in the chain, not lent to the renderer: since three r184 a pipeline reads the renderer's tone mapping on every
+  // frame. Screenshots and everything else that draws straight to the canvas keep the viewport's own curve.
   function ensure() {
     const renderer = getRenderer(), scene = getScene(), camera = getCamera();
     if (!renderer || !scene || !camera) return false;
     if (post && builtCamera === camera && !dirty) return true;
     try { built?.scenePass?.dispose?.(); } catch (_) {}
+    if (!rts) {
+      const mk = () => new THREE.RenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
+      rts = [mk(), mk()];
+      accIn = T.texture(rts[0].texture);
+      accOut = T.texture(rts[0].texture);
+    }
     built = build(scene, camera);
-    post = new THREE.PostProcessing(renderer);
+    post = new THREE.RenderPipeline(renderer);
+    post.outputColorTransform = false;
     post.outputNode = built.node;
-    const tone = renderer.toneMapping, exposure = renderer.toneMappingExposure;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    try { post.needsUpdate = true; post._update(); }
-    finally { renderer.toneMapping = tone; renderer.toneMappingExposure = exposure; }
+    finish = new THREE.RenderPipeline(renderer);
+    finish.outputColorTransform = false;
+    finish.outputNode = T.renderOutput(T.toneMapping(THREE[PHOTO_LOOKS[lookName]] ?? THREE.NeutralToneMapping, T.float(1), built.shown), THREE.NoToneMapping, renderer.outputColorSpace);
     builtCamera = camera;
     dirty = false;
+    restartAsked = true;
     return true;
   }
 
@@ -257,7 +294,7 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
     return true;
   }
 
-  function disable() { on = false; }
+  function disable() { on = false; restartAsked = true; }
 
   // One frame. `reach` is the model's size (its bounding box diagonal): the occlusion reach follows it.
   function render(reach) {
@@ -276,13 +313,46 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
       const p = getFocus && getFocus();
       if (p) { camera.updateMatrixWorld(); const v = p.clone().applyMatrix4(camera.matrixWorldInverse); u.focus.value = Math.max(1e-6, -v.z); }
     }
-    post.render();
+    // The average starts again when the view, the size or the reach changed, or restart() was asked for.
+    camera.updateMatrixWorld();
+    const view = viewOf(size, camera);
+    if (restartAsked || !sameView(view, lastView)) { count = 0; restartAsked = false; lastView = view; }
+    const frames = (PHOTO_QUALITY[qualityName] || PHOTO_QUALITY.best).frames;
+    if (count < frames) {
+      for (const rt of rts) rt.setSize(size.x, size.y);
+      const i = count;
+      u.blend.value = 1 / (i + 1);
+      u.frame.value = i;
+      u.rot.value = i * 2.39996323;
+      // this frame moved by a fraction of a pixel (in clip space: the perspective matrix moves x and y by z, the orthographic by 1)
+      const e = camera.projectionMatrix.elements, ortho = e[15] !== 0, ix = ortho ? 12 : 8, iy = ortho ? 13 : 9;
+      const kx = e[ix], ky = e[iy], [jx, jy] = photoJitter(i);
+      e[ix] += (2 * jx) / size.x; e[iy] += (2 * jy) / size.y;
+      let undo = null;
+      try { if (i > 0 && onSample) undo = onSample(i); } catch (_) {}
+      const prevTarget = renderer.getRenderTarget();
+      try {
+        accIn.value = rts[read].texture;
+        renderer.setRenderTarget(rts[1 - read]);
+        post.render();
+      } finally {
+        renderer.setRenderTarget(prevTarget);
+        e[ix] = kx; e[iy] = ky;
+        try { undo?.(); } catch (_) {}
+      }
+      read = 1 - read;
+      count++;
+    }
+    accOut.value = rts[read].texture;
+    finish.render();
     return true;
   }
+  function restart() { restartAsked = true; }
 
   function set(key, value) {
     if (!(key in PHOTO_DEFAULTS)) return;
     const v = Math.min(1, Math.max(0, Number(value) || 0));
+    if (opts[key] !== v) restartAsked = true;
     opts[key] = v;
     u[key].value = v;
   }
@@ -295,13 +365,24 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus 
     if (!PHOTO_QUALITY[name] || name === qualityName) return;
     qualityName = name; dirty = true;
   }
+  function setLook(name) {
+    if (!PHOTO_LOOKS[name] || name === lookName) return;
+    lookName = name; dirty = true;
+  }
 
   return {
-    enable, disable, render, set, setOn, setQuality,
+    enable, disable, render, restart, set, setOn, setQuality, setLook,
     get: (key) => opts[key],
     isOn: (key) => !!enabledFx[key],
     get quality() { return qualityName; },
+    get look() { return lookName; },
+    get frames() { return count; },
+    get refining() { return on && !restartAsked && count < (PHOTO_QUALITY[qualityName] || PHOTO_QUALITY.best).frames; },
     get enabled() { return on; },
-    dispose() { disable(); try { built?.scenePass?.dispose?.(); } catch (_) {} post = null; built = null; builtCamera = null; },
+    dispose() {
+      disable(); try { built?.scenePass?.dispose?.(); } catch (_) {}
+      try { rts?.forEach((rt) => rt.dispose()); } catch (_) {}
+      post = null; finish = null; built = null; builtCamera = null; rts = null; accIn = null; accOut = null;
+    },
   };
 }

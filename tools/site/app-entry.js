@@ -733,7 +733,7 @@ window.labApps = [
       ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
       ['Stacked copies', 1, [], ['stacked-copies']],
     ],
-    stats: [['Version', '0.35.5'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
+    stats: [['Version', '0.36.0'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',
       '400 identical bolts, 80 duplicate brackets, half a million broken triangles. MeshOptimiser keeps each repeat once, rebuilds the bad geometry and drops what you can’t see.',
@@ -752,6 +752,7 @@ window.labApps = [
     ],
     featureGroups: [
       { title: 'Convert', note: 'STEP to GLB', items: [
+        ['USD and Collada', 'Opens .usd, .usda, .usdc, .usdz and .dae too, standing the right way up and at the right size.', 'new'],
         ['Reads the whole assembly', 'Colours, names and the whole part tree come through.'],
         ['Finds repeats', 'Same shape, any angle: stored once, drawn many times.'],
         ['Rebuilds the surfaces', 'Set the detail in millimetres, or as a share of the model.'],
@@ -770,6 +771,7 @@ window.labApps = [
         ['Long jobs in the background', 'Big conversions run as jobs, with progress in the window.'],
       ] },
       { title: 'Clean up', items: [
+        ['Profile: clean outline', 'A window frame, an extrusion or a seal strip becomes one clean solid. See the cross-section before and after, then Apply.', 'new'],
         ['Model inspector', 'Everything about the model in one window, and what is broken in it. Press a button to scan, then fix each problem with one more.'],
         ['Fix normals', 'Find faces that point the wrong way, turn them round or line them up, and paint the wrong side red while you look.'],
         ['UV layout', 'See how a texture sits on a part: the islands, the overlaps and what lies outside the square.'],
@@ -807,7 +809,7 @@ window.labApps = [
         ['Big parts too', 'A part of millions of triangles is read in the background, shows its points and moves in half a second.'],
         ['Enter into Edit mesh', 'With a part selected, Enter goes into Edit mesh in the mode you used last, and Enter again comes out.'],
         ['Click, Box, Brush', 'Three ways to pick. Double-click takes the whole loop.'],
-        ['What you see, or everything', 'A Visible switch over the view: a box or the Brush takes only what you can see, or the back sides and the hidden parts too.', 'new'],
+        ['What you see, or everything', 'A Visible switch over the view: a box or the Brush takes only what you can see, or the back sides and the hidden parts too.'],
         ['Move what you picked', 'Move, turn and scale pieces with the gizmo. One undo.'],
         ['Dissolve', 'Points out, surface closed, no hole.'],
         ['Weld and Fill', 'Join points. Close a hole from its rim.'],
@@ -896,7 +898,11 @@ window.labApps = [
         ['Keyboard remapper', 'The shortcuts window is a keyboard: lit keys carry their command, and holding Ctrl, Shift or Alt shows what those do. Click a shortcut, press new keys, and a key that is taken warns you first. Keep your set in a profile, one per person.'],
         ['Scene tabs', 'Each tab is its own scene. Opening a file never replaces your work. Copy parts from one tab, or one window, into another.'],
         ['Cards over the model', 'Tools open as cards you can move. Enter runs, Esc closes.'],
-        ['Depth of field', 'Photo mode softens what is nearer or further than the point you Alt+click, as a camera lens does.', 'new'],
+        ['Depth of field', 'Photo mode softens what is nearer or further than the point you Alt+click, as a camera lens does.'],
+        ['Photo mode, refined', 'Hold still and Photo mode smooths the edges and the shadows over up to 32 frames. Pick a look: Neutral, Soft or Contrast.', 'new'],
+        ['The lens in millimetres', 'Set the lens as on a camera: 35 mm wide, 85 mm close. Right-click the camera pill for the lens and navigation.', 'new'],
+        ['Textures where you pick them', 'Material balls and texture slots show the picture, a picture dropped on a slot goes on, and FBX and OBJ files find their maps by name.', 'new'],
+        ['The latest three.js', 'The 3D view runs on three.js r186: big models are ready sooner and give their graphics memory back.', 'new'],
         ['A look of your own', 'Accent colour, tones, font, text size, corners and density.'],
         ['Numbers you drag', 'Drag any number sideways to change it, or click to type. Right-click to reset, step, double or halve it.'],
         ['Search (Shift + C)', 'Commands, settings, parts, library: one box. Typos and initials still find it.'],
@@ -1037,7 +1043,23 @@ window.labApps = [
     changelog: {
       link: 'https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md',
       versions: [
-        { version: '0.35.5', fixes: 42, date: '22 Oct 2026 · 09:22', latest: true,
+        { version: '0.36.0', name: 'Triglav', fixes: 27, date: '22 Oct 2026 · 22:05', latest: true,
+          summary: 'The biggest update so far. The 3D view moves to the latest three.js (r186) and picking to three-mesh-bvh 0.9.16, so big models are ready sooner and give their memory back. MeshOptimiser opens USD and Collada, profiles get a tool of their own, Photo mode refines a still view, and the lens is set in millimetres. 27 fixes.',
+          items: [
+            ['New', 'The 3D view runs on three.js r186 (it was r172): big models are ready sooner because shaders are built without holding the page up, freed parts give their graphics memory back, and the HDRI turns its light and reflections with the background.'],
+            ['New', 'Picking runs on three-mesh-bvh 0.9.16: a click on a part with several colours picks the right one, and the picking trees take less memory.'],
+            ['New', 'Opens USD (.usd, .usda, .usdc, .usdz) and Collada (.dae), standing the right way up and at the right size.'],
+            ['New', 'Profile: clean outline. A window frame, an aluminium extrusion or a seal strip becomes one clean solid. You see the cross-section as it is and as it will be, can move its points by hand, and nothing changes until Apply. Round part shares the same card.'],
+            ['New', 'Photo mode refines a still view over up to 32 frames, for smooth edges and soft shadows, and offers three looks: Neutral, Soft and Contrast.'],
+            ['New', 'The lens in millimetres: a bigger number zooms in, as on a camera. Right-click the camera pill for the lens and navigation settings.'],
+            ['New', 'Textures show on the material balls and in the texture slots, a picture can be dropped on a slot, and an FBX or OBJ finds the maps beside it by name.'],
+            ['New', 'Align to floor works on just the selected parts.'],
+            ['Fix', 'A big model shows only once it turns smoothly, and Ctrl+Z works straight after opening it.'],
+            ['Fix', 'Remesh works on a STEP part after Decimate, and Decimate’s Target and Within fields show again.'],
+            ['Fix', 'Remove holes no longer opens thin plates, a GLB with JPEG textures is no longer ten times too big, and a texture change can be undone.'],
+            ['Fix', 'Parts copied in Photo mode get their shadows, and Ctrl+Z after an isolate undoes only the isolate.'],
+          ] },
+        { version: '0.35.5', fixes: 42, date: '22 Oct 2026 · 09:22',
           summary: 'Photo mode gets depth of field, Edit mesh a Visible switch, and the status pills slide. Then a review of the whole app: merges keep their materials, mirrored parts stay the right way out, and the STEP converter cleans up after itself. 42 fixes.',
           items: [
             ['New', 'Photo mode has depth of field: Alt+click a point of the model, or press Pick, to focus there. Save photo keeps it.'],

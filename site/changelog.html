@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.5." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.36.0." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.5." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.36.0." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -54,9 +54,31 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.36.0">
+          <div class="log-head">
+            <strong>v0.36.0<b class="rel-code">Triglav</b></strong><em>Latest</em><span>22 Oct 2026</span><span>27 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>The biggest update so far. The 3D view moves to the latest three.js (r186) and picking to three-mesh-bvh 0.9.16, so big models are ready sooner and give their memory back. MeshOptimiser opens USD and Collada, profiles get a tool of their own, Photo mode refines a still view, and the lens is set in millimetres. 27 fixes.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>The 3D view runs on three.js r186 (it was r172): big models are ready sooner because shaders are built without holding the page up, freed parts give their graphics memory back, and the HDRI turns its light and reflections with the background.</span></li>
+              <li><b class="is-new">New</b><span>Picking runs on three-mesh-bvh 0.9.16: a click on a part with several colours picks the right one, and the picking trees take less memory.</span></li>
+              <li><b class="is-new">New</b><span>Opens USD (.usd, .usda, .usdc, .usdz) and Collada (.dae), standing the right way up and at the right size.</span></li>
+              <li><b class="is-new">New</b><span>Profile: clean outline. A window frame, an aluminium extrusion or a seal strip becomes one clean solid. You see the cross-section as it is and as it will be, can move its points by hand, and nothing changes until Apply. Round part shares the same card.</span></li>
+              <li><b class="is-new">New</b><span>Photo mode refines a still view over up to 32 frames, for smooth edges and soft shadows, and offers three looks: Neutral, Soft and Contrast.</span></li>
+              <li><b class="is-new">New</b><span>The lens in millimetres: a bigger number zooms in, as on a camera. Right-click the camera pill for the lens and navigation settings.</span></li>
+              <li><b class="is-new">New</b><span>Textures show on the material balls and in the texture slots, a picture can be dropped on a slot, and an FBX or OBJ finds the maps beside it by name.</span></li>
+              <li><b class="is-new">New</b><span>Align to floor works on just the selected parts.</span></li>
+              <li><b class="is-fix">Fix</b><span>A big model shows only once it turns smoothly, and Ctrl+Z works straight after opening it.</span></li>
+              <li><b class="is-fix">Fix</b><span>Remesh works on a STEP part after Decimate, and Decimate’s Target and Within fields show again.</span></li>
+              <li><b class="is-fix">Fix</b><span>Remove holes no longer opens thin plates, a GLB with JPEG textures is no longer ten times too big, and a texture change can be undone.</span></li>
+              <li><b class="is-fix">Fix</b><span>Parts copied in Photo mode get their shadows, and Ctrl+Z after an isolate undoes only the isolate.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.35.5">
           <div class="log-head">
-            <strong>v0.35.5</strong><em>Latest</em><span>22 Oct 2026</span><span>42 fixes</span>
+            <strong>v0.35.5</strong><span>22 Oct 2026</span><span>42 fixes</span>
           </div>
           <div class="log-body">
             <p>Photo mode gets depth of field, Edit mesh a Visible switch, and the status pills slide. Then a review of the whole app: merges keep their materials, mirrored parts stay the right way out, and the STEP converter cleans up after itself. 42 fixes.</p>
@@ -870,7 +892,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.35.5</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.36.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
