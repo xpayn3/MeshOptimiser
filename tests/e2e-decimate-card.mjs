@@ -126,6 +126,30 @@ try {
   check("Smart optimise's entry point reduces within a distance", (await selTris()) === tW, { now: await selTris(), tW });
   check('and undo puts it back', await undoAll(t0));
 
+  // ── a part as a STEP part comes (flat normals, a corner of its own on every face) stays indexed, and Remesh still works on it ──
+  // (Decimate's crease pass handed back one vertex per triangle corner: Remesh then found nothing to join)
+  const cpid = await evalJS(`(async () => {
+    const BGU = await import('three/addons/utils/BufferGeometryUtils.js');
+    const p = window.state.parts.filter(p => !p.deleted && p.mesh && p.triCount >= 3000 && p.triCount <= 40000).sort((a, b) => b.triCount - a.triCount)[0];
+    let g = p.mesh.geometry.toNonIndexed(); g.deleteAttribute('normal'); g.computeVertexNormals(); g = BGU.mergeVertices(g);
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    p.mesh.geometry = g; p.triCount = g.index.count / 3; p.vertCount = g.attributes.position.count;
+    return p.partId; })()`);
+  const geo = () => evalJS(`(() => { const g = window.state.partById.get(${JSON.stringify(cpid)}).mesh.geometry; return { indexed: !!g.index, tris: g.index ? g.index.count / 3 : g.attributes.position.count / 3, verts: g.attributes.position.count }; })()`);
+  await call('select_parts', { ids: [cpid] });
+  await setVal('#decimate-strength', '0.5');
+  const hC = await hist(), g0 = await geo();
+  await evalJS("document.getElementById('btn-decimate-sel').click()"); await settle(hC);
+  const g1 = await geo();
+  check('a part with a corner per face is reduced', g1.tris < g0.tris, { g0, g1 });
+  check('and keeps its corners shared (indexed, fewer vertices than three per triangle)', g1.indexed && g1.verts < g1.tris * 2, g1);
+  const hR = await hist();
+  await evalJS("window._appFns._Actions.list.find(a => a.id === 'remesh').run(); document.querySelector('#remesh-mode [data-mode=\"ut\"]').click(); document.getElementById('btn-remesh-run').click()");
+  await settle(hR);
+  const g2 = await geo();
+  check('Remesh (polygons) after Decimate still joins flat faces', (await hist()) === hR + 1 && g2.tris < g1.tris, { g1, g2 });
+  await call('undo'); await call('undo'); await sleep(600);
+
   check('no uncaught errors in the page', errors.length === 0, errors);
 } catch (e) {
   fail++; console.log('FAIL (threw)', e.message);

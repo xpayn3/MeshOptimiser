@@ -13,6 +13,18 @@ Last release in the changelog: **v0.35.5**.
 
 ## Fixed
 
+- ![fix][fix] **Remesh did nothing on a STEP part after Decimate ("Nothing to join").** A part from a STEP file came out of Decimate
+  with every triangle on its own three corners, nothing shared, so Remesh found no flat face to join, and the part held three times the
+  vertices it needs. Decimate, Fit to triangle budget and Quick remesh now join the corners that are alike again (the same point with
+  the same normal), so the part comes out as it came from the file: on the 203 mm brake disc, 6,850 vertices for 5,830 triangles
+  instead of 17,490, and Remesh sees its flat faces as polygons.
+  Cause: a part whose normals are the flat ones of each face (every STEP part) is reduced without them and shaded again afterwards with
+  three's `toCreasedNormals`, which hands back a corner per triangle; nothing joined them again.
+  Where: `_creaseAfter` in `app/js/app.js` (shared by Decimate, Fit to budget and Quick remesh): it re-indexes with `mergeVertices`.
+  Test: `tests/e2e-decimate-card.mjs`, last section (a Gearbox part given a corner per face, as a STEP part comes: 51,864 vertices for
+  17,288 triangles before, indexed now, and Remesh then joins its flat faces). Every remesh tool after Decimate checked on the brake
+  disc (STEP) and the Gearbox in headless Chrome: all work. Not yet checked in the app by hand.
+
 - ![fix][fix] **A big model showed before it was ready, and stuttered for the first seconds of turning it.** The loader that is open
   (the start screen's, or the card over the view) now stays up through a last step, with "Preparing the view" under its heading: no
   second loader comes up. Every shader program the scene needs is built ahead, the view is drawn behind the loader
@@ -62,6 +74,15 @@ Last release in the changelog: **v0.35.5**.
   `e2e-drag-cursor`, `e2e-cmd-card-grow` and `e2e-isolate` gave the same results before and after.
 
 ## Found, not fixed yet
+
+- **Undo is refused for a while after a model opens** ("A step is still running in the app, so nothing was undone"), while other edits
+  such as Duplicate go through. Since `71f2455` ("the model shows only once it turns smoothly") the loader stays up through
+  "Preparing the view", up to 12 s, and the undo tool and `_Tasks.busy()` count it as a step running. In headless Chrome (SwiftShader)
+  it lasts the full 12 s: `e2e-quick-remesh-obj`, `e2e-isolate` (seed 4242) and `e2e-mcp-tools` fail on it, and pass on the commit
+  before. On a real GPU it may be short; not checked by hand.
+
+- **Choosing "Target…" or "Within…" on the Decimate card shows no field to type the target or the distance into.** Same cause as the
+  estimate below: `_updateDecCount` shows those fields, and it never gets past its visibility check.
 
 - **The Decimate card never shows its estimate ("12,400 → about 6,200 triangles") or its Preview link.** The count under the button
   works. Cause: `_updateDecCount` (`decimate-card.js`) skips its work while `#decimate-info` is not visible, and the stylesheet hides

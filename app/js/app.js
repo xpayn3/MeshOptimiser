@@ -56540,9 +56540,17 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (byPos.attributes.position.count > n * 0.6) return { src: all, flat: false };
     return { src: byPos, flat: true };
   }
+  // (toCreasedNormals hands back a corner of its own for every triangle: the corners that are alike, the same point with the same normal,
+  // are joined again, so the part comes out as it came from the file, smooth faces sharing their points. Left as it was, Remesh found
+  // nothing to join on a reduced STEP part, and the part took three times the vertices it needs.)
   function _creaseAfter(out, flat) {
     if (!out || !flat) return out;
-    try { const c = _toCreased(out, 30 * Math.PI / 180); try { out.dispose(); } catch (_) {} return c; } catch (_) { return out; }
+    try {
+      const c = _toCreased(out, 30 * Math.PI / 180); try { out.dispose(); } catch (_) {}
+      if (c.index) return c;
+      try { const m = _mergeVertices(c); if (m && m.index) { try { c.dispose(); } catch (_) {} return m; } } catch (_) {}
+      return c;
+    } catch (_) { return out; }
   }
 
   // meshoptimizer's simplifier (WebAssembly). It works on the index buffer
