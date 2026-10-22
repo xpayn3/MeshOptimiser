@@ -51,7 +51,22 @@ Last release in the changelog: **v0.35.5**.
   dry run); the unit tests, `?selftest`, `e2e-mcp-tools`, `e2e-isolate`, `e2e-undo-memory`, `e2e-cmd-card-grow`, `e2e-mesh-tools` and
   `e2e-brep-fill` (on a STEP brake disc) gave the same results before and after.
 
+- ![refactor][refactor] **Decimate has a file of its own.** Its card (the run by a share, to a triangle target or within a distance, the
+  preview, and the count under its button) moved out of `app.js` into `app/js/decimate-card.js`, word for word. The helpers it shares
+  with Quick remesh, Fit to budget and Remove holes (loading the simplifier, welding, `_geomFromIndexParts`, `_decSnap`, the undo op)
+  stay in `app.js`.
+  Where: `installDecimateCard` in `decimate-card.js`, called from `app.js` where the run was; it hands back `_decimateSelected` and
+  `_decimateSelected_job` (Smart optimise). `tests/decimate-align.test.mjs` reads the card files beside `app.js`.
+  Test: `tests/e2e-decimate-card.mjs` (new: the three ways to set it, the preview and its button, undo, the Claude tool and Smart
+  optimise's entry point); the unit tests, `?selftest`, `e2e-mcp-tools`, `e2e-idle-writes`, `e2e-quick-remesh(-obj)`, `e2e-uv-carry`,
+  `e2e-drag-cursor`, `e2e-cmd-card-grow` and `e2e-isolate` gave the same results before and after.
+
 ## Found, not fixed yet
+
+- **The Decimate card never shows its estimate ("12,400 → about 6,200 triangles") or its Preview link.** The count under the button
+  works. Cause: `_updateDecCount` (`decimate-card.js`) skips its work while `#decimate-info` is not visible, and the stylesheet hides
+  that line while its text is empty and the link hidden (`.plan-line:has(>span:empty):has(>.plan-link[hidden])`, `index.html`), so
+  neither ever changes. Found by `tests/e2e-decimate-card.mjs` (four checks fail), the same before and after the move.
 
 - **Undo of an isolate can leave the view isolated** after parts were hidden with the eye in the tree: isolate one part, then Ctrl+Z,
   and both parts show with the view still marked isolated. Found by `node tests/e2e-isolate.mjs tests/fixtures/test-model.glb 60 892060`

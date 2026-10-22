@@ -4,7 +4,9 @@
 // the smart payload from one builder), both hold a result against the same shape guard, and the Smart switch is one control.
 import fs from 'fs';
 
-const src = fs.readFileSync(new URL('../app/js/app.js', import.meta.url), 'utf8');
+// app.js and the tool cards moved out of it (Decimate's run is in decimate-card.js), read as one
+const JS = new URL('../app/js/', import.meta.url);
+const src = ['app.js', ...fs.readdirSync(JS).filter(f => /-card\.js$/.test(f)).sort()].map(f => fs.readFileSync(new URL(f, JS), 'utf8')).join('\n');
 const html = fs.readFileSync(new URL('../app/index.html', import.meta.url), 'utf8');
 let failed = 0;
 const ok = (cond, msg) => { if (!cond) { failed++; console.error('FAIL  ' + msg); } };
