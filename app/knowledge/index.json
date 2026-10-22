@@ -77,7 +77,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Orbit, pan and zoom with the mouse, frame a part with F, and switch between the camera, Top, Front and Side views.",
-  "chars": 3550
+  "chars": 3645
  },
  {
   "slug": "select-parts",
@@ -149,7 +149,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
-  "chars": 14153
+  "chars": 14297
  },
  {
   "slug": "read-the-numbers",

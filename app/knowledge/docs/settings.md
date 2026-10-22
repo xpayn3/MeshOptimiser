@@ -74,10 +74,10 @@ What the 3D view draws around the model.
 
 ## Camera
 
-Projection, field of view, clip planes, and how the view moves.
+Projection, focal length, clip planes, and how the view moves. A right-click on the camera pill, top left of the view, opens the lens and navigation settings beside it.
 
 - **Projection**: Perspective, as a camera sees, or Orthographic, with no perspective.
-- **Field of view**: How wide the lens is, in perspective.
+- **Focal length**: The lens in millimetres, 10 to 200, in perspective: a bigger number zooms in.
 - **Clip planes**: How near and how far the camera sees. **Auto** fits the scene. **Tight** is for tiny parts, **Wide** for large assemblies and **Huge** for the size of a factory.
 - **Orbit around**: What the view turns around when you drag. **Selection**: the selected parts, or the centre of the view when nothing is selected. **Scene**: always the centre of the view. **Cursor**: the point under the pointer when the drag starts. That is the surface the pointer is over, or, over empty space, a point at the depth the view was turning around.
 - **Zoom toward the cursor**: The wheel zooms toward the pointer instead of the centre of the view.

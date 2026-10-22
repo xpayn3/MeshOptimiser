@@ -7,7 +7,7 @@
  */
 (function () {
   'use strict';
-  var DATA_URL = 'js/help-content.js?v=46';
+  var DATA_URL = 'js/help-content.js?v=47';
   var LAST_KEY = 'stepopt-help-last';
   var data = null, loading = null, wired = false, current = null, query = '';
   var $ = function (id) { return document.getElementById(id); };

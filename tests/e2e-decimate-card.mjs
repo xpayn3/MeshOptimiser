@@ -34,6 +34,8 @@ const settle = async (before) => {
   await sleep(800);
 };
 const setVal = (sel, v) => evalJS(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.value = ${JSON.stringify(String(v))}; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+// (the card's fields follow the setting on a 200 ms timer, and a frame of the software renderer can hold the page longer than that: wait for it)
+const shownSoon = async (sel, want = true) => { for (let t = 0; t < 3000; t += 100) { if ((await shown(sel)) === want) return want; await sleep(100); } return !want; };
 const shown = (sel) => evalJS(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return !!e && e.style.display !== 'none' && !e.hidden; })()`);
 const undoAll = async (t0) => { await call('undo'); await sleep(600); return (await selTris()) === t0; };
 try {
@@ -74,9 +76,9 @@ try {
   check('the estimate shows the selection going from its count to about half', await evalJS(`(() => { const i = document.getElementById('decimate-info'); const f = i.querySelector('.plan-from'), t = i.querySelector('.plan-to'); return !!(f && t) && f.textContent.replace(/\\D/g, '') === String(${t0}) && t.textContent.replace(/\\D/g, '') === String(Math.round(${t0} * 0.5)); })()`), await evalJS("document.getElementById('decimate-info').textContent"));
   check('the preview link shows', await shown('#decimate-preview'));
   await setVal('#decimate-strength', 'target'); await sleep(700);
-  check('Target… shows the target field', await shown('#decimate-target'));
+  check('Target… shows the target field', await shownSoon('#decimate-target'));
   await setVal('#decimate-strength', 'tol'); await sleep(700);
-  check('Within… shows the distance row and says as many as possible go', (await shown('#decimate-tol-row')) && /as many as possible go/.test(await evalJS("document.getElementById('decimate-info').textContent")), await evalJS("document.getElementById('decimate-info').textContent"));
+  check('Within… shows the distance row and says as many as possible go', (await shownSoon('#decimate-tol-row')) && /as many as possible go/.test(await evalJS("document.getElementById('decimate-info').textContent")), await evalJS("document.getElementById('decimate-info').textContent"));
   await setVal('#decimate-strength', '0.5'); await sleep(700);
   check('a share hides both again', !(await shown('#decimate-target')) && !(await shown('#decimate-tol-row')));
 

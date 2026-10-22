@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.36.0 (Triglav)** — The biggest update so far: three.js r186 under the view and three-mesh-bvh 0.9.16 for picking, USD and Collada files, a Profile tool, a still view refined in Photo mode, textures where you pick them, the lens in millimetres, and 27 fixes.
+
+- ![new][new] **three.js r186 (from r172):** shaders built without holding the page up, GPU memory given back, the HDRI turns its light with it; **three-mesh-bvh 0.9.16** picks the right colour group on multi-colour parts.
+- ![new][new] **Opens USD and Collada** (`.usd`, `.usda`, `.usdc`, `.usdz`, `.dae`), with their up axis and unit.
+- ![new][new] **Profile: clean outline** makes a window frame, an extrusion or a seal strip one clean solid, with a live cross-section and an editor.
+- ![new][new] **Photo mode refines a still view** (32 frames averaged) and has a choice of look; **Focal length in mm** and the camera card on a right-click of the camera pill.
+- ![fix][fix] **A model shows only once it turns smoothly;** Ctrl+Z works straight away; Decimate, Remesh and Remove holes are surer on STEP parts.
+
 **v0.35.5** — Depth of field in Photo mode, a *Visible* switch in Edit mesh, status pills that slide, and 42 fixes: merges keep their materials, mirrored parts stay the right way out, the STEP converter cleans up after itself, and the app does no work while idle.
 
 - ![new][new] **Photo mode: depth of field,** focused with Alt+click or *Pick*.

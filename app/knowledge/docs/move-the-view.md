@@ -48,7 +48,7 @@ The grid marks the floor of the scene. Press `G` to hide or show it.
 Under **Settings**, **Camera**:
 
 - **Projection**: Perspective, where far things look smaller, or Orthographic, where they do not.
-- **Field of view**: How wide the lens is.
+- **Focal length**: The lens, in millimetres as on a full-frame camera: a bigger number zooms in (35 mm wide, 50 mm normal, 85 mm close).
 - **Clip planes**: How near and how far the camera can see. Leave it on Auto unless parts of a very small or very large model are cut off.
 - **Orbit around**: What the view turns around. **Selection**: the selected parts, or the centre of the view when nothing is selected. **Scene**: always the centre of the view. **Cursor**: the point under the pointer when the drag starts.
 - **Zoom toward the cursor**: The wheel zooms toward the pointer instead of the centre.

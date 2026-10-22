@@ -1007,7 +1007,7 @@ module.exports = {
         ['p', 'Under {{Settings}}, {{Camera}}:'],
         ['terms', [
           ['Projection', 'Perspective, where far things look smaller, or Orthographic, where they do not.'],
-          ['Field of view', 'How wide the lens is.'],
+          ['Focal length', 'The lens, in millimetres as on a full-frame camera: a bigger number zooms in (35 mm wide, 50 mm normal, 85 mm close).'],
           ['Clip planes', 'How near and how far the camera can see. Leave it on Auto unless parts of a very small or very large model are cut off.'],
           ['Orbit around', 'What the view turns around. {{Selection}}: the selected parts, or the centre of the view when nothing is selected. {{Scene}}: always the centre of the view. {{Cursor}}: the point under the pointer when the drag starts.'],
           ['Zoom toward the cursor', 'The wheel zooms toward the pointer instead of the centre.'],
@@ -1555,10 +1555,10 @@ module.exports = {
           ['Wireframe: Flat within', '{{Strict}}, {{Normal}} or {{Loose}}: for parts that have polygons of their own, how far neighbouring triangles may turn away from each other and still count as one polygon.'],
         ]],
         ['h', 'Camera'],
-        ['p', 'Projection, field of view, clip planes, and how the view moves.'],
+        ['p', 'Projection, focal length, clip planes, and how the view moves. A right-click on the camera pill, top left of the view, opens the lens and navigation settings beside it.'],
         ['terms', [
           ['Projection', 'Perspective, as a camera sees, or Orthographic, with no perspective.'],
-          ['Field of view', 'How wide the lens is, in perspective.'],
+          ['Focal length', 'The lens in millimetres, 10 to 200, in perspective: a bigger number zooms in.'],
           ['Clip planes', 'How near and how far the camera sees. {{Auto}} fits the scene. {{Tight}} is for tiny parts, {{Wide}} for large assemblies and {{Huge}} for the size of a factory.'],
           ['Orbit around', 'What the view turns around when you drag. {{Selection}}: the selected parts, or the centre of the view when nothing is selected. {{Scene}}: always the centre of the view. {{Cursor}}: the point under the pointer when the drag starts. That is the surface the pointer is over, or, over empty space, a point at the depth the view was turning around.'],
           ['Zoom toward the cursor', 'The wheel zooms toward the pointer instead of the centre of the view.'],

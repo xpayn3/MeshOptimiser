@@ -4,6 +4,70 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.36.0 (Triglav)
+
+Released 22 Oct 2026.
+
+v0.35.5 brought depth of field and a long round of fixes. v0.36.0 is the biggest update so far: the viewer moves from three.js r172 to r186 and its picking library to three-mesh-bvh 0.9.16, the app opens USD and Collada, profiles get a tool of their own, Photo mode refines a still view and offers a choice of look, textures show where you pick them, and the camera's lens is set in millimetres. Around them, 27 fixes: a model shows only once it turns smoothly, Ctrl+Z works straight after opening one, and Decimate, Remesh and Remove holes are surer on STEP parts.
+
+**Under the hood: three.js r186 and three-mesh-bvh 0.9.16**
+
+- ![new][new] **three.js r186 (from r172).** Fourteen releases of the library the 3D view is built on. What it brings straight away: shaders are compiled without holding the page up, so a big model is ready sooner; screenshots and Claude's pictures no longer leave a GPU buffer behind each time; parts that are freed give their graphics memory back; the HDRI rotation turns the light and the reflections with the background; and new loaders that the app uses at once (USD, Collada, below). The patches the app keeps in three's loaders and writers (glTF, FBX, OBJ, USDZ) were carried over, and five things r186 changed are handled (below). Every e2e test that passes on r172 passes on r186 on the graphics card, and four more do.
+- ![refactor][refactor] **three-mesh-bvh 0.9.16 (from 0.8.3),** the library behind fast picking, hover and Decimate's distance check. A pick on a part with several colour groups reports the right one, triangles in no group are left out, its trees take less memory, and its results match three.js's own in the few edge cases where they did not. Picks give the same results as before and are as fast (about 80 ms to build every tree of a 220,000-triangle model).
+- ![fix][fix] **Five things three r186 changed, handled:** the dots of Edit mesh and of the groups vanished in Top, Front and Side; a hidden scene tab logged WebGPU errors; a part first drawn in an orthographic view kept flat highlights back in perspective; Photo mode would have lost its ACES look; a Z-up FBX would have been turned twice.
+- ![refactor][refactor] **No more "renderAsync() has been deprecated" in the console:** the six places that drew with it use the current call.
+
+**New tools and formats**
+
+- ![new][new] **Opens USD and Collada.** `.usd`, `.usda`, `.usdc` and `.usdz` (text, the binary files real tools write, or a zip with its textures) and `.dae`, from the picker, drag and drop, a dropped folder and Claude's `open_file`. Their up axis and unit are honoured, as for every other format; a USD file that does not state its unit is read as metres, as Blender reads it.
+- ![new][new] **Profile: clean outline.** A profile (a PVC window frame, an aluminium extrusion, a seal strip) is made one clean solid from a card of its own. The cross-section is drawn as it is and as it will be while the options change (fill chambers, fill holes and cuts across, close gaps up to a width, straighten, shading angle), square or mitred ends, bent profiles too, and nothing changes until Apply. With nothing selected it finds every profile in the view and steps through them; *Edit points* lets you drag, add and delete the section's points by hand. One undo step.
+- ![new][new] **Round part shares the Profile card.** Remove ridges, Make solid and Belt: remove ribs show their cross-section the same way, before and after.
+- ![new][new] **Align to floor works on the selection.** With nothing selected it stands the whole model on the floor, as before; with parts selected, only they move.
+
+**Photo mode**
+
+- ![new][new] **A still view is refined, and a choice of look.** While nothing moves, Photo mode draws the view again and again and averages the frames (Best: 32): smooth edges, no speckle in the occlusion, and a soft edge on the sun's shadow. Anything that moves starts it again; Save photo and Claude's pictures take the whole average. *Look*: Neutral, Soft (AgX) or Contrast (ACES, the look so far).
+- ![fix][fix] **A part copied in Photo mode had no shadow,** and after Photo mode the model was lit a little differently than before it. Copies get their shadows, and the lighting comes back as it was.
+- ![fix][fix] **Photo mode's averaging never got past the first frame in Top, Front and Side.**
+
+**The camera**
+
+- ![new][new] **The lens and navigation from the camera pill.** A right-click on the camera pill (top left of the view) opens a small card beside it: projection, focal length, clip planes, what the view orbits around, zoom toward the cursor. It is the Settings › Camera pane itself, so a change made there is the one in Settings; its gear opens that pane, where the speeds are too.
+- ![new][new] **Field of view is now Focal length, in millimetres.** Set as on a full-frame camera, 10 to 200 mm: a bigger number zooms in (35 mm wide, 50 mm normal, 85 mm close), where a bigger field of view used to zoom out. 29 mm is the view the app has always started with.
+
+**Materials and textures**
+
+- ![new][new] **Textures show on the material balls and in the texture slots.** A material with a colour texture wears it on its ball in the Materials dock, wrapped as on a sphere; the material editor's texture slots and their card show the picture, also for textures that came with a model.
+- ![new][new] **Drop a picture on a texture slot.** A PNG, JPEG, WebP or AVIF dragged from the file explorer onto a slot of the material editor goes on the material.
+- ![new][new] **An FBX or OBJ takes the textures beside it, found by name.** A model from a library (Fab, Megascans) that names no picture gets the colour, normal, roughness and other maps in its folder, matched by their names.
+- ![fix][fix] **A model with JPEG textures saved as a GLB ten times its size,** because every picture was written again as a lossless PNG. A picture keeps the format it came in.
+- ![fix][fix] **The material window was slow with 4K textures,** a texture put on a material could not be undone, the material editor reopened on the material it showed last, and after the preset list had been open the next click on + did nothing.
+
+**Reduce, remesh and repair**
+
+- ![fix][fix] **Remesh did nothing on a STEP part after Decimate ("Nothing to join").** The reduced part kept no shared corners and held three times the vertices it needs; Decimate, Fit to budget and Quick remesh now join them again (a brake disc: 6,850 vertices for 5,830 triangles instead of 17,490).
+- ![fix][fix] **Decimate's "Target…" and "Within…" showed no field to type into,** and its estimate and Preview link never showed.
+- ![fix][fix] **Quick remesh "smart" left more thin triangles than "plain",** and on some parts a rougher shape.
+- ![fix][fix] **Remove holes opened the part instead of closing it** when an opening ran on into a thin plate, and it said half a sheet-metal part's holes were left alone when a flow-drilled hole had been closed.
+- ![fix][fix] **Check against under-counted a GLB of many parts by about a third.**
+
+**Opening a model, undo, the view**
+
+- ![fix][fix] **A big model showed before it was ready and stuttered for the first seconds of turning it.** The loader stays up through *Preparing the view*, shaders are built ahead and the picking trees finished; only then does the model show.
+- ![fix][fix] **Ctrl+Z did nothing for a while after a model opened,** while other edits went through. Undo and redo work while the view is prepared.
+- ![fix][fix] **Ctrl+Z after an isolate could undo something else** and leave the view marked isolated.
+- ![fix][fix] **After a move in Edit mesh the picking tree could fail to refit** ("Maximum call stack size exceeded").
+- ![fix][fix] **A long Cloner array was cut off while the view was panned, and its spacing stopped at 500 mm.**
+- ![fix][fix] **The left sidebar could not be widened by the middle of its handle.**
+- ![polish][polish] **Settings › About:** the version and system facts sit close together, and the credits are in the app's own accent colour.
+
+**Inside**
+
+- ![refactor][refactor] **Remove holes and Decimate have files of their own** (`holefill-card.js`, `decimate-card.js`), moved out of `app.js` word for word; the other mesh tools follow one at a time.
+- ![refactor][refactor] **The tests caught up with the app:** all 63 self-tests pass, and every e2e test passes on WebGPU.
+
+Checked by the unit tests, the self-test and the e2e tests in a test browser; Photo mode's looks and the Profile tool on a real customer profile have not yet been checked by eye.
+
 ## v0.35.5
 
 Released 22 Oct 2026.
