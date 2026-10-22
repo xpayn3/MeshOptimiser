@@ -13,6 +13,25 @@ Last release in the changelog: **v0.35.5**.
 
 ## Fixed
 
+- ![fix][fix] **Ctrl+Z did nothing for a while after a model opened ("Wait until the running step has finished").** While the loader
+  said "Preparing the view" (up to 12 seconds on a slow graphics card), undo and redo were refused, Claude's undo too, though other
+  edits such as Duplicate went through. They work during it now; the view is still prepared the same way.
+  Cause: that last step of a load keeps the loader up, and the loader's entry on the Tasks list counted as a step still running, which
+  holds undo and redo back. Nothing is being made then that an undo could cross.
+  Where: `_Tasks` in `app/js/app.js`: a task can be passive (it only shows progress) and `busy()` passes over it; `_publishTask` marks the
+  loader's task passive while `setLoader` was last called for "Preparing the view" (`_viewSettling`), and any other loader, a new load
+  among them, holds undo back as before.
+  Test: `tests/e2e-undo-while-settling.mjs` (new: a part duplicated while the view is prepared, then Ctrl+Z, Ctrl+Y and Claude's undo,
+  all while the loader still says "Preparing the view"; Ctrl+Z and Claude's undo failed before). `e2e-quick-remesh-obj`, `e2e-isolate`
+  (seed 4242) and `e2e-mcp-tools` pass again; `e2e-load-settle` still passes.
+
+- ![fix][fix] **Decimate's "Target…" and "Within…" showed no field to type into, and its estimate and Preview link never showed.**
+  The target field, the distance field, the "12,400 → about 6,200 triangles" line and Preview come up as they should.
+  Cause: `_updateDecCount` did nothing while the estimate's line was not visible, and that line hides itself while it is empty, so it
+  stayed empty, and the fields it also shows never came up.
+  Where: `_updateDecCount` in `app/js/decimate-card.js`: it asks whether the card is open instead.
+  Test: `tests/e2e-decimate-card.mjs` (its four checks of the estimate, the preview link and the two fields failed before, pass now).
+
 - ![fix][fix] **Remesh did nothing on a STEP part after Decimate ("Nothing to join").** A part from a STEP file came out of Decimate
   with every triangle on its own three corners, nothing shared, so Remesh found no flat face to join, and the part held three times the
   vertices it needs. Decimate, Fit to triangle budget and Quick remesh now join the corners that are alike again (the same point with
@@ -74,20 +93,6 @@ Last release in the changelog: **v0.35.5**.
   `e2e-drag-cursor`, `e2e-cmd-card-grow` and `e2e-isolate` gave the same results before and after.
 
 ## Found, not fixed yet
-
-- **Undo is refused for a while after a model opens** ("A step is still running in the app, so nothing was undone"), while other edits
-  such as Duplicate go through. Since `71f2455` ("the model shows only once it turns smoothly") the loader stays up through
-  "Preparing the view", up to 12 s, and the undo tool and `_Tasks.busy()` count it as a step running. In headless Chrome (SwiftShader)
-  it lasts the full 12 s: `e2e-quick-remesh-obj`, `e2e-isolate` (seed 4242) and `e2e-mcp-tools` fail on it, and pass on the commit
-  before. On a real GPU it may be short; not checked by hand.
-
-- **Choosing "Target…" or "Within…" on the Decimate card shows no field to type the target or the distance into.** Same cause as the
-  estimate below: `_updateDecCount` shows those fields, and it never gets past its visibility check.
-
-- **The Decimate card never shows its estimate ("12,400 → about 6,200 triangles") or its Preview link.** The count under the button
-  works. Cause: `_updateDecCount` (`decimate-card.js`) skips its work while `#decimate-info` is not visible, and the stylesheet hides
-  that line while its text is empty and the link hidden (`.plan-line:has(>span:empty):has(>.plan-link[hidden])`, `index.html`), so
-  neither ever changes. Found by `tests/e2e-decimate-card.mjs` (four checks fail), the same before and after the move.
 
 - **Undo of an isolate can leave the view isolated** after parts were hidden with the eye in the tree: isolate one part, then Ctrl+Z,
   and both parts show with the view still marked isolated. Found by `node tests/e2e-isolate.mjs tests/fixtures/test-model.glb 60 892060`

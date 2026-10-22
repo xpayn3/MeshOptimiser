@@ -287,8 +287,11 @@ export function installDecimateCard(app) {
     const info = document.getElementById('decimate-info');
     const sel = document.getElementById('decimate-strength');
     const tgt = document.getElementById('decimate-target');
-    // Nothing below is visible while the card is closed or the tab is in the background: skip the walk over the selection.
-    if (document.hidden || !(info && info.offsetParent)) return;
+    // Nothing below is visible while the card is closed or the tab is in the background: skip the walk over the selection. (The card is
+    // asked, not the estimate's line: that line hides itself while it is empty, so asking it kept it empty for good, and the Target and
+    // Within fields below never came up either.)
+    const card = info && info.closest('.section-cmd');
+    if (document.hidden || !card || card.hidden || !card.getClientRects().length) return;
     const showTgt = (sel && sel.value === 'target') ? '' : 'none';
     if (tgt && tgt.style.display !== showTgt) tgt.style.display = showTgt;
     const tolRow = document.getElementById('decimate-tol-row'), showTol = (sel && sel.value === 'tol') ? '' : 'none';

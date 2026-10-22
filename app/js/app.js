@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=33';
 import { installHoleFillCard } from './holefill-card.js?v=1';
-import { installDecimateCard } from './decimate-card.js?v=1';
+import { installDecimateCard } from './decimate-card.js?v=2';
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
 import { fillRoundGrooves, outlineRevolve, revolveLoops, sweepBelt, sweepLoops } from './revolve.js?v=8';
@@ -1088,7 +1088,8 @@ const _Tasks = (() => {
   return {
     set(id, patch) { const t = m.get(id) || { id, t0: Date.now(), label: '', detail: '', pct: null, cancel: null }; Object.assign(t, patch); m.set(id, t); publish(); },
     end(id) { if (m.delete(id)) publish(); },
-    busy() { return m.size > 0; },
+    // (a passive task only shows progress: nothing is being made that an undo could cross, so it does not hold undo and redo back)
+    busy() { for (const t of m.values()) if (!t.passive) return true; return false; },
     cancel(id) { const t = m.get(id); if (t && t.cancel) { try { t.cancel(); } catch (e) { console.warn('[tasks] cancel:', e); } } },
   };
 })();
@@ -1113,11 +1114,12 @@ const _Job = (() => {
   };
 })();
 let _loaderPct = null;
+let _viewSettling = false;            // the loader is up for "Preparing the view" only (_settleView): the model is in, nothing is being made
 function _publishTask() {
   if (!_loaderStart) { _Tasks.end('load'); return; }
   const st = _LD.steps && _LD.idx >= 0 ? _LD.steps[Math.min(_LD.idx, _LD.steps.length - 1)] : '';
   const msg = String((document.getElementById('loader-msg') || {}).textContent || 'Loading').replace(/[….]+$/, '');
-  _Tasks.set('load', { label: msg, detail: st, pct: _loaderPct, cancel: () => document.getElementById('loader-cancel-btn')?.click() });
+  _Tasks.set('load', { label: msg, detail: st, pct: _loaderPct, passive: _viewSettling, cancel: () => document.getElementById('loader-cancel-btn')?.click() });
 }
 // Returns true when the welcome modal is currently up — in that case the
 // loader UI is mirrored into the welcome pane and the standalone #loader
@@ -1128,6 +1130,8 @@ function _welcomeActive() {
 }
 
 function setLoader(show, msg='Loading', sub='') {
+  // (only the last step of a load, "Preparing the view", leaves undo and redo free: any other loader, a new load among them, holds them)
+  _viewSettling = !!show && sub === 'Preparing the view';
   const inWelcome = _welcomeActive();
   if (show && inWelcome) {
     try { _Welcome?.enterLoading(); } catch (_) {}
@@ -10973,6 +10977,7 @@ async function _settleView(stillMine = () => true, capMs = 12000) {
     // the picking trees (the hover outline and every click use them)
     while (!over() && state._bvhBuilding) await new Promise(r => setTimeout(r, 50));
   } finally {
+    _viewSettling = false;
     btn?.removeEventListener('click', onCancel);
     Log.info(`View ready in ${Math.round(performance.now() - t0)} ms (${frames} frames${compiled ? ', programs built ahead' : ''}${skip ? ', skipped' : ''})`, { tag: 'load' });
   }
