@@ -4,9 +4,9 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## v0.36.0 (Triglav)
+## v0.36.0
 
-Released 22 Oct 2026.
+Released 22 Oct 2026 · Triglav.
 
 v0.35.5 brought depth of field and a long round of fixes. v0.36.0 is the biggest update so far: the viewer moves from three.js r172 to r186 and its picking library to three-mesh-bvh 0.9.16, the app opens USD and Collada, profiles get a tool of their own, Photo mode refines a still view and offers a choice of look, textures show where you pick them, and the camera's lens is set in millimetres. Around them, 27 fixes: a model shows only once it turns smoothly, Ctrl+Z works straight after opening one, and Decimate, Remesh and Remove holes are surer on STEP parts.
 
