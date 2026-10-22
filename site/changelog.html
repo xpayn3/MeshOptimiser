@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.4." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.5." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.4." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.35.5." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -54,9 +54,29 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.35.5">
+          <div class="log-head">
+            <strong>v0.35.5</strong><em>Latest</em><span>22 Oct 2026</span><span>42 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>Photo mode gets depth of field, Edit mesh a Visible switch, and the status pills slide. Then a review of the whole app: merges keep their materials, mirrored parts stay the right way out, and the STEP converter cleans up after itself. 42 fixes.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>Photo mode has depth of field: Alt+click a point of the model, or press Pick, to focus there. Save photo keeps it.</span></li>
+              <li><b class="is-new">New</b><span>Edit mesh has a Visible switch: off, a box or the Brush takes the back sides and the parts hidden behind others too.</span></li>
+              <li><b class="is-new">New</b><span>The status pills beside the camera pill (Isolated, Exploded, Measure, Notes, Animate) slide in and out instead of popping.</span></li>
+              <li><b class="is-fix">Fix</b><span>Merging parts turned their materials white. A merged part keeps each part’s own material, and opens again with them.</span></li>
+              <li><b class="is-fix">Fix</b><span>Bake transforms, Set transform and the booleans turned a mirrored part inside out.</span></li>
+              <li><b class="is-fix">Fix</b><span>The mesh tools threw away vertex colours, extra UV sets and a STEP part’s CAD faces.</span></li>
+              <li><b class="is-fix">Fix</b><span>A damaged STEP said only “exited with code 1”, and a failed or cancelled conversion left files behind.</span></li>
+              <li><b class="is-fix">Fix</b><span>In Edit mesh, dots were cut by their own faces, open sheets worked from one side, and Ctrl+Z went back through old picks after a long session.</span></li>
+              <li><b class="is-fix">Fix</b><span>Claude’s tools changed locked parts, and Clean up took two undos.</span></li>
+              <li><b class="is-fix">Fix</b><span>The app kept working out its page styles while nothing happened; tooltips were far too long.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.35.4">
           <div class="log-head">
-            <strong>v0.35.4</strong><em>Latest</em><span>21 Oct 2026</span><span>3 fixes</span>
+            <strong>v0.35.4</strong><span>21 Oct 2026</span><span>3 fixes</span>
           </div>
           <div class="log-body">
             <p>Edit mesh keeps up with big models: a part of millions of triangles is read in the background, shows its points, and moves and box-picks without holding the view up. 3 fixes.</p>
@@ -850,7 +870,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.35.4</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.35.5</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
