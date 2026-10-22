@@ -9055,9 +9055,9 @@ window.moSplash = function (msg, pct) {
 
 <!-- The libraries the app needs are bundled in vendor/ (three.js r172 with
      the add-ons in use, three-mesh-bvh, meshoptimizer, lucide, and the Draco
-     and Assimp converters), so startup does not wait on a CDN and the app
-     works offline. Still fetched on demand from the internet: the KTX2
-     transcoder, glTF-Transform (for a Draco-compressed export) and the
+     and Assimp converters, and the KTX2 transcoder), so startup does not wait
+     on a CDN and the app works offline. Still fetched on demand from the
+     internet: glTF-Transform (for a Draco-compressed export) and the
      in-browser STEP reader. -->
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
 <script defer src="js/notes-core.js?v=9"></script>
