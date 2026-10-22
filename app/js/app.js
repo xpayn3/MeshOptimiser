@@ -9813,6 +9813,7 @@ async function loadStepFile(file) {
     await new Promise(r => setTimeout(r, 350));
     // Drain stale resources from the previous model — see _drainDisposeQueue.
     _drainDisposeQueue();
+    await _settleView(() => !ctrl.cancelled);      // (shown once it turns smoothly)
     if (idsBefore) setTimeout(() => _focusImportedParts(idsBefore), 120);     // show where the import landed
   } catch (e) {
     stopHB();
@@ -10925,6 +10926,52 @@ function onModelLoaded(filename) {
       .then(() => _captureRecentThumb(filename, _rid, _epoch))
       .catch(e => console.warn('[recent-thumb] capture failed:', e?.message || e));
   }, 1500, 20000), 1100);       // (two extra full draws of the scene and a read-back: not while the user is already working with it)
+}
+
+// ── The view is made ready behind the loader ─────────────────────────────────────────────────────────────────────────────
+// A big model used to show the moment its file was read, and then stuttered for the first seconds of turning it: the first frames
+// were still sending its buffers to the graphics card and building its shader programs, the shadows were switched on for it (which
+// rebuilds every material), and the trees that make clicks and hover fast were still being built. The way games and Sketchfab do it:
+// keep the loader up through all that, build every program ahead (compileAsync), draw behind the loader until the frames come at an
+// even pace, and only then show the model. Never longer than capMs: a scene that is simply slow to draw on this computer is shown anyway.
+// Cancel on the loader shows it at once. stillMine: false once a newer load has taken over.
+async function _settleView(stillMine = () => true, capMs = 12000) {
+  if (!renderer || !scene || !camera || !state.parts.some(p => !p.deleted)) return;
+  const t0 = performance.now();
+  let skip = false;
+  const btn = document.getElementById('loader-cancel-btn'), onCancel = () => { skip = true; };
+  btn?.addEventListener('click', onCancel, { once: true });
+  const over = () => skip || document.hidden || !stillMine() || performance.now() - t0 > capMs;
+  const left = () => Math.max(0, capMs - (performance.now() - t0));
+  // (a frame, or 250 ms when none comes: a background tab draws nothing)
+  const nextFrame = () => new Promise(r => { const t = setTimeout(r, 250); requestAnimationFrame(() => { clearTimeout(t); r(); }); });
+  let frames = 0, compiled = false;
+  try {
+    setLoader(true, 'Preparing the view', 'Getting the model ready to turn smoothly');
+    setLoaderProgress(null);
+    await new Promise(r => setTimeout(r, 0));          // (what the load queued for right after it: the shadows, the counts)
+    // every shader program the scene needs, built without blocking the page
+    if (!over() && typeof renderer.compileAsync === 'function') {
+      await Promise.race([
+        renderer.compileAsync(scene, camera).then(() => { compiled = true; }, e => console.warn('[settle] compile:', e?.message || e)),
+        new Promise(r => setTimeout(r, left())),
+      ]);
+    }
+    // draw until four frames in a row take no longer than half as much again as the quickest so far (34 ms at least)
+    let best = Infinity, even = 0, prev = performance.now();
+    while (!over() && even < 4) {
+      requestRender();
+      await nextFrame();
+      const now = performance.now(), dt = now - prev; prev = now; frames++;
+      if (dt < best) best = dt;
+      even = frames > 2 && dt <= Math.max(34, best * 1.5) ? even + 1 : 0;
+    }
+    // the picking trees (the hover outline and every click use them)
+    while (!over() && state._bvhBuilding) await new Promise(r => setTimeout(r, 50));
+  } finally {
+    btn?.removeEventListener('click', onCancel);
+    Log.info(`View ready in ${Math.round(performance.now() - t0)} ms (${frames} frames${compiled ? ', programs built ahead' : ''}${skip ? ', skipped' : ''})`, { tag: 'load' });
+  }
 }
 
 // Camera-shutter flash overlay. Replaces the unintentional black blink that
@@ -37068,6 +37115,9 @@ async function _runLoad(file, formatLabel, parser) {
     if (!loadedOk || wasImport) { state._sourceFile = prevSource; state.sceneName = prevSceneName; }
     if (myLoadGen === state._loadGen) {
       state.renderPaused = false;
+      if (loadedOk) await _settleView(() => myLoadGen === state._loadGen);      // (shown once it turns smoothly)
+    }
+    if (myLoadGen === state._loadGen) {
       if (controls) controls.enabled = true;
       setLoader(false);
       requestRender();

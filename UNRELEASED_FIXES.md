@@ -13,6 +13,18 @@ Last release in the changelog: **v0.35.5**.
 
 ## Fixed
 
+- ![fix][fix] **A big model showed before it was ready, and stuttered for the first seconds of turning it.** The loader now stays up
+  through a last step, "Preparing the view": every shader program the scene needs is built ahead, the view is drawn behind the loader
+  until the frames come at an even pace, and the trees that make hover and clicks fast are finished. Only then does the model show. It
+  never waits longer than 12 seconds (a scene that is slow on this computer is shown anyway), and Cancel on the loader shows it at once.
+  Cause: the loader went away as soon as the file was read, and the first frames then sent the buffers to the graphics card, compiled
+  the programs, rebuilt every material for the shadows and built the picking trees, all while the user was already turning the model.
+  Where: `_settleView` in `app/js/app.js`, called from `_runLoad` (GLB, FBX, OBJ, 3MF, STL, and STEP converted by the server) and
+  `loadStepFile` (STEP read in the page).
+  Test: `tests/e2e-load-settle.mjs` (Gearbox Assy, real GPU: the loader said "Preparing the view", the picking trees were done when it
+  went away, the first two seconds after it ran at 16.7 ms a frame with the longest at 20.7 ms). Not yet checked on a model as big as
+  the V8, or in the app on port 4242 (it serves another copy).
+
 - ![fix][fix] **Remove holes opened the part instead of closing it: polygons went missing on the far side.** With a large size, an
   opening that is not a hole (a bore that runs on into other geometry) is sealed from outside, and the wall under it is taken out.
   On a plate no thicker than the opening is wide, that column reached the face on the other side of the plate and took its triangles
