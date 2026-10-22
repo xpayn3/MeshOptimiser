@@ -208,9 +208,10 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 14px; line-height:
   .tile:hover .tile-art { color: #101010; --art-dim: #101010; }
   .tile:hover .tile-art .art-hot, .tile:hover .tile-art .art-dim { stroke: #101010; }
   .tile:hover .tile-art text.art-t { fill: #101010; }
-  /* the parts that are coloured by an animation (a hit, a find, a glow) are black too: !important beats an animation */
-  .tile:hover .tile-art :is(path, circle, rect, ellipse, line, polyline, polygon):not(.art-solid):not(.art-fnd):not(.art-face):not(.art-hole) { stroke: #101010 !important; filter: none !important; }
-  .tile:hover .tile-art :is(.art-hole, .art-face) { fill: #101010 !important; }
+  /* the parts that are coloured by an animation (a hit, a find, a glow) are black too: !important beats an animation; they take currentColor, not #101010, so they darken with the
+     drawing's own colour once the fill has come in (an instant #101010 left them black on the dark card for a moment) */
+  .tile:hover .tile-art :is(path, circle, rect, ellipse, line, polyline, polygon):not(.art-solid):not(.art-fnd):not(.art-face):not(.art-hole) { stroke: currentColor !important; filter: none !important; }
+  .tile:hover .tile-art :is(.art-hole, .art-face) { fill: currentColor !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tile, .tile::before, .tile-label, .tile h2, .tile h2 span, .tile-line, .tile-art, .tile-art .art-hot, .tile-art .art-dim { transition: none; }
@@ -312,8 +313,8 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 14px; line-height:
   :is(.clip, .star):hover .clip-art { --fill-r: 1100px; --glow: 0.09; --card-bg: var(--tile-c, var(--accent)); color: #101010; --art-dim: #101010; }
   :is(.clip, .star):hover .clip-art .art-hot, :is(.clip, .star):hover .clip-art .art-dim { stroke: #101010; }
   :is(.clip, .star):hover .clip-art text.art-t { fill: #101010; }
-  :is(.clip, .star):hover .clip-art :is(path, circle, rect, ellipse, line, polyline, polygon):not(.art-solid):not(.art-fnd):not(.art-face):not(.art-hole) { stroke: #101010 !important; filter: none !important; }
-  :is(.clip, .star):hover .clip-art :is(.art-hole, .art-face) { fill: #101010 !important; }
+  :is(.clip, .star):hover .clip-art :is(path, circle, rect, ellipse, line, polyline, polygon):not(.art-solid):not(.art-fnd):not(.art-face):not(.art-hole) { stroke: currentColor !important; filter: none !important; }
+  :is(.clip, .star):hover .clip-art :is(.art-hole, .art-face) { fill: currentColor !important; }
 }
 @media (prefers-reduced-motion: reduce) { :is(.clip, .star) .clip-art, :is(.clip, .star) .clip-art .art-hot, :is(.clip, .star) .clip-art .art-dim { transition: none; } }
 .tile-art .art-hole, .tile-art .art-sa, .tile-art .art-sb, .tile-art .art-fnd { transform-box: fill-box; transform-origin: center; }
@@ -1865,10 +1866,11 @@ h1 .tv { font-size: 14px; margin-left: 12px; }
 .peek-frame { position: relative; }
 .hero-peek.is-live .peek-frame { transform: scale(var(--s, 0.9)); will-change: transform; }      /* a little smaller at the start and the end, full size in the middle (site.js) */
 .hero-peek.is-live .words-over { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
-.word { grid-area: 1 / 1; display: grid; justify-items: center; gap: clamp(10px, 1.6vw, 24px); text-align: center; padding-inline: var(--gutter); }
+.word { grid-area: 1 / 1; display: grid; justify-items: center; gap: clamp(6px, 0.8vw, 12px); text-align: center; padding-inline: var(--gutter); }
 .hero-peek.is-live .word h2 .ch { display: inline-block; opacity: var(--o, 0); translate: 0 var(--y, 0); filter: blur(var(--b, 0px)); will-change: opacity, translate, filter; }      /* letter by letter (site.js) */
+.hero-peek.is-live .word h2 { scale: var(--z, 1); transform-origin: 50% 55%; will-change: scale; }      /* the zoom in and through (site.js) */
 .hero-peek.is-live .word p { opacity: var(--po, 0); translate: 0 var(--py, 0); filter: blur(var(--pb, 0px)); }
-.word h2 { font-size: round(clamp(72px, 15vw, 260px), 1px); line-height: 1; padding-bottom: 0.14em; letter-spacing: -0.05em; }      /* (room for the tail of a g) */
+.word h2 { font-size: round(clamp(72px, 15vw, 260px), 1px); line-height: 1; margin-bottom: -0.12em; letter-spacing: -0.05em; }      /* (none of the words has a tail below the line, so the line under it comes up into that room; a word with a g or p would need it back) */
 .word p { max-width: 34ch; margin: 0; color: var(--tx); font-size: var(--t-lead); line-height: 1.4; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7), 0 2px 24px rgba(0, 0, 0, 0.8); }
 @media (prefers-reduced-motion: reduce), (max-width: 760px) {
   .hero-peek, .hero-peek.is-live { height: auto; }
