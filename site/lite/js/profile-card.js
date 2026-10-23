@@ -9,9 +9,9 @@
 // redo moves past it. The options are remembered (this browser): the gap width and the straightening as shares of the
 // cross-section, so they suit a small seal and a big frame alike. The Shading angle is the part's own (the one in Properties): the
 // card starts from it, and the parts it builds are shaded at it and keep it.
-import { cleanProfile } from './profile.js?v=5';
-import { runMeshOp } from './meshops.js?v=18';
-import { sectionView } from './section-view.js?v=1';
+import { cleanProfile } from './profile.js?v=6';
+import { runMeshOp } from './meshops.js?v=19';
+import { sectionView } from './section-view.js?v=7';
 
 // app: the objects and functions of app.js this card uses (see the call in app.js)
 export function installProfileCard(app) {
@@ -57,11 +57,15 @@ export function installProfileCard(app) {
   // ── the preview, and the editor on it (section-view.js) ──
   let view = null;
   const viewOf = () => view || (view = sectionView($i('pf-svg'), {
-    onEdit(shapes, fast) {
+    // (shapes null: the edit was taken back before there was one; crossed: an edge of it crosses another, drawn red, not built)
+    onEdit(shapes, fast, crossed) {
       const it = itNow(); if (!it) return;
-      it.shapes = shapes; it.edited = true;
+      it.shapes = shapes || null; it.edited = !!shapes; it.crossed = !!(shapes && crossed);
       preview(fast);
-      if (!fast && cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
+      if (fast) return;
+      if (it.crossed) { clearTimeout(timer); say('An edge of the section crosses another (drawn red): move a point so it does not, and it is built.'); cur.crossSaid = true; return; }
+      if (cur.crossSaid) { say(''); cur.crossSaid = false; }
+      if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); }
     },
   }));
   function draw(fit) {
@@ -71,7 +75,7 @@ export function installProfileCard(app) {
   function markEdited() {
     const it = itNow(), on = !!(it && it.shapes), ed = !!(view && view.editing);
     const r = $i('pf-edit-reset'); if (r) r.hidden = !on;
-    const h = $i('pf-edit-hint'); if (h) h.textContent = ed ? 'Drag a point (it snaps to the profile as it was; Shift: free) · double-click an edge to add one · Delete or Alt-click takes one out' + (on ? ' · this part is built from the section as edited; the options no longer change it' : '') : (on ? 'Built from the section as edited by hand.' : '');
+    const h = $i('pf-edit-hint'); if (h) h.textContent = on ? 'Built from the section as edited by hand; the options no longer change it.' : '';      // (how to edit: the view's label)
     const btn = $i('pf-edit'); if (btn) btn.classList.toggle('is-on', ed);
   }
 
@@ -125,6 +129,7 @@ export function installProfileCard(app) {
       for (const it of cur.items) {
         if (cur.items.length > 4) say('Building ' + (++n) + ' of ' + cur.items.length + '…');
         const p = getPart(it.partId); if (!p || p.deleted || !p.mesh) continue;
+        if (it.crossed) { bad.push(it.name + ': its section as edited crosses itself'); continue; }
         let r; try { r = await runMeshOp('cleanProfile', it.P.slice(), it.I.slice(), optsFor(it, false)); } catch (e) { r = { ok: false, why: e.message || String(e) }; }
         if (!r || !r.ok) { bad.push(it.name + ': ' + ((r && r.why) || 'it could not be done')); continue; }
         const before = cur.op ? null : _decSnap(p);
@@ -182,7 +187,7 @@ export function installProfileCard(app) {
     $i('pf-prev')?.addEventListener('click', () => step(-1));
     $i('pf-next')?.addEventListener('click', () => step(1));
     $i('pf-edit')?.addEventListener('click', () => { if (!cur) return; viewOf().setEdit(!view.editing); markEdited(); });
-    $i('pf-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.edited = false; viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
+    $i('pf-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.edited = false; it.crossed = false; viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
     $i('pf-reset')?.addEventListener('click', () => {
       const it = itNow(); if (!cur || !it) return; const s = it.last && it.last.ok ? it.last.sectionSize * it.scale : 0;
       changed('fill', DEF.fill); changed('machining', DEF.machining); changed('smooth', DEF.smooth);
@@ -288,7 +293,7 @@ export function installProfileCard(app) {
     profileStep: (d) => { step(d); return summary(); },
     // (for tests: the section of the part shown, as it will be built, and an edit to it)
     profileSection: () => { const it = itNow(); return it && it.last && it.last.ok ? (it.shapes || it.last.shapesAfter) : null; },
-    profileEdit: (shapes) => { const it = itNow(); if (!it) return null; it.shapes = shapes; it.edited = true; viewOf().reset(shapes); preview(); if (cur.op) build(); return summary(); },
+    profileEdit: (shapes) => { const it = itNow(); if (!it) return null; it.shapes = shapes; it.edited = true; it.crossed = false; viewOf().reset(shapes); preview(); if (cur.op) build(); return summary(); },
     profileState: () => (cur ? { options: { ...cur.o }, applied: !!cur.op, edit: !!(view && view.editing), summary: summary() } : null),
   });
   return { open };

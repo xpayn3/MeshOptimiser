@@ -2,22 +2,23 @@
 import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=34';
 import { installHoleFillCard } from './holefill-card.js?v=1';
-import { installProfileCard } from './profile-card.js?v=7';
-import { installRoundCard } from './round-card.js?v=3';
-import { installDecimateCard } from './decimate-card.js?v=2';
+import { installProfileCard } from './profile-card.js?v=14';
+import { installRoundCard } from './round-card.js?v=12';
+import { installDecimateCard } from './decimate-card.js?v=3';
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
 import { fillRoundGrooves, outlineRevolve, sweepBelt } from './revolve.js?v=8';
 import { voxelRemesh } from './voxel.js?v=4';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=18';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=19';
 import { carryUvs } from './uvcarry.js?v=2';
-import { createPhoto } from './photo.js?v=9';
+import { createPhoto } from './photo.js?v=10';
+import { createStage } from './photo-stage.js?v=4';
 import * as MEDIT from './meshedit.js?v=6';
 import { dissolvePoints } from './dissolve.js?v=3';
 import * as MT from './meshtools.js?v=5';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=3';
 import * as SPL from './splines.js?v=3';
-import { reduceIndex, packAttributes } from './simplify-core.js?v=6';
+import { reduceIndex, reduceWithin, packAttributes } from './simplify-core.js?v=7';
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
@@ -1632,7 +1633,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=79', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=81', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -3964,6 +3965,7 @@ const _Settings = (() => {
     ['three-mesh-bvh', 'Garrett Johnson', 'MIT', 'https://github.com/gkjohnson/three-mesh-bvh', 'Fast picking on big meshes.'],
     ['meshoptimizer', 'Arseny Kapoulkine', 'MIT', 'https://github.com/zeux/meshoptimizer', 'The simplifier behind Decimate and Smart Fit, and Meshopt compression.'],
     ['Draco', 'Google', 'Apache 2.0', 'https://github.com/google/draco', 'Reads and writes Draco-compressed GLB.'],
+    ['Basis Universal', 'Binomial LLC', 'Apache 2.0', 'https://github.com/BinomialLLC/basis_universal', 'Reads KTX2-compressed textures in glTF.'],
     ['Open Asset Import Library (assimpjs)', 'the assimp team and Viktor Kovacs', 'BSD 3-Clause; MIT', 'https://github.com/assimp/assimp', 'Opens other 3D formats.'],
     ['CadQuery OCP', 'the CadQuery contributors', 'Apache 2.0', 'https://github.com/CadQuery/OCP', 'Reads STEP files.'],
     ['Open CASCADE Technology', 'Open Cascade SAS', 'LGPL 2.1 with exception', 'https://dev.opencascade.org', 'The geometry kernel under OCP.'],
@@ -5254,9 +5256,10 @@ const _Actions = (() => {
     { id:'convexHull', group:'Edit', label:'Convex hull', words:'convex hull shell wrap collision physics game', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('convexHull'); } catch (_) {} } },
     { id:'convexPieces', group:'Edit', label:'Convex pieces', words:'convex pieces decomposition collision physics game vhacd', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('convexPieces'); } catch (_) {} } },
     { id:'mergeBodies', group:'Edit', label:'Merge bodies', words:'merge bodies union solids boolean overlapping manifold join', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('mergeBodies'); } catch (_) {} } },
-    { id:'unionParts', group:'Edit', label:'Union parts', words:'union parts boolean join add merge solids manifold', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('union'); } catch (_) {} } },
-    { id:'subtractParts', group:'Edit', label:'Subtract parts', words:'subtract parts boolean difference cut minus manifold', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('subtract'); } catch (_) {} } },
-    { id:'intersectParts', group:'Edit', label:'Intersect parts', words:'intersect parts boolean common overlap manifold', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('intersect'); } catch (_) {} } },
+    { id:'booleanCard', group:'Edit', label:'Boolean…', words:'boolean booleans union subtract intersect without split cut difference common combine solids cinema 4d boole manifold', run: () => { try { window.__moAgent && window.__moAgent.booleanCard && window.__moAgent.booleanCard(); } catch (_) {} } },
+    { id:'unionParts', group:'Edit', label:'Union parts', words:'union parts boolean join add merge solids manifold', run: () => { try { window.__moAgent && window.__moAgent.booleanCard && window.__moAgent.booleanCard('union'); } catch (_) {} } },
+    { id:'subtractParts', group:'Edit', label:'Subtract parts', words:'subtract parts boolean difference cut minus manifold', run: () => { try { window.__moAgent && window.__moAgent.booleanCard && window.__moAgent.booleanCard('subtract'); } catch (_) {} } },
+    { id:'intersectParts', group:'Edit', label:'Intersect parts', words:'intersect parts boolean common overlap manifold', run: () => { try { window.__moAgent && window.__moAgent.booleanCard && window.__moAgent.booleanCard('intersect'); } catch (_) {} } },
     { id:'voxelRemesh',   group:'Edit',       label:'Voxel remesh', words:'voxel remesh dynamesh rebuild retopology uniform even watertight closed solid merge bodies fill hollows close gaps wrap stand-in proxy', run: () => { try { window.__moAgent && window.__moAgent.voxelRemesh && window.__moAgent.voxelRemesh(); } catch (_) {} } },
     { id:'beltRibs',      group:'Edit',       label:'Belt: remove ribs', words:'belt remove ribs ridges grooves poly-v serpentine drive belt band strap seal sweep spline profile path defeature', run: () => { try { window.__moAgent && window.__moAgent.roundCard && window.__moAgent.roundCard({ mode: 'belt' }); } catch (_) {} } },
     { id:'cleanProfile',  group:'Edit',       label:'Profile: clean outline', words:'profile extrusion extruded section cross-section window frame pvc aluminium chambers hollow cells holes notches teeth slots ridges fill solid outline simplify defeature drilled machining mitre mitred bent curved arch whole scene all profiles edit points', run: () => { try { window.__moAgent && window.__moAgent.cleanProfile && window.__moAgent.cleanProfile(); } catch (_) {} } },
@@ -5585,13 +5588,13 @@ const _CmdK = (() => {
     solid: 'cube-solid', wire: 'cube-wire', xray: 'cube-xray', clay: 'sphere-clay', gzMove: 'move-3d', gzRotate: 'rotate-3d', gzScale: 'scale-3d', gzOff: 'circle-slash', tgGrid: 'land-plot',
     selAll: 'square-check', selInvert: 'arrow-left-right', selClear: 'square-x', isolate: 'focus', showAll: 'eye', hideUnsel: 'eye-off', hideSel: 'eye-off', reveal: 'locate',
     undo: 'undo-2', redo: 'redo-2', delete: 'trash-2', copy: 'copy', paste: 'clipboard-paste', duplicate: 'copy-plus', recenter: 'axis-3d', group: 'folder-plus', ungroup: 'folder-minus',
-    alignParts: 'align-center-vertical', inspectModel: 'bug', smallParts: 'trash-2', flagSmall: 'land-plot', sunGizmo: 'sun', alignFloor: 'arrow-down-to-line', alignFloorNow: 'arrow-down-to-line', pivotOrient: 'axis-3d', merge: 'combine', repairMesh: 'wrench', normals: 'flip-horizontal-2', normalsFind: 'scan-search', normalsReverse: 'unfold-vertical', normalsAlign: 'layer-arrow-up', normalsHighlight: 'scan-eye', hiddenFaces: 'scan-eye', mergeBy: 'layers', selLayer: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'shrink', flatten: 'list-tree', measure: 'ruler', materials: 'swatch-book',
+    alignParts: 'align-center-vertical', inspectModel: 'bug', smallParts: 'trash-2', flagSmall: 'land-plot', sunGizmo: 'sun', alignFloor: 'arrow-down-to-line', alignFloorNow: 'arrow-down-to-line', pivotOrient: 'axis-3d', merge: 'combine', repairMesh: 'wrench', booleanCard: 'squares-unite', unionParts: 'squares-unite', subtractParts: 'squares-subtract', intersectParts: 'squares-intersect', normals: 'flip-horizontal-2', normalsFind: 'scan-search', normalsReverse: 'unfold-vertical', normalsAlign: 'layer-arrow-up', normalsHighlight: 'scan-eye', hiddenFaces: 'scan-eye', mergeBy: 'layers', selLayer: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'shrink', flatten: 'list-tree', measure: 'ruler', materials: 'swatch-book',
     settings: 'settings', shortcuts: 'command', palette: 'search', console: 'terminal', welcome: 'home', lettering: 'type',
   };
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
-  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
+  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'booleanCard', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
   const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
     'flagSliver', 'isolateSmall', 'deleteSmall', 'smallParts', 'splitAll', 'split', 'fillHoles', 'removeBlends', 'roundFaces', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
@@ -6844,7 +6847,6 @@ const _RendererOwner = (() => {
     try {
       const r = new THREE.WebGPURenderer({ ...opts, forceWebGL });
       await r.init();
-      try { _fixGeometryDispose(r); } catch (_) {}
       try { _hookGpuErrors(r); } catch (_) {}
       const isGPU = !forceWebGL && r.backend && (r.backend.isWebGPUBackend || r.backend.constructor?.name?.includes('WebGPU'));
       return { instance: r, backendName: isGPU ? 'WebGPU' : 'WebGL2' };
@@ -6852,7 +6854,6 @@ const _RendererOwner = (() => {
       console.warn('[STEP] renderer init failed, retry forceWebGL:', e.message);
       const r = new THREE.WebGPURenderer({ ...opts, forceWebGL: true });
       await r.init();
-      try { _fixGeometryDispose(r); } catch (_) {}
       return { instance: r, backendName: 'WebGL2' };
     }
   }
@@ -7555,7 +7556,7 @@ function initScene() {
       // Maya) is to show ONE arrow per axis in the positive direction —
       // the negative side is implied.
       //
-      // GOTCHA: three.js r172's setupGizmo() bakes the mesh's position
+      // GOTCHA: three.js's setupGizmo() (r172 and r186) bakes the mesh's position
       // offset INTO THE GEOMETRY VERTICES and resets object.position to
       // (0,0,0). Reading o.position.x always returns 0, so the old
       // position-based check never matched anything. Compute the geometry
@@ -8692,43 +8693,47 @@ function setBackground(mode) {
 // once. Cached on the renderer so consecutive 'hdri' mode toggles don't
 // re-pay the cost.
 let _defaultEnvTex = null;
-let _defaultEnvUp = null;          // the up axis _defaultEnvTex was made for
 let _hdriPmrem = null;
 
 // ── Environments stand on the scene's floor ──────────────────────────────────────────────────────────────────────────
 // three's environments have their sky at +Y: RoomEnvironment's ceiling lights, the top row of an equirect. This app's world is
-// Z-up unless the scene is set to Y-up, and the node materials of three r172 ignore scene.environmentRotation, so an environment
-// used as it comes lit a Z-up model from the side (the studio's ceiling fell on the +Y faces, not the tops) and an HDRI's sky stood
-// beside the model. So the turn is baked into the environment when it is made: the studio room is turned a quarter about X before
-// it is rendered, and an equirect is drawn onto a box round the camera with its lookup turned the same way. Each is made for the
-// up axis of the moment, and made again when that changes (_envFollowUp).
+// Z-up unless the scene is set to Y-up, so an environment used as it comes lit a Z-up model from the side (the studio's ceiling fell
+// on the +Y faces, not the tops) and an HDRI's sky stood beside the model. Each environment is made as it comes and turned where it
+// is used: scene.environmentRotation (the lighting and reflections) and backgroundRotation take a quarter turn about X in a Z-up
+// scene, then the HDRI's own turn about the up axis (_applyEnvTurn). (three r172's node materials ignored environmentRotation, so
+// the quarter turn used to be baked into each environment, which was made again whenever the up axis changed.)
 function _envUpAxis() { return state.sceneUpAxis === 'y' ? 'y' : 'z'; }
 function _envFromRoom(RoomEnvironment) {
   _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
-  if (_envUpAxis() === 'z') { room.rotation.x = Math.PI / 2; room.updateMatrixWorld(true); }      // (its ceiling, at +Y, goes to +Z)
   const tex = _hdriPmrem.fromScene(room, 0.04).texture;
   room.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
   return tex;
 }
 function _envFromEquirect(equirect) {
   _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
-  if (_envUpAxis() !== 'z') return _hdriPmrem.fromEquirectangular(equirect).texture;
-  // A box round the cube camera PMREM renders from; each pixel looks the equirect up in the direction it is seen in, turned so that
-  // the world's +Z asks for the equirect's +Y (the same lookup three makes in fromEquirectangular, with the axes turned: x, z, -y).
-  const T = THREE.TSL, d = T.positionWorldDirection;
-  const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthTest: false, depthWrite: false, fog: false, toneMapped: false });
-  mat.fragmentNode = T.vec4(T.texture(equirect, T.equirectUV(T.vec3(d.x, d.z, d.y.negate())), 0).rgb, 1);
-  const box = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), mat), sc = new THREE.Scene();
-  box.frustumCulled = false;
-  sc.add(box);
-  try { return _hdriPmrem.fromScene(sc, 0, 0.1, 10).texture; }
-  finally { box.geometry.dispose(); mat.dispose(); }
+  return _hdriPmrem.fromEquirectangular(equirect).texture;
 }
-// The up axis changed: the environment in use is made again for it (the plain backgrounds' studio, or the HDRI).
+const _envTurn = new THREE.Euler();
+// The environment and the background stood on the scene's floor and turned `rot` about its up axis.
+// three looks the lighting up in a PMREM texture with Y negated BEFORE it turns the direction (environmentRotation), and the
+// background with Y negated AFTER (backgroundRotation). A turn about X or Z comes out the other way round under that negation, so the
+// two are given mirrored turns: the lighting -π/2 about X (which takes the sky from +Y to +Z) and `rot` about Z, the background +π/2
+// and -rot. A turn about Y is the same for both. (Checked against the old baked environments: the same lighting to within 1 of 255.
+// On three r186 the old code turned the background against the lighting in a Z-up scene.)
+const _bgTurn = new THREE.Euler();
+function _applyEnvTurn(rot) {
+  if (!scene) return;
+  if (_envUpAxis() === 'z') { _envTurn.set(-Math.PI / 2, 0, rot, 'ZYX'); _bgTurn.set(Math.PI / 2, 0, -rot, 'ZYX'); }      // (the quarter about X first, then about Z)
+  else { _envTurn.set(0, rot, 0, 'XYZ'); _bgTurn.copy(_envTurn); }
+  scene.environmentRotation.copy(_envTurn);
+  scene.backgroundRotation.copy(_bgTurn);
+}
+// The up axis changed: the environment in use is turned to it.
 function _envFollowUp() {
-  if (!scene || !renderer) return;
-  if (state.bgMode === 'hdri') _ensureHdriEnvironment(); else _ensureStudioReflections();
+  if (!scene) return;
+  if (state.bgMode === 'hdri') _applyHdriRotation(); else _applyEnvTurn(0);
+  requestRender();
 }
 
 // ── Something to reflect, on the plain backgrounds ─────────────────────────
@@ -8761,13 +8766,11 @@ async function _ensureStudioReflections() {
   if (_studioReflTimer > 0) return;               // already waiting
   _studioReflTimer = 0;
   try {
-    if (!_studioRefl || _studioRefl.renderer !== renderer || _studioRefl.up !== _envUpAxis()) {
+    if (!_studioRefl || _studioRefl.renderer !== renderer) {
       const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
       // (the one PMREM generator of the session, shared with the HDRI code
       // below: a second one made here was never freed)
-      const old = _studioRefl && _studioRefl.renderer === renderer ? _studioRefl.tex : null;
-      _studioRefl = { renderer, tex: _envFromRoom(RoomEnvironment), up: _envUpAxis() };
-      if (old) { if (scene.environment === old) scene.environment = _studioRefl.tex; try { old.dispose(); } catch (_) {} }      // (made for the other up axis)
+      _studioRefl = { renderer, tex: _envFromRoom(RoomEnvironment) };
     }
   } catch (e) {
     // the renderer may not be ready this early: try again shortly, a few times
@@ -8777,15 +8780,8 @@ async function _ensureStudioReflections() {
   }
   if (state.bgMode === 'hdri') return;          // the mode changed while this was being built
   scene.environment = _studioRefl.tex;
-  if (scene.environmentRotation) scene.environmentRotation.set(0, 0, 0);
-  if ('environmentIntensity' in scene) scene.environmentIntensity = _STUDIO_REFL;
-  // HDRI mode scales each material as well as the scene: undo that
-  if (state.partsRoot) {
-    state.partsRoot.traverse(o => {
-      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
-      if (mats) for (const m of mats) if (typeof m.envMapIntensity === 'number' && m.envMapIntensity !== 1) m.envMapIntensity = 1;
-    });
-  }
+  _applyEnvTurn(0);
+  scene.environmentIntensity = _STUDIO_REFL;
   requestRender();
 }
 
@@ -8838,14 +8834,14 @@ function _paintHdriPreset(id) {
   }
   const tex = new THREE.CanvasTexture(cv);
   tex.mapping = THREE.EquirectangularReflectionMapping;
-  if (tex.colorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
   return tex;
 }
 function _ensurePresetEnv(id) {
-  const key = id + '|' + _envUpAxis();
+  const key = id;
   if (_hdriPresetCache.has(key)) return _hdriPresetCache.get(key);
   const equirect = _paintHdriPreset(id);
   if (!equirect) return null;
@@ -8865,7 +8861,6 @@ async function _applyHdriPreset(id) {
     state._customHdri = null;
     state._customHdriName = null;
   }
-  state._customHdriSrc = null;
   if (id === 'studio') {
     await _ensureHdriEnvironment();   // RoomEnvironment path
     const cur = document.getElementById('hdri-current');
@@ -8895,16 +8890,6 @@ function _hdriBackground(tex) {
   return new THREE.Color(document.body.classList.contains('claude-mode') ? 0x383838 : 0x444547);
 }
 async function _ensureHdriEnvironment() {
-  // (a loaded HDRI made for the other up axis is made again from its source, which is kept for that)
-  if (state._customHdri && state._customHdriSrc && state._customHdriUp !== _envUpAxis()) {
-    try {
-      const env = _envFromEquirect(state._customHdriSrc);
-      state._customHdriSrc.dispose();                 // (its GPU copy; the picture stays, for the next turn)
-      state._customHdri.dispose?.();
-      state._customHdri = env;
-      state._customHdriUp = _envUpAxis();
-    } catch (e) { console.warn('[hdri] could not turn the loaded HDRI to the up axis:', e); }
-  }
   if (state._customHdri) {
     scene.background = _hdriBackground(state._customHdri);
     scene.environment = state._customHdri;
@@ -8928,13 +8913,10 @@ async function _ensureHdriEnvironment() {
       return;
     }
   }
-  if (!_defaultEnvTex || _defaultEnvUp !== _envUpAxis()) {
+  if (!_defaultEnvTex) {
     try {
       const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
-      const old = _defaultEnvTex;
       _defaultEnvTex = _envFromRoom(RoomEnvironment);
-      _defaultEnvUp = _envUpAxis();
-      if (old) { if (scene.background === old) scene.background = null; if (scene.environment === old) scene.environment = null; try { old.dispose(); } catch (_) {} }
     } catch (e) {
       console.warn('[hdri] default env load failed:', e);
       return;
@@ -8971,12 +8953,10 @@ async function _loadCustomHdri(file) {
     // Run through PMREM so it lights PBR materials with the correct
     // pre-filtered roughness mips; without this, reflections are noisy.
     const envTex = _envFromEquirect(tex);
-    tex.dispose();                                  // (its GPU copy: the picture itself is kept, to be turned again if the up axis changes)
+    tex.dispose();
     // Drop the previous custom HDRI to avoid GPU leaks.
     state._customHdri?.dispose?.();
     state._customHdri = envTex;
-    state._customHdriSrc = tex;
-    state._customHdriUp = _envUpAxis();
     state._customHdriName = file.name;
     if (state.bgMode === 'hdri') _ensureHdriEnvironment();
     const cur = document.getElementById('hdri-current');
@@ -8991,54 +8971,27 @@ async function _loadCustomHdri(file) {
   }
 }
 
-// Apply state.hdriRotation. Two paths run in parallel because the node
-// materials of three r172 ignore scene.environmentRotation (on both
-// renderers): the lighting and reflections stay where the environment was
-// made (turned to the up axis: _envFromRoom / _envFromEquirect):
-//   1. scene.backgroundRotation turns the visible background about the
-//      scene's up axis (environmentRotation is set the same, for a three
-//      that reads it).
-//   2. The directional "sun" light gets repositioned to match the gizmo,
-//      providing the visible relighting that responds to the user drag.
-// Together this gives the same look as a real HDRI rotation regardless
-// of which renderer is active.
+// Apply state.hdriRotation: the environment (its lighting and reflections) and the background turn about the scene's up axis
+// (_applyEnvTurn), and the directional "sun" goes round with them (_applyHdriSunPosition), so its shadow turns too.
 function _applyHdriRotation() {
   if (!scene) return;
-  const rot = state.hdriRotation || 0;
-  const yUp = _envUpAxis() === 'y';
-  if (scene.environmentRotation) scene.environmentRotation.set(0, yUp ? rot : 0, yUp ? 0 : rot);
-  if (scene.backgroundRotation)  scene.backgroundRotation.set(0, yUp ? rot : 0, yUp ? 0 : rot);
+  _applyEnvTurn(state.hdriRotation || 0);
   if (state._lights?.dir && state._lights._stashedForHdri) {
     _applyHdriSunPosition();
   }
 }
 
-// Apply state.hdriIntensity to the env's lighting and reflections.
-//
-// Modern three.js (r163+) exposes scene.environmentIntensity /
-// backgroundIntensity. The WebGPU bundle's NodeMaterial path picks them
-// up for some materials but not all, so we ALSO walk every PBR material
-// and set envMapIntensity directly (the older per-material knob). Doing
-// both is harmless — a 'belt + suspenders' so the slider actually moves
-// pixels regardless of which renderer is active or whether the loaded
-// model uses MeshStandardMaterial or NodeMaterial.
+// Apply state.hdriIntensity to the env's lighting and reflections, and to the background.
+// (scene.environmentIntensity is what every material without an envMap of its own reads. three r172's node materials did not all read
+// it, so each material's envMapIntensity was set as well; on r186 that only scaled the reflection maps some FBX files bring.)
 function _applyHdriIntensity() {
   if (!scene) return;
   // The slider belongs to HDRI mode. On a plain background the surroundings
   // are the soft studio at its own fixed strength.
   if (state.bgMode !== 'hdri') { _ensureStudioReflections(); return; }
   const k = Math.max(0, state.hdriIntensity ?? 1);
-  if ('environmentIntensity' in scene) scene.environmentIntensity = k;
-  if ('backgroundIntensity'  in scene) scene.backgroundIntensity  = k;
-  if (state.partsRoot) {
-    state.partsRoot.traverse(o => {
-      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
-      if (!mats) return;
-      for (const m of mats) {
-        if (typeof m.envMapIntensity === 'number') m.envMapIntensity = k;
-      }
-    });
-  }
+  scene.environmentIntensity = k;
+  scene.backgroundIntensity  = k;
   // Sun directional in HDRI mode: scale with intensity so the visible
   // relighting tracks the env brightness. Outside HDRI mode the dir
   // light is at its target value (set in _applyHdriLightStash).
@@ -9055,14 +9008,10 @@ function _toggleHdriUI(on) {
   _applyHdriLightStash(on);
 }
 
-// HDRI lighting model — the WebGPU bundle's NodeMaterial path doesn't
-// reliably re-light meshes when scene.environmentRotation changes (the
-// visible bg rotates but the diffuse/specular lookups stay frozen on
-// the original orientation). Workaround used by Substance Painter and
-// Marmoset: keep a single directional "sun" light alive that the user
-// drags via the sun gizmo. The HDRI continues to provide ambient +
-// reflections; the directional gives the visible relighting that
-// actually responds to the gizmo.
+// HDRI lighting model, as in Substance Painter and Marmoset: the HDRI gives
+// the ambient light and the reflections, and a single directional "sun",
+// which the user drags with the sun gizmo, gives a clear key light and the
+// shadows. Both turn together (_applyHdriRotation).
 //
 // On HDRI enter:
 //   - hemi      → 0 (HDRI covers ambient)
@@ -9665,38 +9614,8 @@ function _repairPartGeometries(reupload) {
   });
   return fixed;
 }
-// three r172 frees the GPU buffers of a disposed geometry by asking the render object that first drew it for its attributes. When the
-// part has had another geometry since (a tool, Undo, Redo), those are the attributes of the geometry it draws now, so freeing the
-// old one later (the sweep of geometries nothing refers to, the purge of deleted parts) destroyed the buffers the part was drawing
-// with. three only uploads a part again when the part itself changed (its matrix, its material, the version numbers of its
-// buffers), and parts that look alike share that check, so nothing put them back: every frame failed with "Vertex buffer slot 1
-// required by [RenderPipeline ...] was not set" (setIndexBuffer threw for an indexed one) until the part was moved. Here a geometry
-// frees only what is its own.
-function _fixGeometryDispose(r) {
-  const geos = r && r._geometries;
-  if (!geos || typeof geos.initGeometry !== 'function' || !geos.attributes || !geos.wireframes || !geos.info) return;
-  // (three r186 frees a disposed geometry's buffers itself, by its attributes, and forgets it; it also keeps its listeners in
-  // _geometryDisposeListeners, which this copy would leave out: there, three's own is kept)
-  if (geos._geometryDisposeListeners instanceof Map) return;
-  geos.initGeometry = function (renderObject) {
-    const geometry = renderObject.geometry;
-    this.get(geometry).initialized = true;
-    this.info.memory.geometries++;
-    // (one at a time: three keeps a record for some attributes it never sent, an unused uv for one, and its destroy throws on those;
-    // by then the record is gone and the next upload makes a buffer, so the throw is let go and the others are still freed)
-    const free = (a) => { try { this.attributes.delete(a); } catch (_) {} };
-    const onDispose = () => {
-      this.info.memory.geometries--;
-      if (geometry.index) free(geometry.index);
-      for (const name in geometry.attributes) free(geometry.attributes[name]);
-      const wire = this.wireframes.get(geometry);
-      if (wire !== undefined) { free(wire); this.wireframes.delete(geometry); }
-      geometry.removeEventListener('dispose', onDispose);
-      this.delete(geometry);               // (drawn again after this, e.g. brought back by Undo: it is set up again, with a new listener)
-    };
-    geometry.addEventListener('dispose', onDispose);
-  };
-}
+// (three r172 freed a disposed geometry's buffers through the render object that first drew it, which could destroy the buffers of
+// the geometry a part draws now; the app replaced that. three r186 frees a geometry's own attributes, so its own code is used.)
 function _hookGpuErrors(r) {
   const dev = r && r.backend && r.backend.device;
   if (!dev || typeof dev.addEventListener !== 'function') return;
@@ -9873,8 +9792,6 @@ async function loadStepFile(file) {
           importMode ? `+${result.meshes.length} parts (now ${state.parts.length})` : `${result.meshes.length} parts · ${dt.toFixed(1)}s`,
           'success');
     await new Promise(r => setTimeout(r, 350));
-    // Drain stale resources from the previous model — see _drainDisposeQueue.
-    _drainDisposeQueue();
     await _settleView(() => !ctrl.cancelled);      // (shown once it turns smoothly)
     if (idsBefore) setTimeout(() => _focusImportedParts(idsBefore), 120);     // show where the import landed
   } catch (e) {
@@ -10532,12 +10449,14 @@ function _autoInstanceFromGLB() {
   let collapsed = 0, groupCount = 0;
   for (const g of groups.values()) {
     // Only worth swapping for a shape that repeats many times. Each
-    // InstancedMesh needs a shader and a GPU pipeline of its own (three r172
-    // cannot share them between instanced objects), built at load and again
-    // on every change of view mode, section or material state — about 25 ms
-    // apiece. With the old limit of 3 an assembly whose shapes repeat 4–40
+    // InstancedMesh needs a shader and a GPU pipeline of its own, built at
+    // load and again on every change of view mode, section or material
+    // state. With the old limit of 3 an assembly whose shapes repeat 4–40
     // times got 105 of them: 2.7 s frozen on every switch to wireframe or
-    // x-ray, to save draw calls the renderer handles easily. A plain mesh per
+    // x-ray (three r172), to save draw calls the renderer handles easily.
+    // Still so on three r186: at a limit of 4 the coral sample got 97 of
+    // them and took 3.9 s to go back to Solid (0.4 s at 32), for no gain in
+    // frame time. A plain mesh per
     // copy shares one shader with every other mesh; the fasteners that come
     // in hundreds still collapse into one draw.
     if (g.parts.length < _AUTO_INSTANCE_MIN) continue;
@@ -10603,19 +10522,12 @@ function _autoInstanceFromGLB() {
   }
 }
 
-// Module-scope queue of resources whose dispose has been deferred. Disposed
-// after the NEW model has been uploaded and rendered — see clearModel /
-// _drainDisposeQueue below for why we can't dispose synchronously on WebGPU.
-const _deferredDispose = [];
-
 function _safeDispose(obj) {
   if (!obj || typeof obj.dispose !== 'function') return;
   try { obj.dispose(); }
   catch (e) {
-    // r172 WebGPU bug: dispose can throw if a buffer was queued but not yet
-    // uploaded. The error is harmless — the buffer never existed, the throw
-    // just escapes from the cleanup callback. Swallowed so the rest of the
-    // dispose loop continues.
+    // (three r172's WebGPU backend threw here for a buffer that was queued but never sent. r186 did not, in every case tried, but
+    // its destroy of a buffer is still unguarded: a throw is let go so the rest of a cleanup loop still runs.)
   }
 }
 
@@ -10650,25 +10562,10 @@ function _disposeMaterialTextures(mat) {
   }
 }
 
-// Drain the deferred-dispose queue. Called after the new model has rendered
-// at least once, so the WebGPU backend has settled and old buffers can be
-// safely destroyed without racing in-flight commands.
-async function _drainDisposeQueue() {
-  if (_deferredDispose.length === 0) return;
-  // Claim the current queue contents BEFORE awaiting frames. Any items
-  // pushed during the await belong to a *later* clearModel and must NOT
-  // be disposed by this drain — they're the new model's still-live
-  // resources. Earlier versions spliced after the await, which let two
-  // concurrent loads race: the first drain's splice could grab the
-  // second model's just-queued items and dispose them while still in
-  // use.
-  const batch = _deferredDispose.splice(0, _deferredDispose.length);
-  // Wait two animation frames so the renderer has actually committed the new
-  // model's buffers to the GPU. Two frames covers WebGPU's typical 1-2 frame
-  // pipeline depth. After this the renderer holds no references to the old
-  // resources and dispose is a clean tear-down.
-  await _nextFrame();
-  await _nextFrame();
+// Free what is no longer drawn: a geometry with its edges and picking tree, a material with its textures, a mesh.
+// (On three r172 this waited until the next model had been drawn: its WebGPU backend threw when a buffer was freed before it was
+// sent, and the view then stopped drawing. Both models were held at once while the next one loaded. r186 frees them at once.)
+function _disposeStale(batch) {
   let count = 0;
   for (const item of batch) {
     if (!item) continue;
@@ -10684,7 +10581,7 @@ async function _drainDisposeQueue() {
     }
     count++;
   }
-  if (count > 0) Log.debug(`disposed ${count} stale resources from previous model`, { tag: 'dispose' });
+  if (count > 0) Log.debug(`disposed ${count} stale resources`, { tag: 'dispose' });
 }
 
 // IMPORTANT: clearModel is monkey-patched downstream (search
@@ -10741,31 +10638,14 @@ function clearModel() {
   state._gizmoBeforeMats = null;
   if (controls) controls.enabled = true;
 
-  // ── Deferred dispose pattern (WebGPU swap-then-drop) ────────────────────
-  // three.js r172 WebGPU has a known bug: synchronously disposing a buffer
-  // that the renderer has queued but not yet uploaded throws "Cannot read
-  // properties of undefined (reading 'destroy')". Worse, even when caught
-  // the bad destroy leaves the device in a state where subsequent renders
-  // silently throw — the viewport appears to "hang" on the last good frame.
-  //
-  // Fix: stash the old resources in _deferredDispose instead of disposing
-  // now. The new model gets loaded into fresh buffers; the old ones stay
-  // alive but unreferenced by the scene graph. After the new model has
-  // rendered at least once (called from loadGlbFile / buildModelFromMeshes
-  // via _drainDisposeQueue), the queue drains and the old buffers are
-  // destroyed cleanly because the renderer's command queue has settled.
-  //
-  // Memory tradeoff: peak memory briefly holds both models. For our case
-  // (130 → 491 MB GLB swap) that's ~1 GB GPU, well within budget on a
-  // modern GPU. Worth it to keep the renderer in a valid state.
-  for (const g of state.geomByHash.values()) _deferredDispose.push({ kind: 'geom', obj: g });
-  for (const m of state.materialByColor.values()) _deferredDispose.push({ kind: 'mat',  obj: m });
+  // The old model's GPU resources, freed as soon as it is out of the scene (_disposeStale), so the next model does not load
+  // while the old one still holds its memory.
+  const stale = [];
+  for (const g of state.geomByHash.values()) stale.push({ kind: 'geom', obj: g });
+  for (const m of state.materialByColor.values()) stale.push({ kind: 'mat',  obj: m });
   for (const g of state.instancedGroups) {
-    if (g.instanced?.material) _deferredDispose.push({ kind: 'mat',  obj: g.instanced.material });
-    if (g.instanced)            _deferredDispose.push({ kind: 'mesh', obj: g.instanced });
-  }
-  if (state._selMergedGeom) {
-    _deferredDispose.push({ kind: 'geom', obj: state._selMergedGeom });
+    if (g.instanced?.material) stale.push({ kind: 'mat',  obj: g.instanced.material });
+    if (g.instanced)            stale.push({ kind: 'mesh', obj: g.instanced });
   }
   // Sweep raw-Mesh materials that aren't tracked in materialByColor — every
   // primitive add and every shareMaterials=false code path produces fresh
@@ -10778,17 +10658,17 @@ function clearModel() {
       const m = o?.material;
       if (!m || o.userData.selGlow) return;
       if (Array.isArray(m)) {
-        for (const mm of m) { if (mm && !_seenMats.has(mm)) { _seenMats.add(mm); _deferredDispose.push({ kind: 'mat', obj: mm }); } }
+        for (const mm of m) { if (mm && !_seenMats.has(mm)) { _seenMats.add(mm); stale.push({ kind: 'mat', obj: mm }); } }
       } else if (!_seenMats.has(m)) {
-        _seenMats.add(m); _deferredDispose.push({ kind: 'mat', obj: m });
+        _seenMats.add(m); stale.push({ kind: 'mat', obj: m });
       }
     });
   }
 
   // Detach scene-graph references immediately — the new model needs a clean
-  // root to attach to. Old objects survive in _deferredDispose, but the
-  // renderer no longer traverses them.
+  // root to attach to — then free what the old one used.
   state.partsRoot.clear();
+  _disposeStale(stale);
   // Clipboard ids reference the OLD model — without clearing, paste after a
   // model swap can collide with freshly-allocated partIds in the new model.
   state._clipboardParts = [];
@@ -11175,8 +11055,8 @@ function _camKeep() {
 //   tone mapping, exposure and output colour space on the way into the 8-bit target that is read.
 // - readRenderTargetPixelsAsync returns the data. (The callers used to pass an array last, as for the WebGL renderer: it was
 //   taken for the texture index, and the read failed every time with "Invalid value used as weak map key".)
-// - WebGPU copies rows in steps of 256 bytes and r172 does not pad the buffer it reads into, so on WebGPU the target read is a
-//   multiple of 64 pixels wide and the picture is drawn into its first w columns.
+// - WebGPU copies rows in steps of 256 bytes and three returns the rows with that padding in them, so on WebGPU the target read is
+//   a multiple of 64 pixels wide and the picture is drawn into its first w columns.
 // - WebGPU gives the top row first, WebGL the bottom row first.
 let _gpuCaptureWarned = false;
 async function _gpuCapture(cam, w, h) {
@@ -13044,15 +12924,17 @@ const _ClaudeBridge = (() => {
     },
     async boolean_parts(a) {
       const hook = window.__moAgent && window.__moAgent.meshOp;
-      if (!hook || !['union', 'subtract', 'intersect'].includes(a.op)) throw new Error('op must be union, subtract or intersect.');
+      if (!hook || !['union', 'subtract', 'intersect', 'without', 'split'].includes(a.op)) throw new Error('op must be union, subtract, intersect, without or split.');
+      const after = a.cutters_after == null ? 'keep' : a.cutters_after;
+      if (!['keep', 'hide', 'delete'].includes(after)) throw new Error('cutters_after must be keep, hide or delete.');
       const ids = toIds(a.ids).filter(Number.isFinite);
       if (ids.length < 2) throw new Error('Give at least two part ids: the first is the one that changes.');
       const ok = new Set(live().filter(p => p.mesh && !p.isSpline).map(p => p.partId));
       const bad = ids.filter(id => !ok.has(id));
       if (bad.length) throw new Error('No mesh part has the id' + (bad.length === 1 ? ' ' : 's ') + bad.slice(0, 8).join(', ') + ' (deleted, a drawn line, a cloner or not there: list_parts shows the ids). Nothing was changed.');
       if (getPart(ids[0])?.locked) throw new Error('The first part is locked (lock_parts), so nothing was changed.');
-      const b = snap(); const r = await hook(a.op, { ids, quiet: true }); await sleep(200);
-      return text({ ...diff(b, snap()), parts: (r && r.results) || [], note: 'Only the first part changes; the others are left as they are (hide or delete them).' });
+      const b = snap(); const r = await hook(a.op, { ids, quiet: true, cutters: after, keepOriginal: !!a.keep_original, all: a.shared_with_all !== false, tol: Number.isFinite(a.optimise_points_mm) && a.optimise_points_mm > 0 ? a.optimise_points_mm : 0 }); await sleep(200);
+      return text({ ...diff(b, snap()), parts: (r && r.results) || [], message: r && r.message, note: 'Only the first part changes (or its copy, with keep_original; split also makes the part inside the others as a new part). The other parts were ' + ({ keep: 'left as they are', hide: 'hidden', delete: 'deleted' })[after] + '. One undo takes the whole call back.' });
     },
     async voxel_remesh(a) {
       const hook = window.__moAgent && window.__moAgent.voxelRemesh;
@@ -16787,8 +16669,98 @@ function _guardNormalMapUvs() {
 const _Photo = (() => {
   // The focus of the depth of field: a point picked in the view (Alt+click, or the Pick button), else the point the camera turns round.
   let focusPoint = null, focusName = '', focusArmed = false;
-  const lib = createPhoto({ THREE, getRenderer: () => renderer, getScene: () => scene, getCamera: () => camera, getFocus: () => focusPoint || controls?.target || null, onSample: sunSample });
-  let on = false, busy = false, kept = null, floor = null, reach = 0, stageOn = true, asksSeen = -1;
+  const lib = createPhoto({ THREE, getRenderer: () => renderer, getScene: () => scene, getCamera: () => camera, getFocus: () => focusPoint || controls?.target || null,
+    onSample: (i) => { const a = sunSample(i), b = stage.sample(i); return () => { try { a?.(); } finally { b?.(); } }; } });
+  // The floor (its contact shadow and reflection) and the backdrop: photo-stage.js.
+  const stage = createStage({ THREE });
+  let on = false, busy = false, kept = null, floor = null, reach = 0, stageOn = true, asksSeen = -1, contactSig = '';
+  // Lights: how strong the HDRI and the sun are, and two lights that ride on the camera (as the viewport's headlight does), so that the
+  // picture is lit the same way from wherever it is taken: a rim light from behind the model, which draws a bright edge round it, and a
+  // fill from the side of the camera, which lifts the shade. Studio is the HDRI and the sun as they are; the sun keeps its shadow and its
+  // gizmo in all of them.
+  const LIGHTS = {
+    studio:   { env: 1,    key: 1,    rim: 0,   fill: 0 },
+    product:  { env: 0.75, key: 1.2,  rim: 1.5, fill: 0.3 },
+    dramatic: { env: 0.3,  key: 1.6,  rim: 2.4, fill: 0 },
+    soft:     { env: 1.25, key: 0.45, rim: 0.5, fill: 0.55 },
+  };
+  let lightsKind = 'product', rim = null, fillLight = null;
+  function rigAdd() {
+    if (rim || !camera) return;
+    rim = new THREE.DirectionalLight(0xf2f5ff, 0); rim.name = '__photoRim';
+    rim.position.set(0.6, 0.9, -1.8); rim.target.position.set(0, 0, 0);          // (behind the model, above: its light comes towards the camera)
+    fillLight = new THREE.DirectionalLight(0xfff6ec, 0); fillLight.name = '__photoFill';
+    fillLight.position.set(1, -0.15, 0.2); fillLight.target.position.set(0, 0, -1);  // (beside the camera, low)
+    for (const l of [rim, fillLight]) { l.castShadow = false; camera.add(l); camera.add(l.target); }
+  }
+  function rigRemove() {
+    for (const l of [rim, fillLight]) if (l) { l.parent?.remove(l); l.target.parent?.remove(l.target); try { l.dispose?.(); } catch (_) {} }
+    rim = fillLight = null;
+  }
+  // Set before each frame (the HDRI strength slider and the sun's own code set them too: these are on top of what they set).
+  function applyLights() {
+    const P = LIGHTS[lightsKind] || LIGHTS.studio, L = state._lights;
+    const k = Math.max(0, state.hdriIntensity ?? 1);
+    if (scene) scene.environmentIntensity = k * P.env;
+    if (L && L.dir && L._stashedForHdri) L.dir.intensity = L.dirTarget * 0.6 * k * P.key;
+    if (rim) rim.intensity = P.rim * k;
+    if (fillLight) fillLight.intensity = P.fill * k;
+  }
+  // The contact shadow is made again when the model changed: a sum over where every part is and what it draws with.
+  function modelSig() {
+    let s = 0, n = 0;
+    for (const p of state.parts) {
+      const m = p && !p.deleted && p.visible !== false && p.mesh;
+      if (!m || m.visible === false) continue;
+      const e = m.matrixWorld.elements;
+      s += e[12] * 1.31 + e[13] * 1.73 + e[14] * 2.19 + e[0] + e[5] * 1.1 + e[10] * 1.2 + e[1] * 0.7 + (m.geometry ? m.geometry.id * 0.001 : 0);
+      n++;
+    }
+    for (const g of (state.instancedGroups || [])) if (g.instanced) s += g.instanced.instanceMatrix.version * 0.37 + g.instanced.count * 0.11;
+    return n + ':' + s.toFixed(5);
+  }
+  // (also where the floor stands: under the model's lowest point, which moves when the model does)
+  function contactCheck(force) {
+    if (!on || !floor || !floor.visible || !state.partsRoot) return;
+    try { scene.updateMatrixWorld(); } catch (_) {}
+    const sig = modelSig();
+    if (!force && sig === contactSig) return;
+    contactSig = sig;
+    const box = measure();
+    if (!box) return;
+    const up = floorUp();
+    const low = lowest(up);
+    floor.position.set(0, 0, 0).addScaledVector(up, (Number.isFinite(low) ? low : box.min.dot(up)) - reach * 0.0005);      // (a hair under it, so the two do not fight)
+    floor.updateMatrixWorld(true);
+    try { stage.updateContact(renderer, scene, state.partsRoot, up, floor.position, box); }
+    catch (e) { console.warn('[photo] the contact shadow failed:', e?.message || e); }
+  }
+  // How high the model's lowest point is along `up`, from the vertices of the parts that are shown. (Not the bounding box three gives:
+  // that is each part's own box turned with the part, which reaches below a part that is turned, and it counts hidden and deleted parts
+  // too; a truck stood above the floor.) A part whose turned box cannot reach below the lowest point found so far is not looked into.
+  function lowest(up) {
+    let best = Infinity;
+    const v = new THREE.Vector3(), bb = new THREE.Box3(), m4 = new THREE.Matrix4();
+    state.partsRoot.traverseVisible((o) => {
+      if (!o.isMesh || (o.userData && o.userData.selGlow)) return;
+      const g = o.geometry, pos = g && g.attributes && g.attributes.position;
+      if (!pos || !pos.count) return;
+      if (!g.boundingBox) g.computeBoundingBox();
+      const n = o.isInstancedMesh ? o.count : 1;
+      for (let k = 0; k < n; k++) {
+        if (o.isInstancedMesh) { o.getMatrixAt(k, m4); m4.premultiply(o.matrixWorld); } else m4.copy(o.matrixWorld);
+        bb.copy(g.boundingBox).applyMatrix4(m4);
+        if (bb.isEmpty() || bb.min.dot(up) >= best) continue;
+        if (o.isInstancedMesh && pos.count * n > 2e6) { best = bb.min.dot(up); continue; }      // (thousands of copies of a big shape: its box will do)
+        for (let i = 0; i < pos.count; i++) { const h = v.fromBufferAttribute(pos, i).applyMatrix4(m4).dot(up); if (h < best) best = h; }
+      }
+    });
+    return best;
+  }
+  function floorUp() {
+    const pl = state.gridPlane || 'xy';
+    return new THREE.Vector3(...({ xy: [0, 0, 1], xz: [0, 1, 0], yz: [1, 0, 0] }[pl] || [0, 0, 1]));
+  }
   // Frame i of an average sees the sun from a point a little off its direction (spread over a disc 2 degrees across, as a sun of real
   // size would be): the shadows of all the frames together have a soft edge. The sun is put back right after the frame.
   function sunSample(i) {
@@ -16808,7 +16780,8 @@ const _Photo = (() => {
   // next frame is asked for while the average wants more.
   function frame() {
     if (!on) return false;
-    if ((state._renderAsks || 0) !== asksSeen) lib.restart();
+    if ((state._renderAsks || 0) !== asksSeen) { lib.restart(); contactCheck(false); }
+    applyLights();
     const ok = lib.render(reach || (measure() && reach) || 1);
     if (ok && lib.refining) requestRender();
     asksSeen = state._renderAsks || 0;
@@ -16818,6 +16791,7 @@ const _Photo = (() => {
   function still() {
     if (!on) return false;
     if (!reach) measure();
+    contactCheck(false); applyLights();
     lib.restart();
     if (!lib.render(reach || 1)) return false;
     for (let n = 0; lib.refining && n < 256; n++) lib.render(reach || 1);
@@ -16832,32 +16806,44 @@ const _Photo = (() => {
     reach = Math.max(box.getSize(new THREE.Vector3()).length(), 1e-6);
     return box;
   }
-  // The floor: a round, softly lit stage on the grid, centred on the origin (0, 0, 0), as large as it takes to reach past the model with
+  // The floor: a round, softly lit stage the model stands on (at its lowest point, wherever the grid is: a model that floated above the
+  // grid floated above the floor, with its shadow far off and nothing under it), centred under the origin, as large as it takes to reach past the model with
   // room to spare (three times the model's size at least, so that it never reaches the camera's near plane); it fades to nothing towards its
-  // rim and catches the sun's shadow. (Not three's ShadowMaterial: in this version it writes "null" into the shader once a light that casts no
-  // shadow is in the scene, and the program does not compile.)
+  // rim, catches the sun's shadow, darkens where the model stands and shows it mirrored (photo-stage.js). (Not three's ShadowMaterial: in
+  // this version it writes "null" into the shader once a light that casts no shadow is in the scene, and the program does not compile.)
   function placeFloor() {
     if (!on || !scene) return;
     const box = measure();
     if (!box || !stageOn) { if (floor) floor.visible = false; return; }
-    const pl = state.gridPlane || 'xy';
-    const up = new THREE.Vector3(...({ xy: [0, 0, 1], xz: [0, 1, 0], yz: [1, 0, 0] }[pl] || [0, 0, 1]));
+    const up = floorUp();
     if (!floor) {
-      const fm = new THREE.MeshStandardNodeMaterial({ color: 0xb4b4b8, roughness: 0.92, metalness: 0, transparent: true, depthWrite: false });
-      fm.opacityNode = THREE.TSL.float(1).sub(THREE.TSL.smoothstep(0.12, 0.5, THREE.TSL.length(THREE.TSL.uv().sub(0.5))));
-      floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), fm);
+      floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), stage.build());
       floor.name = '__photoFloor'; floor.userData.noPick = true; floor.raycast = () => {};
       floor.receiveShadow = true; floor.castShadow = false; floor.frustumCulled = false;
       scene.add(floor);
     }
+    floorTarget();
     const centre = box.getCenter(new THREE.Vector3());
     floor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
     // (the disc is solid to an eighth of its width and gone at its rim: the model, wherever it stands, lies in the solid part)
     const off = centre.clone().addScaledVector(up, -centre.dot(up)).length();
     floor.scale.setScalar(Math.max(reach * 3, (off + reach / 2) / 0.12));
-    floor.position.set(0, 0, 0).addScaledVector(up, -reach * 0.0005);      // (a hair under the grid, so the two do not fight)
     floor.visible = true;
     floor.updateMatrixWorld(true);
+    contactCheck(true);
+  }
+  // The reflector mirrors in the plane of the object it is given (its +Z, as the floor's): that object rides on the floor.
+  function floorTarget() {
+    const t = floor && stage.reflectTarget;
+    if (t && t.parent !== floor) floor.add(t);
+  }
+  // The reflection switched on or off: the floor's material is built again (off, the model is not drawn a second time for it).
+  function rebuildFloor() {
+    if (!floor) return;
+    const old = floor.material;
+    floor.material = stage.build();
+    floorTarget();
+    try { old?.dispose(); } catch (_) {}
   }
   // The effects part of the card is dimmed while Photo mode is off, and cannot be used (inert: no click, no focus, no typing); the values
   // that were set are kept for when it is switched on.
@@ -16889,6 +16875,10 @@ const _Photo = (() => {
       }
       state.shadowsEnabled = true; const sh = $('toggle-shadows'); if (sh) { sh.checked = true; sh.disabled = true; sh.title = 'Photo mode keeps the shadows on'; }      // (switching them off under the Photo floor left it with a shadow map that was gone: the renderer logged "binding should be available")
       _applyShadows();
+      rigAdd(); applyLights();
+      kept.bgNode = scene.backgroundNode || null;
+      scene.backgroundNode = stage.backdrop();
+      contactSig = '';
       if (gridHelper) gridHelper.visible = false;
       if (state._originMarker) state._originMarker.visible = false;
       placeFloor();
@@ -16907,7 +16897,9 @@ const _Photo = (() => {
     focusArm(false);
     document.body.classList.remove('photo-mode');
     if (floor) { scene.remove(floor); try { floor.geometry.dispose(); floor.material.dispose(); } catch (_) {} floor = null; }
+    rigRemove();
     const k = kept; kept = null;
+    if (scene) scene.backgroundNode = k ? k.bgNode : null;
     { const sh = $('toggle-shadows'); if (sh) { sh.disabled = false; sh.removeAttribute('title'); } }
     if (k) {
       if (!k.shadows) { state.shadowsEnabled = false; const sh = $('toggle-shadows'); if (sh) sh.checked = false; _applyShadows(); }
@@ -16927,13 +16919,14 @@ const _Photo = (() => {
         else if (k.preset) { try { _applyHdriPreset(k.preset); } catch (_) {} }
       } else {                                      // (not in HDRI mode before: the loft studio that Photo mode loaded does not stay behind as the chosen one)
         try { state._customHdri?.dispose?.(); } catch (_) {}
-        state._customHdri = null; state._customHdriSrc = null; state._customHdriName = null;
+        state._customHdri = null; state._customHdriName = null;
         document.querySelectorAll('.hdri-photo.active').forEach(b => b.classList.remove('active'));
         const cur = $('hdri-current'); if (cur) cur.textContent = 'Built-in studio';
       }
       if (gridHelper) gridHelper.visible = !!state.showGrid && !state._claudeNoGrid;
       if (state._originMarker && k.origin != null) state._originMarker.visible = k.origin;
     }
+    try { _applyHdriIntensity(); } catch (_) {}      // (the strengths the lights had before: Photo mode's Lights set them on top)
     _fxState();
     requestRender();
   }
@@ -16973,23 +16966,39 @@ const _Photo = (() => {
     if ($('photo-quality')) $('photo-quality').value = lib.quality;
     $('photo-look')?.addEventListener('change', (e) => { lib.setLook(e.target.value); requestRender(); });
     if ($('photo-look')) $('photo-look').value = lib.look;
-    for (const k of ['ao', 'glow', 'fringe', 'vignette', 'grain', 'dof']) {
+    const fxOf = (k) => (k === 'contact' || k === 'refl')
+      ? { get: () => stage.get(k), set: (v) => { stage.set(k, v); lib.restart(); }, isOn: () => stage.isOn(k), setOn: (v) => { if (stage.setOn(k, v)) rebuildFloor(); lib.restart(); } }
+      : { get: () => lib.get(k), set: (v) => lib.set(k, v), isOn: () => lib.isOn(k), setOn: (v) => lib.setOn(k, v) };
+    for (const k of ['contact', 'refl', 'ao', 'glow', 'fringe', 'vignette', 'grain', 'dof']) {
+      const fx = fxOf(k);
       const sw = $('photo-fx-' + k);
-      if (sw) { sw.checked = lib.isOn(k); sw.addEventListener('change', () => { lib.setOn(k, sw.checked); $('photo-row-' + k)?.classList.toggle('is-off', !sw.checked); requestRender(); }); }
+      if (sw) { sw.checked = fx.isOn(); $('photo-row-' + k)?.classList.toggle('is-off', !sw.checked); sw.addEventListener('change', () => { fx.setOn(sw.checked); $('photo-row-' + k)?.classList.toggle('is-off', !sw.checked); requestRender(); }); }
       // a number box in the layout of the Shape parameters rows: a percentage, dragged sideways (the fill follows the pointer) or typed
       const el = $('photo-' + k); if (!el) continue;
       const wrap = el.closest('.prim-val-wrap');
-      const fill = () => { if (wrap) wrap.style.setProperty('--scrub-pct', Math.round(lib.get(k) * 100) + '%'); };
-      const apply = (v) => { v = Math.max(0, Math.min(100, Math.round(v))); lib.set(k, v / 100); if (document.activeElement !== el) el.value = v; fill(); requestRender(); };
-      el.value = Math.round(lib.get(k) * 100); fill();
+      const fill = () => { if (wrap) wrap.style.setProperty('--scrub-pct', Math.round(fx.get() * 100) + '%'); };
+      const apply = (v) => { v = Math.max(0, Math.min(100, Math.round(v))); fx.set(v / 100); if (document.activeElement !== el) el.value = v; fill(); requestRender(); };
+      el.value = Math.round(fx.get() * 100); fill();
       el.addEventListener('input', () => { const v = parseFloat(el.value); if (Number.isFinite(v)) apply(v); });
-      el.addEventListener('change', () => { const v = parseFloat(el.value); apply(Number.isFinite(v) ? v : lib.get(k) * 100); el.value = Math.round(lib.get(k) * 100); });
+      el.addEventListener('change', () => { const v = parseFloat(el.value); apply(Number.isFinite(v) ? v : fx.get() * 100); el.value = Math.round(fx.get() * 100); });
       el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
       _scrubDragAll([el, wrap, el.closest('.prim-row')?.querySelector('.prim-label')], {
-        get: () => Math.round(lib.get(k) * 100), min: 0, max: 100, pxPerStep: _fillPxPerStep(wrap, 0, 100),
+        get: () => Math.round(fx.get() * 100), min: 0, max: 100, pxPerStep: _fillPxPerStep(wrap, 0, 100),
         set: (v) => { el.value = v; apply(v); },
       });
     }
+    $('photo-backdrop')?.addEventListener('change', (e) => {
+      if (!stage.setBackdrop(e.target.value)) return;
+      if (on && scene) scene.backgroundNode = stage.backdrop();
+      lib.restart(); requestRender();
+    });
+    if ($('photo-backdrop')) $('photo-backdrop').value = stage.backdropKind;
+    $('photo-lights')?.addEventListener('change', (e) => {
+      if (!LIGHTS[e.target.value]) return;
+      lightsKind = e.target.value; applyLights();
+      lib.restart(); requestRender();
+    });
+    if ($('photo-lights')) $('photo-lights').value = lightsKind;
     $('photo-stage')?.addEventListener('change', (e) => { stageOn = e.target.checked; placeFloor(); requestRender(); });
     $('photo-save')?.addEventListener('click', save);
     $('photo-row-dof')?.classList.toggle('is-off', !lib.isOn('dof'));
@@ -17088,6 +17097,7 @@ const _Photo = (() => {
     still,
     get frames() { return lib.frames; },
     get refining() { return lib.refining; },
+    get stage() { return stage; },      // (for tests)
     refresh: () => { if (on) placeFloor(); },
     enter, leave, save, wire,
     // Switched on for one picture by Claude's screenshot / render_image (photo_mode): true when this call turned it on, so that the caller
@@ -21441,7 +21451,7 @@ const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'axisXfor
 //  · An entry counts as reachable if a part, an instanced group, a mesh in the scene or ANY undo / redo entry mentions its hash
 //    or holds the geometry itself (the entries are searched as plain data, to a limited depth).
 //  · It must be unreachable on two sweeps in a row, a few seconds apart, before it goes; the GPU buffers are released two frames
-//    after it leaves the table (the same wait _drainDisposeQueue uses for the WebGPU backend).
+//    after it leaves the table.
 let _geomSweepTimer = 0, _geomSweepMaybe = new Set();
 function _geomSweepSoon() {
   // (not a debounce: Remove holes, then Ctrl+Z, then Remove holes again, each of which asks for a sweep, would push it back for ever
@@ -21832,8 +21842,11 @@ const _Tabs = (() => {
       // (nor beside a model of over a million triangles: the spare is a whole second copy of the app with a renderer of its own, which holds this
       // page for seconds while it starts and takes graphics memory the model needs; a new tab then starts when it is asked for)
       if (state.parts.reduce((n, p) => n + (p.deleted ? 0 : (p.triCount || 0)), 0) > 1000000) return;
-      if (!_quietFor(2500)) { REG.warmTimer = TOP.setTimeout(warm, 2500); return; }
+      // waits for a quiet moment, but not for ever: a view that is turned without a pause kept it from ever starting
+      if (!REG.warmSince) REG.warmSince = Date.now();
+      if (!_quietFor(2500) && Date.now() - REG.warmSince < 15000) { REG.warmTimer = TOP.setTimeout(warm, 2500); return; }
     } catch (_) {}
+    REG.warmSince = 0;
     REG.spare = { id: spawn({ spare: true }), ready: false };
   }
   function warmSoon() {
@@ -31606,7 +31619,6 @@ function wireUI() {
   $('hdri-default-btn')?.addEventListener('click', () => {
     state._customHdri?.dispose?.();
     state._customHdri = null;
-    state._customHdriSrc = null;
     state._customHdriName = null;
     if (state.bgMode === 'hdri') _ensureHdriEnvironment();
     const cur = $('hdri-current'); if (cur) cur.textContent = 'Built-in studio';
@@ -32305,7 +32317,7 @@ function _getGlbLoader(manager) {
   try {
     if (!_gltfKtx2) {
       _gltfKtx2 = new KTX2Loader();
-      _gltfKtx2.setTranscoderPath('https://unpkg.com/three@0.172.0/examples/jsm/libs/basis/');
+      _gltfKtx2.setTranscoderPath('./vendor/three/examples/jsm/libs/basis/');      // (three r186's own, shipped with the app: no fetch from the internet)
       if (renderer && typeof _gltfKtx2.detectSupport === 'function') _gltfKtx2.detectSupport(renderer);
     }
     loader.setKTX2Loader(_gltfKtx2);
@@ -36551,21 +36563,7 @@ function _rebuildPrimitiveGeometry(p) {
   if (oldGeom?.boundsTree) {
     try { oldGeom.disposeBoundsTree?.(); } catch (_) {}
   }
-  // Route the old geometry into the centralized deferred-dispose queue so
-  // it lands in the same 2-rAF drain that clearModel uses. Going through
-  // _deferredDispose (when available) ensures the dispose order matches
-  // the rest of the codebase's WebGPU upload-handoff convention. Falls
-  // back to a local 2-rAF defer when the queue isn't in scope.
-  if (oldGeom) {
-    if (typeof _deferredDispose !== 'undefined' && typeof _drainDisposeQueue === 'function') {
-      _deferredDispose.push({ kind: 'geom', obj: oldGeom });
-      _drainDisposeQueue();
-    } else {
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        try { oldGeom.dispose(); } catch (_) {}
-      }));
-    }
-  }
+  if (oldGeom) _disposeStale([{ kind: 'geom', obj: oldGeom }]);
   // Hold the render lock across one more frame so the WebGPU backend has
   // committed the newGeom upload (and flushed any old-geom command buffer
   // in flight) before tick() resumes drawing. Without the extra frame
@@ -37044,7 +37042,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
         seenG.add(g);
         for (const k of ['uv', 'uv1', 'uv2', 'uv3']) { const a = g.attributes[k]; if (!a || a.itemSize !== 2) continue; for (let i = 0; i < a.count; i++) a.setY(i, 1 - a.getY(i)); a.needsUpdate = true; }
       }
-      for (const mat of [].concat(m.material || [])) for (const key in mat) { const t = mat[key]; if (t && t.isTexture && !seenT.has(t)) { seenT.add(t); t.flipY = false; t.needsUpdate = true; } }
+      for (const mat of [].concat(m.material || [])) for (const key in mat) { const t = mat[key]; if (t && t.isTexture && !seenT.has(t)) { seenT.add(t); t.flipY = false; if (t.image) t.needsUpdate = true; } }   // a map whose picture has not arrived (or never will: a file the FBX names but does not hold) gets flipY when it loads; marking it now leaves WebGPU a texture to upload with no image, and every frame fails
     }
   }
   // Copies that arrive as separate geometries (a file from another tool writes
@@ -37260,7 +37258,6 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
           : `${state.parts.length} meshes - ${(byteLength/1048576).toFixed(1)} MB`,
         'success');
   await new Promise(r => setTimeout(r, 350));
-  _drainDisposeQueue();
 }
 
 // Shared try/finally wrapper around _ingestSceneRoot so each format-specific
@@ -38055,6 +38052,10 @@ async function boot() {
     // First-run welcome — only when no model is queued AND the pref is on.
     try { _Welcome.show(); } catch (_) {}
   }
+  // The spare copy for a new scene tab starts now, while a file is being picked, not only once a model is open: started then, a new tab
+  // asked for in the first seconds after opening a model (or while the view was being turned) started a whole app and took 6.6 s
+  // (measured, Gearbox Assy, headless) instead of 0.13 s.
+  if (_Tabs.isHost) { try { _Tabs.warmSoon(); } catch (_) {} }
 }
 boot().catch(e => { console.error('[STEP] Boot failed:', e); window._moBooted = true; window.dispatchEvent(new Event('mo-boot-ready')); try { toast('Init failed', e.message, 'error', 12000); } catch(_){} });
 
@@ -43776,7 +43777,9 @@ async function _bboxifyPartsCore(partIds, label, mode) {
       try { _Brep.skip(boxGeom); } catch (_) {}
       p.mesh.geometry = _stampGeometry(boxGeom);
       // Force the material to recompile its pipeline against the new
-      // geometry's attribute layout. Without this, three.js r172 WebGPU
+      // geometry's attribute layout. Without this, three.js (r172, and r186:
+      // the layout is in the pipeline's key, which is only rebuilt when the
+      // material's version changes)
       // can keep using a pipeline cached against the OLD geometry and the
       // new vertex buffer renders with stale state — visually the mesh
       // appears unchanged or scrambled even though geometry was replaced.
@@ -57269,24 +57272,29 @@ setTimeout(() => _dndDecorateTree(), 0);
     const attrs = packAttributes(src);
     let err = 0;
     let worst = 0;
-    const scale = tol > 0 ? S.getScale(positions, 3) : 1;
+    // One material: the vertices that stay may be moved to stand in for the removed ones (simplifyWithUpdate, see reduceUpdate in
+    // simplify-core.js); with several, a vertex two ranges share would be moved twice, so they are reduced in place as before.
+    const one = groups.length === 1;
+    let upd = null;
     for (const g of groups) {
       const sub = index.subarray(g.start, g.start + g.count);
       if (tol > 0) {                                   // as far as the tolerance allows
-        const [res, rel] = S.simplify(sub, positions, 3, 0, Math.min(1, tol / scale));
-        worst = Math.max(worst, rel * scale);
-        outParts.push({ idx: res, materialIndex: g.materialIndex });
+        const r = reduceWithin(S, sub, positions, tol, one);
+        worst = Math.max(worst, r.err);
+        if (r.upd) upd = r.upd;
+        outParts.push({ idx: r.idx, materialIndex: g.materialIndex });
         continue;
       }
       const target = Math.max(3, Math.floor((sub.length / 3) * keep) * 3);
       if (sub.length <= target) { outParts.push({ idx: sub, materialIndex: g.materialIndex }); continue; }
       // (borders locked first, normals / UVs / colours weighed in, falling back
       // step by step: see reduceIndex)
-      const r = reduceIndex(S, sub, positions, target, attrs, _sharpOpts());
+      const r = reduceIndex(S, sub, positions, target, attrs, Object.assign({}, _sharpOpts(), one ? { update: true } : null));
       err = Math.max(err, r.err);
+      if (r.upd) upd = r.upd;
       outParts.push({ idx: r.idx, materialIndex: g.materialIndex });
     }
-    let out = _creaseAfter(_geomFromIndexParts(src, outParts), weld.flat);
+    let out = _creaseAfter(_geomFromIndexParts(src, outParts, upd ? { ...upd, layout: attrs && attrs.layout, stride: attrs && attrs.stride } : null), weld.flat);
     if (out) _simpErr.set(out, err);
     if (out && tol > 0) { out._err = worst; _simpErr.set(out, Math.max(err, worst)); }
     return out;
@@ -57295,7 +57303,9 @@ setTimeout(() => _dndDecorateTree(), 0);
   // Build a geometry from `src`'s attributes and a list of index ranges
   // ({ idx, materialIndex }), dropping the vertices nothing points at any
   // more. Shared by Decimate and Remove holes.
-  function _geomFromIndexParts(src, outParts) {
+  // `upd` (optional): what simplifyWithUpdate moved, { positions, attrs, layout, stride } (see reduceUpdate in simplify-core.js):
+  // the positions, and the normals / UVs / colours packAttributes laid side by side in `attrs`, are read from there instead of `src`.
+  function _geomFromIndexParts(src, outParts, upd) {
     const vCount = src.attributes.position.count;
     let total = 0;
     for (const o of outParts) total += o.idx.length;
@@ -57305,6 +57315,11 @@ setTimeout(() => _dndDecorateTree(), 0);
     const remap = new Int32Array(vCount).fill(-1);
     let used = 0;
     for (const o of outParts) for (let i = 0; i < o.idx.length; i++) { const v = o.idx[i]; if (remap[v] < 0) remap[v] = used++; }
+    const moved = {};                                  // name -> { arr, stride, off }
+    if (upd && upd.positions && upd.positions.length === vCount * 3) {
+      moved.position = { arr: upd.positions, stride: 3, off: 0 };
+      if (upd.attrs && upd.layout && upd.stride && upd.attrs.length === vCount * upd.stride) for (const l of upd.layout) if (l && l.name) moved[l.name] = { arr: upd.attrs, stride: upd.stride, off: l.off, size: l.size };
+    }
     const out = new THREE.BufferGeometry();
     for (const name of Object.keys(src.attributes)) {
       const a = src.attributes[name];
@@ -57312,10 +57327,16 @@ setTimeout(() => _dndDecorateTree(), 0);
       const ArrayType = (a.isInterleavedBufferAttribute || !a.array) ? Float32Array : a.array.constructor;
       const arr = new ArrayType(used * size);
       const direct = !a.isInterleavedBufferAttribute && a.array;
+      const mv = moved[name] && (!(arr instanceof Float32Array) || a.normalized ? null : moved[name]);      // (only float attributes take moved values)
       for (let v = 0; v < vCount; v++) {
         const n = remap[v];
         if (n < 0) continue;
-        if (direct) { for (let c = 0; c < size; c++) arr[n * size + c] = a.array[v * size + c]; }
+        if (mv) {
+          const k = (mv.size || size);
+          for (let c = 0; c < size; c++) arr[n * size + c] = c < k ? mv.arr[v * mv.stride + mv.off + c] : (direct ? a.array[v * size + c] : a.getComponent(v, c));
+          if (name === 'normal') { const x = arr[n * size], y = arr[n * size + 1], z = arr[n * size + 2], l = Math.hypot(x, y, z); if (l > 1e-12) { arr[n * size] = x / l; arr[n * size + 1] = y / l; arr[n * size + 2] = z / l; } }
+        }
+        else if (direct) { for (let c = 0; c < size; c++) arr[n * size + c] = a.array[v * size + c]; }
         else { for (let c = 0; c < size; c++) arr[n * size + c] = a.getComponent(v, c); }
       }
       out.setAttribute(name, new THREE.BufferAttribute(arr, size, !!a.normalized));
@@ -57508,15 +57529,15 @@ setTimeout(() => _dndDecorateTree(), 0);
               const groups = (geom.groups && geom.groups.length > 1)
                 ? geom.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
                 : [{ start: 0, count: index.length, materialIndex: geom.groups && geom.groups[0] ? geom.groups[0].materialIndex | 0 : 0 }];
-              const ap = packAttributes(geom), attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights } : null;
+              const ap = packAttributes(geom), attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights, layout: ap.layout } : null;
               // Smart (the Decimate card's switch; window.__moQuickPlain = true switches it off): the flat faces are cleaned before and after the reduction
               const sp = _smartPayload(geom, threeUrl);
               const moved = attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer];
               if (sp.normals) moved.push(sp.normals.buffer);
-              return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0, ...sp }, transfer: moved };
+              return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0, update: true, ...sp }, transfer: moved };
             }, { owner: 'Quick remesh' });      // (its own: a Stop on another tool leaves its levels alone)
             if (S !== sess) return part.orig;              // (closed while it was being worked out: the result is not built)
-            if (reply && reply.ok) { out = _creaseAfter(_geomFromIndexParts(geom, reply.parts), part.flat); err = reply.err || 0; }
+            if (reply && reply.ok) { out = _creaseAfter(_geomFromIndexParts(geom, reply.parts, reply.upd), part.flat); err = reply.err || 0; }
           }
           if (!out && sess.meshopt) out = _simplifyKeepingAttributes(sess.meshopt, part.orig, keep, 0);
         } catch (e) { console.warn('[quick remesh]', part.p.name, e); out = null; }
@@ -57971,7 +57992,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
     const matOf = (geom) => (geom.groups && geom.groups.length ? (geom.groups[0].materialIndex || 0) : -1);
     async function run(name, o) {
-      if (name === 'union' || name === 'subtract' || name === 'intersect') return booleanParts(name, o);
+      if (BOOL_TITLE[name]) return booleanParts(name, o);
       const def = OPS[name]; if (!def) return { parts: 0, results: [] };
       const toastIf = (a, b, k, ms) => { if (!o.quiet) toast(a, b, k, ms); };
       // the selection, the ids given, or (a tool marked `whole`, with nothing selected) every part that is shown
@@ -58015,35 +58036,75 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (bad.length) toastIf(def.title, bad[0].name + ' was left as it was: ' + (bad[0].why || 'it could not be done'), 'warn', 6000);
       return { parts: undoItems.length, results };
     }
-    // Union, Subtract, Intersect: in world space; the first part takes the result, in its own space
+    // The booleans (the Boolean card, the palette, Claude's boolean_parts), in world space. A, the first part, takes the result in its own
+    // space; the others are B.
+    //   kind: union | subtract | intersect | without (A less B, the cut left open) | split (A less B, and A's part inside B as a new part)
+    //   o.cutters: what becomes of B afterwards: 'keep' (default) | 'hide' | 'delete'
+    //   o.keepOriginal: the result goes on a copy of A, and A is hidden
+    //   o.all (intersect with several B): what A shares with every one (default); false: with any of them
+    //   o.tol: points closer than this (world units) are merged afterwards;  o.smoothDeg: faces meeting under this angle are shaded smooth
+    // Everything it does (the copies, the new geometry, hiding or deleting B) is one undo step. Returns { parts, results, message }.
+    const BOOL_TITLE = { union: 'Union', subtract: 'Subtract', intersect: 'Intersect', without: 'A without B', split: 'Split' };
     async function booleanParts(kind, o) {
-      const title = { union: 'Union parts', subtract: 'Subtract parts', intersect: 'Intersect parts' }[kind];
+      const title = BOOL_TITLE[kind] || 'Boolean';
       const toastIf = (a, b, k, ms) => { if (!o.quiet) toast(a, b, k, ms); };
+      const fail = (message) => { toastIf(title, message, 'info', 3500); return { parts: 0, results: [], message }; };
       const ids = o.ids && o.ids.length ? o.ids : [...state.selected];
       const parts = ids.map(id => getPart(id)).filter(p => p && !p.deleted && p.mesh && p.mesh.geometry && p.mesh.geometry.attributes.position);
-      if (parts.length < 2) { toastIf(title, 'Select two parts or more: the first you pick is the one that changes', 'info', 3500); return { parts: 0, results: [] }; }
-      if (busy) { toastIf(title, 'Still working on the last one', 'info', 2500); return { parts: 0, results: [] }; }
+      if (parts.length < 2) return fail('Select two parts or more: the first you pick is A, the one that changes');
+      if (busy) return fail('Still working on the last one');
       busy = true;
       const world = (p) => { p.mesh.updateWorldMatrix(true, false); const s = source(p.mesh.geometry), m = p.mesh.matrixWorld.elements, P = s.P; for (let i = 0; i < P.length; i += 3) { const x = P[i], y = P[i + 1], z = P[i + 2]; P[i] = m[0] * x + m[4] * y + m[8] * z + m[12]; P[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]; P[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14]; } if (p.mesh.matrixWorld.determinant() < 0) { const I = s.I; for (let i = 0; i + 2 < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } } return { positions: P, index: s.I, UV: s.UV }; };      // (a mirrored part, taken into the world, faces in: Manifold read it inside out)
-      const target = parts[0], a = world(target), rest = parts.slice(1).map(world);
-      let nP = 0, nI = 0; for (const g of rest) { nP += g.positions.length; nI += g.index.length; }
-      const b = { positions: new Float32Array(nP), index: new Uint32Array(nI) }; { let po = 0, io = 0; for (const g of rest) { b.positions.set(g.positions, po); for (let i = 0; i < g.index.length; i++) b.index[io + i] = g.index[i] + po / 3; po += g.positions.length; io += g.index.length; } }
+      const target = parts[0], cutters = parts.slice(1), a = world(target), bs = cutters.map(p => { const g = world(p); return { positions: g.positions, index: g.index }; });
+      const bo = { ...(a.UV ? { uv: a.UV } : {}), all: o.all !== false, ...(o.tol > 0 ? { tol: o.tol } : {}), ...(Number.isFinite(o.smoothDeg) ? { smoothDeg: o.smoothDeg } : {}) };
+      delete a.UV;
       let r;
-      const bo = a.UV ? { uv: a.UV } : {}; delete a.UV; for (const g of rest) delete g.UV;
-      try { r = await compute({ op: 'boolean', kind, a, b, opts: bo }, () => runBoolean(kind, a, b, bo)); } catch (e) { r = { ok: false, why: e.message || String(e) }; } finally { busy = false; }
+      try { r = await compute({ op: 'boolean', kind, a, b: bs, opts: bo }, () => runBoolean(kind, a, bs, bo)); } catch (e) { r = { ok: false, why: e.message || String(e) }; } finally { busy = false; }
       const results = [{ id: target.partId, name: target.name, ok: !!(r && r.ok), why: r && r.why, volume: r && r.volume, triangles_before: target.triCount, triangles_after: r && r.index ? r.index.length / 3 : undefined }];
-      if (!r || !r.ok) { toastIf(title, target.name + ' was left as it was: ' + ((r && r.why) || 'it could not be done'), 'warn', 6000); return { parts: 0, results }; }
+      if (!r || !r.ok) { const message = target.name + ' was left as it was: ' + ((r && r.why) || 'it could not be done'); toastIf(title, message, 'warn', 6000); return { parts: 0, results, message }; }
       // back into the target's own space (its points, and its normals by the inverse transpose)
-      const inv = new THREE.Matrix4().copy(target.mesh.matrixWorld).invert(), e = inv.elements, nm = new THREE.Matrix3().getNormalMatrix(inv).elements;
-      for (let i = 0; i < r.positions.length; i += 3) { const x = r.positions[i], y = r.positions[i + 1], z = r.positions[i + 2]; r.positions[i] = e[0] * x + e[4] * y + e[8] * z + e[12]; r.positions[i + 1] = e[1] * x + e[5] * y + e[9] * z + e[13]; r.positions[i + 2] = e[2] * x + e[6] * y + e[10] * z + e[14]; }
-      for (let i = 0; i < r.normals.length; i += 3) { const x = r.normals[i], y = r.normals[i + 1], z = r.normals[i + 2]; let nx = nm[0] * x + nm[3] * y + nm[6] * z, ny = nm[1] * x + nm[4] * y + nm[7] * z, nz = nm[2] * x + nm[5] * y + nm[8] * z; const l = Math.hypot(nx, ny, nz) || 1; r.normals[i] = nx / l; r.normals[i + 1] = ny / l; r.normals[i + 2] = nz / l; }
-      if (target.mesh.matrixWorld.determinant() < 0) { const I = r.index; for (let i = 0; i + 2 < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } }      // (back into a mirrored part's own space)
-      const before = _decSnap(target);
-      swap(target, r, matOf(target.mesh.geometry));
-      pushUndo({ type: 'decimate', label: title, items: [{ partId: target.partId, before, after: _decSnap(target) }] });
+      const inv = new THREE.Matrix4().copy(target.mesh.matrixWorld).invert(), e = inv.elements, nm = new THREE.Matrix3().getNormalMatrix(inv).elements, flip = target.mesh.matrixWorld.determinant() < 0;
+      const toLocal = (g) => {
+        for (let i = 0; i < g.positions.length; i += 3) { const x = g.positions[i], y = g.positions[i + 1], z = g.positions[i + 2]; g.positions[i] = e[0] * x + e[4] * y + e[8] * z + e[12]; g.positions[i + 1] = e[1] * x + e[5] * y + e[9] * z + e[13]; g.positions[i + 2] = e[2] * x + e[6] * y + e[10] * z + e[14]; }
+        for (let i = 0; i < g.normals.length; i += 3) { const x = g.normals[i], y = g.normals[i + 1], z = g.normals[i + 2]; let nx = nm[0] * x + nm[3] * y + nm[6] * z, ny = nm[1] * x + nm[4] * y + nm[7] * z, nz = nm[2] * x + nm[5] * y + nm[8] * z; const l = Math.hypot(nx, ny, nz) || 1; g.normals[i] = nx / l; g.normals[i + 1] = ny / l; g.normals[i + 2] = nz / l; }
+        if (flip) { const I = g.index; for (let i = 0; i + 2 < I.length; i += 3) { const t = I[i + 1]; I[i + 1] = I[i + 2]; I[i + 2] = t; } }      // (back into a mirrored part's own space)
+      };
+      toLocal(r); if (r.second) toLocal(r.second);
+      // one undo step: the copies (Keep the original, the inside of a split), the geometry, then B hidden or deleted
+      const h0 = state.history.length, keepAll = _undoKeepAll, mat = matOf(target.mesh.geometry);
+      let made = target, inside = null;
+      _undoKeepAll = true;
+      try {
+        if (o.keepOriginal) made = getPart(duplicateParts([target.partId], 'Boolean copy')[0]) || target;
+        if (r.second) inside = getPart(duplicateParts([target.partId], 'Split')[0]) || null;
+        const items = [];
+        const put = (p, g) => { const before = _decSnap(p); swap(p, g, mat); items.push({ partId: p.partId, before, after: _decSnap(p) }); };
+        put(made, r);
+        if (inside) {
+          put(inside, r.second);
+          inside.name = target.name + ' inside'; if (inside.mesh) inside.mesh.name = inside.name;
+          const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.partId === inside.partId); if (tn) tn.name = inside.name;
+        }
+        pushUndo({ type: 'decimate', label: title, items });
+        if (made !== target) _applyVisibility([[target, false]]);
+        if (o.cutters === 'hide') _applyVisibility(cutters.map(p => [p, false]));
+        else if (o.cutters === 'delete') deleteParts(cutters.map(p => p.partId), 'Deleted B');
+      } finally {
+        _undoKeepAll = keepAll;
+        if (state.history.length - h0 > 1) { const ops = state.history.splice(h0); pushUndo({ type: 'compound', label: title, ops }); }
+      }
+      state.selected = new Set([made.partId, ...(inside ? [inside.partId] : [])]);
+      try { state.selectedGroupIds?.clear?.(); } catch (_) {}
       settle();
-      toastIf({ union: 'United', subtract: 'Subtracted', intersect: 'Intersected' }[kind], target.name + ' · ' + fmtNum(results[0].triangles_before) + ' · ' + fmtNum(results[0].triangles_after) + ' triangles · the other ' + (parts.length - 1 === 1 ? 'part is' : parts.length - 1 + ' parts are') + ' left as they are' + (r.notClosed ? ' · ' + r.notClosed + ' open bodies left out' : ''), 'success', 7000);
-      return { parts: 1, results };
+      results[0].id = made.partId;
+      if (inside) results.push({ id: inside.partId, name: inside.name, ok: true, volume: r.volumeInside, triangles_after: r.second.index.length / 3 });
+      const nB = cutters.length, bWord = nB === 1 ? 'B' : 'the ' + nB + ' B parts';
+      const message = (inside ? made.name + ' and ' + inside.name : made.name) + ' · ' + fmtNum(results[0].triangles_before) + ' → ' + fmtNum(results[0].triangles_after) + ' triangles'
+        + (made !== target ? ' · the original A is hidden' : '')
+        + ' · ' + bWord + (o.cutters === 'hide' ? (nB === 1 ? ' is' : ' are') + ' hidden' : o.cutters === 'delete' ? (nB === 1 ? ' is' : ' are') + ' deleted' : (nB === 1 ? ' is' : ' are') + ' left as ' + (nB === 1 ? 'it is' : 'they are'))
+        + (r.notClosed ? ' · ' + r.notClosed + ' open ' + (r.notClosed === 1 ? 'body' : 'bodies') + ' left out' : '');
+      toastIf(title, message, 'success', 7000);
+      return { parts: inside ? 2 : 1, results, message };
     }
     // the card
     async function redo() {
@@ -58110,6 +58171,90 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
     return { run, set: (k, v) => set(k, v), get busy() { return busy; } };
   })();
+
+  // ── Boolean card ─────────────────────────────────────────────────────────
+  // The booleans in one card: a style (Union, Subtract, Intersect, Without, Split) and its options. The parts are the selection in the
+  // order it was picked: A (the first, or the one Swap moves to) changes, the others are B. The work is _MeshOps' booleanParts.
+  const _BooleanCard = (() => {
+    const $i = (id) => document.getElementById(id);
+    const HELP = {
+      union: 'A and B become one solid. Where they overlap, the inside faces go.',
+      subtract: 'A less everything B takes up: a bolt leaves its hole in a plate.',
+      intersect: 'Only what A and B share is kept.',
+      without: 'A with the part inside B cut away and left open: no new faces close the cut.',
+      split: 'A is cut in two where B meets it: the part outside B, and the part inside as a new part.',
+    };
+    const DEF = { kind: 'subtract', after: 'hide', keep: false, all: true, tol: 0, angle: 30 };
+    const o = { ...DEF };
+    for (const k of Object.keys(DEF)) { const v = _Prefs.get('boolean.' + k); if (v !== undefined && v !== null && typeof v === typeof DEF[k]) o[k] = v; }
+    const save = () => { for (const k of Object.keys(DEF)) _Prefs.set('boolean.' + k, o[k]); };
+    let aId = null, busy = false, msg = '', wired = false;
+    const sec = () => document.querySelector('.section-cmd[data-cmd="boolean"]');
+    // the parts it can work on, in the order they were picked
+    const picked = () => [...state.selected].map(id => getPart(id)).filter(p => p && !p.deleted && !p.isCloner && !p.isSpline && p.mesh && p.mesh.geometry && p.mesh.geometry.attributes.position);
+    function show() {
+      const root = sec(); if (!root || root.hidden) return;
+      const parts = picked();
+      if (!parts.some(p => p.partId === aId)) aId = parts.length ? parts[0].partId : null;
+      const A = parts.find(p => p.partId === aId) || null, B = parts.filter(p => p !== A);
+      for (const b of root.querySelectorAll('#bo-kind button')) b.classList.toggle('active', b.dataset.kind === o.kind);
+      for (const b of root.querySelectorAll('#bo-after button')) b.classList.toggle('active', b.dataset.after === o.after);
+      $i('bo-a').textContent = A ? A.name : 'Not picked';
+      $i('bo-b').textContent = B.length === 1 ? B[0].name : B.length ? B.length + ' parts' : 'Not picked';
+      $i('bo-swap').disabled = parts.length < 2;
+      $i('bo-all-row').hidden = !(o.kind === 'intersect' && B.length > 1);
+      $i('bo-all').checked = o.all; $i('bo-keep').checked = o.keep;
+      const tol = $i('bo-tol'), ang = $i('bo-angle');
+      if (tol && document.activeElement !== tol) tol.value = o.tol ? String(o.tol) : '';
+      if (ang && document.activeElement !== ang) ang.value = String(o.angle);
+      $i('bo-adv')?.classList.toggle('is-changed', !!o.tol || o.angle !== DEF.angle);
+      $i('bo-run').disabled = busy || parts.length < 2;
+      const info = $i('bo-info');
+      if (msg) { info.textContent = msg; info.classList.add('is-result'); return; }
+      info.classList.remove('is-result');
+      info.textContent = busy ? 'Working…' : parts.length < 2 ? 'Select two parts or more. The first you pick is A, the one that changes; Swap picks another.' : HELP[o.kind];
+    }
+    const changed = () => { msg = ''; save(); show(); };
+    async function run() {
+      const parts = picked(); if (busy || parts.length < 2) return;
+      const A = parts.find(p => p.partId === aId) || parts[0];
+      const ids = [A.partId, ...parts.filter(p => p !== A).map(p => p.partId)];
+      busy = true; msg = ''; show();
+      let r = null;
+      try { r = await _MeshOps.run(o.kind, { ids, cutters: o.after, keepOriginal: o.keep, all: o.all, tol: o.tol, smoothDeg: o.angle, quiet: true }); }
+      catch (e) { r = { message: e.message || String(e) }; }
+      finally { busy = false; }
+      msg = (r && r.message) || '';
+      if (r && r.parts) msg += '. Ctrl+Z takes the whole step back.';
+      show();
+    }
+    function wire() {
+      if (wired) return; const root = sec(); if (!root) return; wired = true;
+      for (const b of root.querySelectorAll('#bo-kind button')) b.addEventListener('click', () => { o.kind = b.dataset.kind; b.blur(); changed(); });
+      for (const b of root.querySelectorAll('#bo-after button')) b.addEventListener('click', () => { o.after = b.dataset.after; b.blur(); changed(); });
+      $i('bo-swap')?.addEventListener('click', () => { const parts = picked(); if (parts.length < 2) return; const i = parts.findIndex(p => p.partId === aId); aId = parts[(i + 1) % parts.length].partId; msg = ''; show(); });
+      $i('bo-all')?.addEventListener('change', (e) => { o.all = e.target.checked; changed(); });
+      $i('bo-keep')?.addEventListener('change', (e) => { o.keep = e.target.checked; changed(); });
+      const num = (el, d) => { const v = parseFloat(String(el && el.value).replace(',', '.')); return isFinite(v) ? v : d; };
+      $i('bo-tol')?.addEventListener('change', (e) => { const v = num(e.target, 0); o.tol = v > 0 ? v : 0; changed(); });
+      $i('bo-angle')?.addEventListener('change', (e) => { o.angle = Math.max(0, Math.min(180, num(e.target, DEF.angle))); changed(); });
+      $i('bo-reset')?.addEventListener('click', () => { o.tol = DEF.tol; o.angle = DEF.angle; changed(); });
+      $i('bo-run')?.addEventListener('click', run);
+      root.addEventListener('cmd-open', () => { msg = ''; show(); });
+      try { window._appHooks?.propsRenderHooks.push(() => { if (!busy) { const was = aId; show(); if (aId !== was) msg = ''; } }); } catch (_) {}      // (the selection changed)
+    }
+    // open the card; kind: a style to start on (the palette's Union parts, Subtract parts and Intersect parts open it so)
+    function open(kind) {
+      wire();
+      if (kind && HELP[kind]) { o.kind = kind; save(); }
+      msg = '';
+      _CmdCards.open('boolean');
+      show();
+    }
+    return { open };
+  })();
+  window.__moAgent = Object.assign(window.__moAgent || {}, { booleanCard: (kind) => _BooleanCard.open(kind) });
+
 
   // ── Profile: clean outline ──────────────────────────────────────────────
   // The card is in profile-card.js (the work on the cross-section in profile.js). It is handed what it uses from here: the objects as
@@ -62691,7 +62836,8 @@ function _underPointer(x, y) {
       if (!mouse) return;
       const el = document.activeElement;
       if (!el || el === document.body || el === document.documentElement) return;
-      if (el !== ringless) { off(); ringless = el; el.classList.add('no-mod-ring'); }
+      // (one that has the class in the page itself keeps it: only a class put on here is taken off again)
+      if (el !== ringless) { off(); if (el.classList.contains('no-mod-ring')) return; ringless = el; el.classList.add('no-mod-ring'); }
       return;
     }
     mouse = false; off();

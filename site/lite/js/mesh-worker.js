@@ -32,7 +32,7 @@
 
 import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=34';
 import { findEmbossedBodies, findSurfaceMarks } from './emboss.js?v=7';
-import { reduceIndex } from './simplify-core.js?v=6';
+import { reduceIndex, reduceWithin } from './simplify-core.js?v=7';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { repairMesh, analyseNormals } from './meshrepair.js?v=8';
 import { findRepeats } from './repeats.js?v=1';
@@ -40,7 +40,7 @@ import { buildTopology, pairQuads, buildPolygons, outlineLines, outlinePoints, l
 import { untriangulate, evenTriangles, pairIntoQuads } from './untriangulate.js?v=12';
 import { unsubdivide } from './unsubdivide.js?v=1';
 import { voxelRemesh } from './voxel.js?v=4';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=18';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=19';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
 // then in the middle of one. (Three more passes at most; each is a fraction of the first.)
 function untriangulatePasses(positions, index, opts) {
@@ -157,7 +157,10 @@ self.onmessage = async (e) => {
       const parts = [], transfer = [];
       let err = 0;
       const byTol = m.tol > 0;
-      const scale = byTol ? S.getScale(m.positions, 3) : 1;
+      // m.update (Decimate and Quick remesh ask for it) with one material: the vertices that stay may be moved (simplifyWithUpdate, see
+      // reduceUpdate in simplify-core.js); the moved arrays go back as `upd`, and the smart pass after the reduction works on them.
+      const one = !!m.update && m.groups.length === 1;
+      let upd = null;
       for (const g of m.groups) {
         const sub = m.index.subarray(g.start, g.start + g.count);
         if (byTol) {
@@ -166,9 +169,10 @@ self.onmessage = async (e) => {
           // (Borders are free here and normals / UVs are not weighted: Remove holes and its tidy step use this mode to collapse
           // a recess and the flat face around it, and `tol` already limits how far any point, a border one included, may move.
           // Locking borders / weighting attributes would keep outlines and seams exact but stop flat open faces from collapsing.)
-          const [res, rel] = S.simplify(sub, m.positions, 3, 0, Math.min(1, m.tol / scale));
-          const idx = res.slice();
-          err = Math.max(err, rel * scale);
+          const r = reduceWithin(S, sub, m.positions, m.tol, one);
+          const idx = r.idx.slice();
+          err = Math.max(err, r.err);
+          if (r.upd) upd = r.upd;
           parts.push({ idx, materialIndex: g.materialIndex });
           transfer.push(idx.buffer);
           continue;
@@ -198,12 +202,13 @@ self.onmessage = async (e) => {
         }
         if (work.length <= target) idx = work.slice();
         else {
-          const r = reduceIndex(S, work, m.positions, target, m.attrs || null, m.sharp > 0 ? { sharp: m.sharp } : null);
+          const r = reduceIndex(S, work, m.positions, target, m.attrs || null, Object.assign({}, m.sharp > 0 ? { sharp: m.sharp } : null, one ? { update: true } : null));
           idx = r.idx.slice();                     // off the WASM heap, into a buffer of its own
           err = Math.max(err, r.err);
+          if (r.upd) upd = r.upd;
           if (m.smart) {
             try {
-              const c2 = untriangulatePasses(m.positions, idx, smartOpts(m, await getTriangulator(m.threeUrl), false));
+              const c2 = untriangulatePasses(upd ? upd.positions : m.positions, idx, smartOpts(m, await getTriangulator(m.threeUrl), false));
               if (c2 && c2.index.length <= idx.length) idx = Uint32Array.from(c2.index);
             } catch (_) { /* the simplifier's own result stands */ }
           }
@@ -211,7 +216,12 @@ self.onmessage = async (e) => {
         parts.push({ idx, materialIndex: g.materialIndex });
         transfer.push(idx.buffer);
       }
-      self.postMessage({ id: m.id, ok: true, parts, err }, transfer);
+      if (upd) {
+        transfer.push(upd.positions.buffer);
+        if (upd.attrs) transfer.push(upd.attrs.buffer);
+        upd = { positions: upd.positions, attrs: upd.attrs, layout: m.attrs && m.attrs.layout, stride: m.attrs && m.attrs.stride };
+      }
+      self.postMessage({ id: m.id, ok: true, parts, err, upd }, transfer);
       return;
     }
     if (m.op === 'editRead') {

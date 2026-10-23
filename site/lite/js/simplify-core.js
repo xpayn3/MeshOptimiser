@@ -40,7 +40,7 @@ export function packAttributes(geom) {
   if (!cols.length) return null;
   const stride = cols.reduce((s, c) => s + c.size, 0);
   const data = new Float32Array(n * stride);
-  const weights = [];
+  const weights = [], layout = [];
   let off = 0;
   for (const { a, size, w } of cols) {
     const direct = !a.isInterleavedBufferAttribute && a.array instanceof Float32Array && a.itemSize === size;
@@ -49,9 +49,38 @@ export function packAttributes(geom) {
       else for (let c = 0; c < size; c++) data[v * stride + off + c] = a.getComponent(v, c);
     }
     for (let c = 0; c < size; c++) weights.push(w);
+    layout.push({ name: Object.keys(geom.attributes).find(k => geom.attributes[k] === a), size, off });
     off += size;
   }
-  return { data, stride, weights };
+  return { data, stride, weights, layout };
+}
+
+// meshoptimizer 1.x's simplifyWithUpdate: the vertices that stay are moved to where the removed ones are best stood in for, and
+// their normals, UVs and colours with them, instead of being kept where they were. Measured against the plain run on the
+// Gearbox Assy's three heaviest parts (node, both sides of the surface measured): the largest distance moved 30 to 35 % less at
+// 50 / 25 / 10 %, the mean distance half as far at 10 %, in a third of the time; on parts it cannot take to the target (attribute
+// seams) it gets no further than the plain run, which then takes over. It writes into the arrays it is given, so it is handed
+// copies: `positions` and `attrs.data` come back moved, in `upd`. Only for one index range over the vertices (one material):
+// with several, a vertex two ranges share would be moved twice.
+function reduceUpdate(S, sub, positions, target, attrs, lockFlags, flags, error) {
+  const P = positions.slice(), A = attrs ? attrs.data.slice() : new Float32Array(positions.length / 3);
+  const idx = sub.slice();
+  const [count, rel] = S.simplifyWithUpdate(idx, P, 3, A, attrs ? attrs.stride : 1, attrs ? attrs.weights : [0], lockFlags || null, target, error, flags);
+  return { idx: idx.slice(0, count), rel, upd: { positions: P, attrs: attrs ? A : null } };
+}
+
+// As far as no point moves more than `tol` (in the units of `positions`), borders free and attributes not weighed (see the worker's
+// note on why). With `update` (one material) the vertices are moved as in reduceUpdate: measured on the Gearbox Assy brought in as
+// millimetres, the plain run could not be fitted to 0.5 to 2 mm on its largest part (a few collapses its estimate puts at nothing
+// move a curved face by about 0.9 mm), the moved one fitted at 0.5 mm. Returns { idx, err, upd? }.
+export function reduceWithin(S, sub, positions, tol, update) {
+  const scale = S.getScale(positions, 3) || 1, e = Math.min(1, tol / scale);
+  if (update && S.simplifyWithUpdate) {
+    try { const r = reduceUpdate(S, sub, positions, 0, null, null, [], e); return { idx: r.idx, err: r.rel * scale, upd: r.upd }; }
+    catch (_) { /* an older build: the plain run below */ }
+  }
+  const [idx, rel] = S.simplify(sub, positions, 3, 0, e);
+  return { idx, err: rel * scale };
 }
 
 // Sharp edges, for the simplifier's vertex lock. A CAD part is smooth faces meeting at hard edges; the quadric error alone
@@ -125,8 +154,10 @@ export function lockSharp(an, deg) {
 //   2. positions only, borders locked    (outlines don't creep)
 //   3. positions only, borders free      (a mesh that is mostly border)
 // If none gets there, the smallest result is kept.
+// With opts.update (one material only, see reduceUpdate) a moved run is tried before all of them, its sharp edges locked as in 0.
+// when the part allows it; it wins when it gets within 25 % of the target, and its moved arrays come back as `upd`.
 //
-// Returns { idx, err }. `err` is the simplifier's own estimate of how far the
+// Returns { idx, err, upd? }. `err` is the simplifier's own estimate of how far the
 // new surface moved, in the units of `positions` (the library reports it
 // relative to the size of the mesh; it is scaled back here). It is an
 // estimate of the largest collapse error, not a measured distance.
@@ -137,6 +168,18 @@ export function reduceIndex(S, sub, positions, target, attrs, opts) {
   const keep = (idx, rel) => { const r = { idx, err: rel * scale }; if (!best || r.idx.length < best.idx.length) best = r; return r; };
   // the sharp-edge result against a plain one that also reached the target: the lock wins unless it costs clearly more elsewhere
   const pick = (r) => (sharpR && sharpR.err <= r.err * 1.5) ? sharpR : r;
+
+  if (opts && opts.update && S.simplifyWithUpdate) {
+    try {
+      let lock = null, held = 0;
+      if (opts.sharp > 0) {
+        const l = lockSharp(analyseCreases(sub, positions), opts.sharp);
+        if (l.count && l.count <= (opts.maxShare > 0 ? opts.maxShare : 0.08) * (positions.length / 3)) { lock = l.flags; held = l.count; }
+      }
+      const u = reduceUpdate(S, sub, positions, target, attrs, lock, ['LockBorder'], 1.0);
+      if (u.idx.length <= target * 1.25) return { idx: u.idx, err: u.rel * scale, upd: u.upd, sharpKept: held };
+    } catch (_) { /* an older build, or the data did not fit: the usual paths */ }
+  }
 
   // 0. sharp edges first, when asked for (opts.sharp is an angle in degrees): the vertices on them are locked. It only counts if
   //    the target is still reached with them locked, so a part made of nothing but hard edges falls through to the paths below

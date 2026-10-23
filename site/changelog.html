@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.36.0." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.36.1." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.36.0." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.36.1." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -54,9 +54,27 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.36.1">
+          <div class="log-head">
+            <strong>v0.36.1</strong><em>Latest</em><span>23 Oct 2026</span><span>9 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>Booleans get one card with five styles, Photo mode looks like a studio render, Decimate keeps closer to the shape, and a new scene tab opens at once.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>One Boolean card: Union, Subtract, Intersect, Without (the cut left open) and Split (a part cut in two), with options as Cinema 4D’s Boole has them, and one undo step.</span></li>
+              <li><b class="is-new">New</b><span>Photo mode as a studio render: a contact shadow where the model stands, a softly glossy floor, a backdrop (Dark, Studio grey or White) and studio lights that follow the view.</span></li>
+              <li><b class="is-new">New</b><span>Decimate keeps closer to the shape: the points that stay move to stand in for the ones removed, so the surface moves a third less, in a third of the time. Quick remesh and Fit to budget do the same.</span></li>
+              <li><b class="is-new">New</b><span>Profile and Round: pick several points and move them together, line a point up with Shift, and choose the axis for Make solid.</span></li>
+              <li><b class="is-new">New</b><span>A new scene tab opens at once, with or without a model open.</span></li>
+              <li><b class="is-fix">Fix</b><span>Decimate’s Within reduces large curved parts, and Intersect with three parts or more keeps only what they all share.</span></li>
+              <li><b class="is-fix">Fix</b><span>In Photo mode the model stands on the floor, and turning the HDRI in a Z-up scene turns the background too.</span></li>
+              <li><b class="is-fix">Fix</b><span>An FBX with missing textures draws, and KTX2 textures no longer need the internet.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.36.0">
           <div class="log-head">
-            <strong>v0.36.0<b class="rel-code">Triglav</b></strong><em>Latest</em><span>22 Oct 2026</span><span>27 fixes</span>
+            <strong>v0.36.0<b class="rel-code">Triglav</b></strong><span>22 Oct 2026</span><span>27 fixes</span>
           </div>
           <div class="log-body">
             <p>The biggest update so far. The 3D view moves to the latest three.js (r186) and picking to three-mesh-bvh 0.9.16, so big models are ready sooner and give their memory back. MeshOptimiser opens USD and Collada, profiles get a tool of their own, Photo mode refines a still view, and the lens is set in millimetres. 27 fixes.</p>
@@ -892,7 +910,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.36.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.36.1</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

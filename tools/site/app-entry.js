@@ -734,7 +734,7 @@ window.labApps = [
       ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
       ['Stacked copies', 1, [], ['stacked-copies']],
     ],
-    stats: [['Version', '0.36.0'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
+    stats: [['Version', '0.36.1'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',
       '400 identical bolts, 80 duplicate brackets, half a million broken triangles. MeshOptimiser keeps each repeat once, rebuilds the bad geometry and drops what you can’t see.',
@@ -753,7 +753,7 @@ window.labApps = [
     ],
     featureGroups: [
       { title: 'Convert', note: 'STEP to GLB', items: [
-        ['USD and Collada', 'Opens .usd, .usda, .usdc, .usdz and .dae too, standing the right way up and at the right size.', 'new'],
+        ['USD and Collada', 'Opens .usd, .usda, .usdc, .usdz and .dae too, standing the right way up and at the right size.'],
         ['Reads the whole assembly', 'Colours, names and the whole part tree come through.'],
         ['Finds repeats', 'Same shape, any angle: stored once, drawn many times.'],
         ['Rebuilds the surfaces', 'Set the detail in millimetres, or as a share of the model.'],
@@ -772,7 +772,7 @@ window.labApps = [
         ['Long jobs in the background', 'Big conversions run as jobs, with progress in the window.'],
       ] },
       { title: 'Clean up', items: [
-        ['Profile: clean outline', 'A window frame, an extrusion or a seal strip becomes one clean solid. See the cross-section before and after, then Apply.', 'new'],
+        ['Profile: clean outline', 'A window frame, an extrusion or a seal strip becomes one clean solid. See the cross-section before and after, then Apply.'],
         ['Model inspector', 'Everything about the model in one window, and what is broken in it. Press a button to scan, then fix each problem with one more.'],
         ['Fix normals', 'Find faces that point the wrong way, turn them round or line them up, and paint the wrong side red while you look.'],
         ['UV layout', 'See how a texture sits on a part: the islands, the overlaps and what lies outside the square.'],
@@ -793,7 +793,7 @@ window.labApps = [
         ['Stacked copies', 'Parts drawn twice in the same place, removed. Only true copies go.'],
         ['Recipes', 'Save Smart optimise settings by name, run them again, share them as a file.'],
         ['Merge by colour', 'One mesh per colour. One undo.'],
-        ['Decimate', 'By percentage or triangle count. Normals, UVs and vertex colours stay.'],
+        ['Decimate', 'By percentage or triangle count. Normals, UVs and vertex colours stay, and the points that stay move to keep the shape.', 'new'],
         ['Sharp edges stay sharp', 'Rims, steps and corners hold their shape when triangles go.'],
         ['Align to floor', 'A model that arrived on its side, stood up, with a preview first.'],
         ['Change pivot orientation', 'Turn a part’s pivot to World, View, the last part picked or your own angles, and the part looks just as it did.'],
@@ -900,10 +900,12 @@ window.labApps = [
         ['Scene tabs', 'Each tab is its own scene. Opening a file never replaces your work. Copy parts from one tab, or one window, into another.'],
         ['Cards over the model', 'Tools open as cards you can move. Enter runs, Esc closes.'],
         ['Depth of field', 'Photo mode softens what is nearer or further than the point you Alt+click, as a camera lens does.'],
-        ['Photo mode, refined', 'Hold still and Photo mode smooths the edges and the shadows over up to 32 frames. Pick a look: Neutral, Soft or Contrast.', 'new'],
-        ['The lens in millimetres', 'Set the lens as on a camera: 35 mm wide, 85 mm close. Right-click the camera pill for the lens and navigation.', 'new'],
-        ['Textures where you pick them', 'Material balls and texture slots show the picture, a picture dropped on a slot goes on, and FBX and OBJ files find their maps by name.', 'new'],
-        ['The latest three.js', 'The 3D view runs on three.js r186: big models are ready sooner and give their graphics memory back.', 'new'],
+        ['Photo mode, refined', 'Hold still and Photo mode smooths the edges and the shadows over up to 32 frames. Pick a look: Neutral, Soft or Contrast.'],
+        ['Photo mode, a studio', 'A contact shadow where the model stands, a softly glossy floor, a backdrop and studio lights that follow the view.', 'new'],
+        ['One Boolean card', 'Union, Subtract, Intersect, Without and Split, with their options, as Cinema 4D’s Boole has them. One undo step.', 'new'],
+        ['The lens in millimetres', 'Set the lens as on a camera: 35 mm wide, 85 mm close. Right-click the camera pill for the lens and navigation.'],
+        ['Textures where you pick them', 'Material balls and texture slots show the picture, a picture dropped on a slot goes on, and FBX and OBJ files find their maps by name.'],
+        ['The latest three.js', 'The 3D view runs on three.js r186: big models are ready sooner and give their graphics memory back.'],
         ['A look of your own', 'Accent colour, tones, font, text size, corners and density.'],
         ['Numbers you drag', 'Drag any number sideways to change it, or click to type. Right-click to reset, step, double or halve it.'],
         ['Search (Shift + C)', 'Commands, settings, parts, library: one box. Typos and initials still find it.'],
@@ -1044,7 +1046,19 @@ window.labApps = [
     changelog: {
       link: 'https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md',
       versions: [
-        { version: '0.36.0', name: 'Triglav', fixes: 27, date: '22 Oct 2026 · 22:05', latest: true,
+        { version: '0.36.1', fixes: 9, date: '23 Oct 2026 · 11:08', latest: true,
+          summary: 'Booleans get one card with five styles, Photo mode looks like a studio render, Decimate keeps closer to the shape, and a new scene tab opens at once.',
+          items: [
+            ['New', 'One Boolean card: Union, Subtract, Intersect, Without (the cut left open) and Split (a part cut in two), with options as Cinema 4D’s Boole has them, and one undo step.'],
+            ['New', 'Photo mode as a studio render: a contact shadow where the model stands, a softly glossy floor, a backdrop (Dark, Studio grey or White) and studio lights that follow the view.'],
+            ['New', 'Decimate keeps closer to the shape: the points that stay move to stand in for the ones removed, so the surface moves a third less, in a third of the time. Quick remesh and Fit to budget do the same.'],
+            ['New', 'Profile and Round: pick several points and move them together, line a point up with Shift, and choose the axis for Make solid.'],
+            ['New', 'A new scene tab opens at once, with or without a model open.'],
+            ['Fix', 'Decimate’s Within reduces large curved parts, and Intersect with three parts or more keeps only what they all share.'],
+            ['Fix', 'In Photo mode the model stands on the floor, and turning the HDRI in a Z-up scene turns the background too.'],
+            ['Fix', 'An FBX with missing textures draws, and KTX2 textures no longer need the internet.'],
+          ] },
+        { version: '0.36.0', name: 'Triglav', fixes: 27, date: '22 Oct 2026 · 22:05',
           summary: 'The biggest update so far. The 3D view moves to the latest three.js (r186) and picking to three-mesh-bvh 0.9.16, so big models are ready sooner and give their memory back. MeshOptimiser opens USD and Collada, profiles get a tool of their own, Photo mode refines a still view, and the lens is set in millimetres. 27 fixes.',
           items: [
             ['New', 'The 3D view runs on three.js r186 (it was r172): big models are ready sooner because shaders are built without holding the page up, freed parts give their graphics memory back, and the HDRI turns its light and reflections with the background.'],
