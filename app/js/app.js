@@ -3762,6 +3762,12 @@ const _Settings = (() => {
       _toggleRow('set-dyn-res', 'Lower the resolution if it stutters', (() => { try { return _MotionPerf.dynRes(); } catch (_) { return false; } })(), 'On a scene too heavy to move smoothly, the picture is drawn a little coarser while it moves and sharp again when it stops. A scene that moves freely is left alone.'));
     $s('set-cull-small')?.addEventListener('change', e => { try { _MotionPerf.setCullSmall(e.target.checked); } catch (_) {} });
     $s('set-dyn-res')?.addEventListener('change', e => { try { _MotionPerf.setDynRes(e.target.checked); } catch (_) {} });
+    // what the still picture is drawn with (_sharpTex, _shadowMapSize)
+    $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('Picture quality') +
+      _toggleRow('set-sharp-tex', 'Sharp textures at an angle', _gfxSharpTex(), 'Textures on a surface seen at a slant, like a table top going away from you, stay sharp instead of blurring. Costs very little on any recent graphics card.') +
+      _toggleRow('set-fine-shadows', 'Finer shadows', _gfxFineShadows(), 'The shadows are drawn from a picture twice as detailed, so their edges stay crisp on a large model and up close. Uses about 50 MB more graphics memory.'));
+    $s('set-sharp-tex')?.addEventListener('change', e => { try { if (e.target.checked) localStorage.removeItem('stepopt-gfx-sharp-tex'); else localStorage.setItem('stepopt-gfx-sharp-tex', '0'); } catch (_) {} _gfxApplySharpTex(); });
+    $s('set-fine-shadows')?.addEventListener('change', e => { try { if (e.target.checked) localStorage.setItem('stepopt-gfx-fine-shadows', '1'); else localStorage.removeItem('stepopt-gfx-fine-shadows'); } catch (_) {} _gfxApplyShadows(); });
     $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('Memory') +
       `<div class="set-row set-stack"><span>Page memory<span class="set-help">What this tab's scripts hold, out of the most the browser allows. Only Chrome and Edge report it.</span></span><div class="mem-g"><div class="mem-bar"><i id="set-mem-heap-bar" class="mem-a"></i></div><div class="mem-key"><span id="set-mem-heap">…</span></div></div></div>` +
       `<div class="set-row set-stack"><span>Models and history<span class="set-help">The geometry of everything open (the same amount sits on the graphics card), and the old versions of parts that only the undo history keeps.</span></span><div class="mem-g"><div class="mem-bar"><i id="set-mem-geom-bar" class="mem-a"></i><i id="set-mem-held-bar" class="mem-b"></i></div><div class="mem-key"><span><i class="mem-a"></i>Models <b id="set-mem-geom">…</b></span><span><i class="mem-b"></i>Kept by undo <b id="set-mem-held">…</b></span></div></div></div>` +
@@ -7272,7 +7278,7 @@ function initScene() {
   const dir  = new THREE.DirectionalLight(0xffffff, 0); dir.position.set(80, 60, 100); scene.add(dir);
   // (the shadow map at its final size from the start: _shadowRefit used to grow it from three's 512 after the shadow was first drawn, and a
   // render target that changes size throws its textures away while the parts' shaders still point at them: "binding should be available")
-  try { dir.shadow.mapSize.set(2048, 2048); } catch (_) {}
+  try { const n = _shadowMapSize(); dir.shadow.mapSize.set(n, n); } catch (_) {}
   const fill = new THREE.DirectionalLight(0xb0c4ff, 0); fill.position.set(-80, -40, 60); scene.add(fill);
   // The headlight: a soft light that travels with the camera, from just above
   // and beside the eye. The three lights above are fixed in the scene, so a
@@ -9979,6 +9985,52 @@ function _loadedMaterial(mat) {
 // a standard one with the same maps, colour and see-through. A part with several materials keeps them all when one of them has a texture.
 const _TEX_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'alphaMap', 'aoMap', 'bumpMap', 'lightMap', 'displacementMap', 'specularMap', 'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap', 'transmissionMap', 'thicknessMap', 'sheenColorMap', 'sheenRoughnessMap', 'specularColorMap', 'specularIntensityMap', 'iridescenceMap', 'iridescenceThicknessMap', 'anisotropyMap'];
 const _hasTexture = (m) => !!m && m.isMaterial && _TEX_SLOTS.some(k => m[k] && m[k].isTexture);
+// A surface seen at a slant is read from the smaller mip levels of its textures, so a table top going away from the camera blurs to a
+// smear. Anisotropic filtering takes more samples along the slant and keeps it sharp. three leaves it at 1 on loaded textures; every
+// texture of a model gets what the graphics card can do (16 on nearly all of them; WebGPU applies it only with linear filters, which
+// mipmapped textures have).
+// Both are switches under Settings › Performance › Picture quality: sharp textures (on unless switched off, key '0') and finer shadows
+// (off unless switched on, key '1'). Read from storage each time (functions, not constants: the lights are made before this point of
+// the file runs), and every tab hears when another changes them.
+function _gfxSharpTex() { try { return localStorage.getItem('stepopt-gfx-sharp-tex') !== '0'; } catch (_) { return true; } }
+function _gfxFineShadows() { try { return localStorage.getItem('stepopt-gfx-fine-shadows') === '1'; } catch (_) { return false; } }
+function _sharpTex(tex) {
+  if (!tex || !tex.isTexture) return;
+  let max = 16; try { if (renderer && renderer.getMaxAnisotropy) max = renderer.getMaxAnisotropy() || 1; } catch (_) {}
+  const want = _gfxSharpTex() ? Math.max(1, Math.min(16, max)) : 1;
+  if ((tex.anisotropy || 1) !== want) tex.anisotropy = want;
+}
+function _sharpenTextures(meshes) {
+  for (const o of meshes) for (const m of [].concat(o.material || [])) if (m && m.isMaterial) for (const k of _TEX_SLOTS) _sharpTex(m[k]);
+}
+// The switch turned: every texture in the scene again. A texture whose filtering changes is sent to the graphics card afresh
+// (WebGL sets the filtering only when a texture is sent, and only ever raises it, so going back to 1 needs a new copy).
+function _gfxApplySharpTex() {
+  if (!scene) return;
+  const seen = new Set();
+  scene.traverse(o => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material || [])) if (m && m.isMaterial) for (const k of _TEX_SLOTS) {
+      const t = m[k]; if (!t || !t.isTexture || seen.has(t)) continue; seen.add(t);
+      const was = t.anisotropy; _sharpTex(t);
+      if (t.anisotropy !== was) { try { t.dispose(); } catch (_) {} t.needsUpdate = true; }
+    }
+  });
+  try { requestRender(); } catch (_) {}
+}
+// The sun's shadow is drawn from a square picture of the model seen from the sun: 2048 px, or 4096 with Finer shadows (never more than
+// the graphics card takes). Three r186 resizes it in place (r172 threw: "binding should be available").
+function _shadowMapSize() {
+  let n = _gfxFineShadows() ? 4096 : 2048;
+  try { const b = renderer && renderer.backend, lim = b && b.device ? b.device.limits.maxTextureDimension2D : (b && b.gl ? b.gl.getParameter(b.gl.MAX_TEXTURE_SIZE) : 0); if (lim) n = Math.min(n, lim); } catch (_) {}
+  return n;
+}
+function _gfxApplyShadows() {
+  const sh = state._lights && state._lights.dir && state._lights.dir.shadow;
+  if (sh) { const n = _shadowMapSize(); if (sh.mapSize.x !== n) sh.mapSize.set(n, n); }
+  try { requestRender(); } catch (_) {}
+}
+try { window.addEventListener('storage', (e) => { if (e.key === 'stepopt-gfx-sharp-tex') _gfxApplySharpTex(); else if (e.key === 'stepopt-gfx-fine-shadows') _gfxApplyShadows(); }); } catch (_) {}
 function _standardFromLegacy(x) {
   const sh = typeof x.shininess === 'number' ? x.shininess : 30;
   const s = new THREE.MeshStandardMaterial({ color: x.color ? x.color.clone() : new THREE.Color(0xffffff), metalness: 0, roughness: Math.min(1, Math.max(0.04, Math.sqrt(2 / (sh + 2)))), side: THREE.DoubleSide });
@@ -12951,12 +13003,107 @@ const _ClaudeBridge = (() => {
       return text({ ...diff(b, snap()), parts: (r && r.results) || [], note: a.mode === 'solid' ? 'Each part is rebuilt as one solid round shape from its outline: fins, ribs and gaps are filled.' : 'Each part is rebuilt from its profile: ridges and grooves narrower than width_mm are filled flush with the ridge tops; a part that is not round all the way round is left as it was (see why; mode solid works on it).' });
     },
     async set_camera_view(a) {
-      const v = a.view;
+      const v = a.view || 'current';
+      const turn = Number(a.turn_deg) || 0, tilt = Number(a.tilt_deg) || 0, zoom = a.zoom == null ? 1 : Number(a.zoom);
+      if (!(zoom >= 0.1 && zoom <= 20)) throw new Error('zoom must be from 0.1 to 20 (2 is twice as close, 0.5 twice as far).');
+      const mm = a.lens_mm == null ? null : Number(a.lens_mm);
+      if (mm !== null && !(mm >= 10 && mm <= 200)) throw new Error('lens_mm must be from 10 to 200 (full-frame millimetres: 29 is the view as it starts, 85 a portrait lens).');
       if (v === 'perspective') _setPerspectiveView();
       else if (v === 'top' || v === 'front' || v === 'side') _setStandardView(v);
       else if (v === 'fit') fitToView();
-      else throw new Error('view must be perspective, top, front, side or fit.');
-      await sleep(600); return text('Camera: ' + v + '.');
+      else if (v !== 'current') throw new Error('view must be current, perspective, top, front, side or fit.');
+      if (v !== 'current') await sleep(600);
+      // the lens (the Camera card's focal length), with the camera moved back or in so the model keeps its size in the picture: a longer
+      // lens from further away flattens the perspective, as a product photographer's does
+      if (mm !== null) {
+        if (!camera || !controls) throw new Error('The viewport is not ready.');
+        if (!camera.isPerspectiveCamera) throw new Error('lens_mm needs the perspective camera (this view is orthographic).');
+        const was = camera.fov, el = document.getElementById('cam-fov');
+        if (el) { el.value = String(mm); el.dispatchEvent(new Event('input', { bubbles: true })); }
+        else { state.cameraFov = 2 * Math.atan(12 / mm) * 180 / Math.PI; camera.fov = state.cameraFov; camera.updateProjectionMatrix(); }
+        const k = Math.tan(was * Math.PI / 360) / Math.tan(camera.fov * Math.PI / 360);
+        camera.position.sub(controls.target).multiplyScalar(k).add(controls.target);
+        controls.update?.(); requestRender();
+      }
+      // then turned round the model (about the scene's up axis), tilted up or down and moved closer, round the point the camera turns round
+      if (turn || tilt || zoom !== 1) {
+        if (!camera || !controls) throw new Error('The viewport is not ready.');
+        const t = controls.target, up = state.sceneUpAxis === 'z' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+        const off = camera.position.clone().sub(t);
+        if (turn) off.applyAxisAngle(up, turn * Math.PI / 180);
+        if (tilt) {
+          const right = new THREE.Vector3().crossVectors(off, up);
+          if (right.lengthSq() > 1e-12) {
+            const ang = off.angleTo(up), lo = 3 * Math.PI / 180;      // (never quite straight down or straight up: the view would spin)
+            const th = Math.max(ang - (Math.PI - lo), Math.min(ang - lo, tilt * Math.PI / 180));
+            off.applyAxisAngle(right.normalize(), th);
+          }
+        }
+        if (camera.isOrthographicCamera) { camera.zoom *= zoom; camera.updateProjectionMatrix(); }
+        else off.divideScalar(zoom);
+        camera.position.copy(t).add(off);
+        camera.lookAt(t); controls.update?.(); requestRender();
+        await sleep(200);
+      }
+      return text('Camera: ' + v + (mm !== null ? ', ' + mm + ' mm lens' : '') + (turn ? ', turned ' + turn + '°' : '') + (tilt ? ', tilted ' + tilt + '°' : '') + (zoom !== 1 ? ', zoom ' + zoom + '×' : '') + '.');
+    },
+    async photo_mode(a) {
+      // Photo mode set from here: on or off, the lights, backdrop, finish, quality, the floor, each effect (0 to 100, 0 or false: off) and
+      // the focus of the depth of field. It works the controls of the Photo mode card, so the card shows what was set.
+      const el = (id) => document.getElementById(id);
+      const fire = (e, ev) => e.dispatchEvent(new Event(ev, { bubbles: true }));
+      const FX = ['contact', 'refl', 'ao', 'glow', 'fringe', 'vignette', 'grain', 'dof'];
+      const LISTS = { lights: ['studio', 'product', 'dramatic', 'soft'], backdrop: ['dark', 'studio', 'white'], look: ['neutral', 'agx', 'aces'], quality: ['draft', 'good', 'best', 'max'] };
+      for (const k of Object.keys(LISTS)) if (a[k] != null && !LISTS[k].includes(a[k])) throw new Error(k + ' must be ' + LISTS[k].join(', ') + '.');
+      const fx = a.effects && typeof a.effects === 'object' ? a.effects : {};
+      for (const k of Object.keys(fx)) {
+        if (!FX.includes(k)) throw new Error('effects are ' + FX.join(', ') + '.');
+        const v = fx[k]; if (!(v === false || v === true || (Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 100))) throw new Error('effect ' + k + ' must be a number from 0 to 100, or false.');
+      }
+      if (a.focus != null && !['pivot', 'centre', 'center'].includes(a.focus)) throw new Error('focus must be pivot or centre (or give focus_ids / focus_name_contains).');
+      if (a.on === false) {
+        if (_Photo.on) { _Photo.leave(); const t = el('toggle-photo'); if (t) t.checked = false; }
+        return text({ on: false });
+      }
+      if (!_Photo.on) {
+        if (!snap().parts) throw new Error('The scene is empty.');
+        await _Photo.enter();
+        if (!_Photo.on) throw new Error('Photo mode could not be switched on.');
+        const t = el('toggle-photo'); if (t) t.checked = true;
+        await sleep(400);
+      }
+      const pick = (id, v) => { const s = el(id); if (v != null && s && s.value !== v) { s.value = v; fire(s, 'change'); } };
+      pick('photo-lights', a.lights); pick('photo-backdrop', a.backdrop); pick('photo-look', a.look); pick('photo-quality', a.quality);
+      if (typeof a.floor === 'boolean') { const c = el('photo-stage'); if (c && c.checked !== a.floor) { c.checked = a.floor; fire(c, 'change'); } }
+      for (const k of Object.keys(fx)) {
+        const v = fx[k], want = v === true ? true : v !== false && Number(v) > 0;
+        const sw = el('photo-fx-' + k); if (sw && sw.checked !== want) { sw.checked = want; fire(sw, 'change'); }
+        const n = el('photo-' + k); if (want && v !== true && n) { n.value = Math.round(Number(v)); fire(n, 'change'); }
+      }
+      // the focus: the orbit pivot, the model under the middle of the view, or the front of a part (where a ray from the camera through
+      // the middle of the part meets the model; the middle of the part if that ray misses)
+      let focusMiss = '';
+      if (a.focus === 'pivot') _Photo.setFocus(null);
+      else if (a.focus === 'centre' || a.focus === 'center') { const h = _Photo.hitAt(0, 0); if (h) _Photo.setFocus(h.point, h.name); else focusMiss = 'nothing of the model is in the middle of the view'; }
+      else if ((Array.isArray(a.focus_ids) && a.focus_ids.length) || String(a.focus_name_contains || '').trim()) {
+        const ids = resolveIds({ ids: a.focus_ids, name_contains: a.focus_name_contains });
+        if (!ids.length) throw new Error('No part matches focus_ids / focus_name_contains.');
+        const box = new THREE.Box3();
+        for (const id of ids) { const p = getPart(id); if (p && p.bbox) box.union(p._exOff ? p.bbox.clone().translate(p._exOff) : p.bbox); }
+        if (box.isEmpty()) throw new Error('Those parts have no size to focus on.');
+        const c = box.getCenter(new THREE.Vector3()), s = c.clone().project(camera);
+        const h = Math.abs(s.x) <= 1 && Math.abs(s.y) <= 1 ? _Photo.hitAt(s.x, s.y) : null;
+        const name = getPart(ids[0])?.name || '';
+        _Photo.setFocus(h ? h.point : c, h ? (h.name || name) : name);
+      }
+      requestRender(); await sleep(300);
+      const val = (id) => el(id)?.value;
+      const effects = {};
+      for (const k of FX) effects[k] = el('photo-fx-' + k)?.checked ? Number(val('photo-' + k)) || 0 : 0;
+      const f = _Photo.focus;
+      return text({ on: _Photo.on, lights: val('photo-lights'), backdrop: val('photo-backdrop'), look: val('photo-look'), quality: val('photo-quality'),
+        floor: !!el('photo-stage')?.checked, effects, focus: f ? (f.name || 'a picked point') : 'orbit pivot', ...(focusMiss ? { focus_note: focusMiss } : {}),
+        note: 'Take a screenshot or render_image now (with photo_mode true it keeps these settings). photo_mode with on false leaves Photo mode.' });
     },
     async undo(a) {
       const n = Math.min(20, Math.max(1, a.steps | 0 || 1)); let k = 0;
@@ -16483,7 +16630,7 @@ function _shadowRefit() {
   dir.updateMatrixWorld?.();
   const sh = dir.shadow;
   if (!sh) return;
-  try { sh.mapSize.set(2048, 2048); } catch (_) {}
+  try { const n = _shadowMapSize(); sh.mapSize.set(n, n); } catch (_) {}
   const cam = sh.camera;
   if (cam) {
     const half = diag * 0.75;                              // (the model's own size all round: its shadow on the floor can be long, but the part of it that matters is near)
@@ -16863,6 +17010,7 @@ const _Photo = (() => {
       };
       on = true;
       document.body.classList.add('photo-mode');
+      _CAD_EDGE_MAT.visible = false;      // (no CAD edge lines in a photo: they are a drawing aid, and read as ink on a rendered surface)
       // Light: always the loft studio, which is bright, soft and neutral, lights the model and is not shown behind it (a photographed room
       // behind a model is a distraction: the stage and the vignette are the backdrop). What was chosen before is put back on leaving.
       {
@@ -16896,6 +17044,7 @@ const _Photo = (() => {
     on = false; lib.disable();
     focusArm(false);
     document.body.classList.remove('photo-mode');
+    _CAD_EDGE_MAT.visible = true;
     if (floor) { scene.remove(floor); try { floor.geometry.dispose(); floor.material.dispose(); } catch (_) {} floor = null; }
     rigRemove();
     const k = kept; kept = null;
@@ -17102,6 +17251,11 @@ const _Photo = (() => {
     enter, leave, save, wire,
     // Switched on for one picture by Claude's screenshot / render_image (photo_mode): true when this call turned it on, so that the caller
     // switches it off again; the loft studio needs a moment to load.
+    // For Claude's photo_mode tool: the focus of the depth of field (null: the orbit pivot), set to a point or put back, and the point of
+    // the model under a place in the view (x, y from -1 to 1, as three's normalised device coordinates).
+    get focus() { return focusPoint ? { point: focusPoint.toArray(), name: focusName } : null; },
+    setFocus(point, name) { focusArm(false); focusPoint = point ? point.clone() : null; focusName = point ? (name || '') : ''; focusShow(); lib.restart(); requestRender(); },
+    hitAt(x, y) { const cv = $('canvas'); if (!cv) return null; const r = cv.getBoundingClientRect(); return focusHit({ clientX: r.left + (x + 1) / 2 * r.width, clientY: r.top + (1 - y) / 2 * r.height }); },
     async begin() {
       if (on) return false;
       await enter();
@@ -23065,7 +23219,7 @@ function _pasteForeign(snap, fromTitle = '') {
     let t = list.find(x => x.colorSpace === d.colorSpace && x.wrapS === d.wrapS && x.wrapT === d.wrapT && x.flipY === d.flipY && x.channel === d.channel);
     if (!t) {
       t = new THREE.Texture(d.image); t.colorSpace = d.colorSpace; t.wrapS = d.wrapS; t.wrapT = d.wrapT; t.flipY = d.flipY; t.channel = d.channel;
-      t.repeat.fromArray(d.repeat); t.offset.fromArray(d.offset); t.rotation = d.rotation; t.needsUpdate = true; list.push(t);
+      t.repeat.fromArray(d.repeat); t.offset.fromArray(d.offset); t.rotation = d.rotation; _sharpTex(t); t.needsUpdate = true; list.push(t);
     }
     return t;
   };
@@ -37029,6 +37183,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   try { _registerSplines(sceneRoot, importMode); } catch (e) { console.warn('[spline] could not read the lines of this file:', e); }
   try { _joinPrimitives(sceneRoot); } catch (e) { console.warn('[load] could not join the primitives of a mesh:', e); }      // (a GLB read through Assimp; loadGlbFile has joined its own already)
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
+  try { _sharpenTextures(meshList); } catch (_) {}      // (textures stay sharp at a slant: see _sharpTex)
   // Texture coordinates run one way in the scene: V from the top, as glTF has them, which is what three's GLB and USDZ writers expect
   // (the USDZ writer turns V for its file; the OBJ, FBX and PLY writers do too: the OBJ writer, _fbxUvData, the PLY branch of _doExportImpl). OBJ, FBX, 3MF, USD and Collada count V from the
   // bottom, so their coordinates are turned here and their textures read the same way round (flipY false), which draws exactly as
@@ -37826,6 +37981,7 @@ async function _applyTextureSets(root, file) {
         t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
         t.wrapS = t.wrapT = THREE.RepeatWrapping;
         t.flipY = false;                                // (V runs from the top in the scene: _ingestSceneRoot turns the file's UVs)
+        _sharpTex(t);
         t.name = invert ? f.name.replace(/\.[^.]+$/, '') + ' (as roughness)' : f.name;
         if (!invert) { t.userData.fileName = f.name; t.userData.dataUrl = url; }
         t.needsUpdate = true;
@@ -41996,6 +42152,7 @@ function _openMaterialEditor(info) {
         tex.colorSpace = _texColorSpace(cs);
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
         tex.flipY = false;          // (V runs from the top in the scene, as in a glTF: see _ingestSceneRoot)
+        _sharpTex(tex);
         tex.needsUpdate = true;
         tex.name = file.name;
         tex.userData = tex.userData || {};
@@ -65725,6 +65882,7 @@ function _recolourFaceGroup(partId, mi, hex) {
   const grab = (t, k) => { const m = new RegExp('"' + k + '":\\s*(?:"([^"]*)"|(-?[\\d.]+))').exec(t); return m ? (m[1] != null ? m[1] : Number(m[2])) : undefined; };
   const SORTED = { triangles: 'heaviest first', size: 'biggest first', name: 'A to Z' };
   const HUMAN = {
+    photo_mode: (a, j) => j.on === false ? 'Left Photo mode' : j.on ? 'Set up Photo mode' + (j.lights ? ': ' + j.lights + ' light' : '') + (j.effects && j.effects.dof ? ', depth of field' : '') : '',
     set_explode: (a, j) => j.amount != null ? (j.amount ? 'Exploded the view to ' + j.amount + '%' : 'Put the parts back together') : '',
     scene_summary: (a, j) => j.file ? j.file + ': ' + plural(j.parts, 'part', 'parts') + ', ' + fmtN(j.triangles) + ' triangles' + (j.selected ? ', ' + fmtN(j.selected) + ' selected' : '') : '',
     list_parts: (a, j, t, ok) => { const r = ok ? j.returned : grab(t, 'returned'), n = ok ? j.total : grab(t, 'total'); return r == null ? '' : 'Listed ' + fmtN(r) + (n != null && n !== r ? ' of ' + plural(n, 'part', 'parts') : ' parts') + (a.sort_by && SORTED[a.sort_by] ? ', ' + SORTED[a.sort_by] : '') + (a.name_contains ? ' with “' + a.name_contains + '” in the name' : ''); },

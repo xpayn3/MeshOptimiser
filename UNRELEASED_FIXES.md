@@ -11,7 +11,41 @@ Last release in the changelog: **v0.36.1**.
 
 ## New
 
+- ![new][new] **Claude can set up Photo mode.** A new MCP tool, `photo_mode`, switches it on or off and sets the lights, backdrop,
+  finish, quality, floor, every effect (depth of field, occlusion, glow, vignette, grain, colour fringe, contact shadow, floor
+  reflection) and the focus (the pivot, the middle of the view, or a part by id or name); the Photo mode card shows what was set.
+  `render_image` and `screenshot` with `photo_mode` true keep those settings. `set_camera_view` can now also turn, tilt and zoom the
+  camera round the model (`turn_deg`, `tilt_deg`, `zoom`, and `view` current) and set the lens (`lens_mm`, the camera moved so the
+  model keeps its size: 85 mm gives the flat look of a product photo).
+  Where: `app/js/app.js` tools `photo_mode`, `set_camera_view`, `_Photo.setFocus` / `hitAt`; `app/serve.py` `MCP_TOOLS`.
+  Test: `tests/e2e-mcp-photo.mjs` (24 checks); `e2e-mcp-tools` still passes (199). Needs serve.py restarted to be listed to Claude.
+
+- ![new][new] **Picture quality switches** under Settings › Performance. *Sharp textures at an angle* (on) keeps textures on a
+  slanted surface sharp; *Finer shadows* (off) draws the sun's shadow from a 4096 px picture instead of 2048, for crisper edges on a
+  large model and up close (about 50 MB more graphics memory). Both apply at once, are remembered, and every open tab follows.
+  Where: `app/js/app.js`, `_gfxSharpTex` / `_gfxApplySharpTex`, `_gfxFineShadows` / `_shadowMapSize` / `_gfxApplyShadows`, the Performance pane.
+  Test: `tests/e2e-texture-anisotropy.mjs` (both switches, SwiftShader and GPU); `e2e-shadows` and `e2e-copy-shadows` still pass. The
+  difference Finer shadows makes has not been judged by eye yet.
+
 ## Fixed
+
+- ![fix][fix] **Photo mode pictures had the CAD edge lines on them** (thin dark outlines round every face, like ink on a render).
+  Photo mode now hides them, and they come back when it is left.
+  Cause: the edge lines are children of the parts and Photo mode drew the scene as the viewport has it.
+  Where: `app/js/app.js`, `_Photo` enter / leave (the shared `_CAD_EDGE_MAT` hidden).
+  Test: `tests/e2e-mcp-photo.mjs` (89 edge lines on the Gearbox, none drawn in Photo mode, drawn again after).
+  (A report that Photo mode renders were stretched was measured and is not a bug: a sphere comes out round at 16:9, 1:1 and 9:16. The
+  long look was the wide 45 degree lens close up; `lens_mm` is the answer.)
+
+- ![fix][fix] **Textures went blurry on a surface seen at a slant** (a table top going away from the camera smeared into a soft
+  wash). Every texture of a model, and every texture added in the material editor, is now filtered at the graphics card's best
+  (anisotropic filtering, 16 on nearly every card), so the grain stays sharp at a grazing angle.
+  Cause: three.js loads textures with anisotropy 1, so a slanted surface is read from the small mip levels; nothing in the app raised it
+  (only the paint flakes and the measure labels had their own).
+  Where: `app/js/app.js`, `_sharpTex` / `_sharpenTextures`, called from `_ingestSceneRoot` (every format), the material editor's `_loadTexture`,
+  `_applyTextureSets` (textures picked from a folder) and `_pasteForeign` (parts pasted from another window).
+  Test: `tests/e2e-texture-anisotropy.mjs` (SwiftShader and, with `CAPTURE_GPU=1`, the machine's GPU; fails with 1 without the fix). Not
+  checked by eye on the table model, and textures made inside the app (baked, painted) are not covered.
 
 ## Found, not fixed yet
 
