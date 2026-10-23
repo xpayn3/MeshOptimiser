@@ -10,7 +10,6 @@
 <!-- Installable: the browser's "Install" / "Open in app" gives it a window of its own, without the address bar. -->
 <script>try{if(JSON.parse(localStorage.getItem('stepopt-prefs')||'{}').splashOnStart===false)document.documentElement.classList.add('no-splash')}catch(e){}</script>
 <script>/* Claude mode from the first paint: with ?claude (or when it was left on) neither the splash nor the app shows, only the dark page, until the feed takes over (app.js, setMode) */try{if(window.top===window&&!window.__MESHOPT_DEMO){var h=document.documentElement,v=localStorage.getItem('stepopt-claude-view');if(/[?&]claude\b/.test(location.search)||(v&&v!=='off')){h.classList.add('claude-boot','no-splash');setTimeout(function(){h.classList.remove('claude-boot')},6000)}}}catch(e){}</script>
-
 <meta name="theme-color" content="#141414">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -144,6 +143,11 @@
   --sl-hit:16px; --sl-track-h:4px; --sl-track:var(--bg3); --sl-fill:var(--ac);
   --sl-thumb:14px; --sl-thumb-bg:#fff; --sl-thumb-shadow:0 0 0 1px var(--blk-20),0 1px 3px var(--blk-50);
   --sl-halo:var(--ac-tint-35); --sl-halo-size:5px; --sl-grow:1.12; --sl-grow-active:1.2;
+  /* the fill-bar slider (every value slider: see "The fill-bar slider" below) */
+  --bar-h:calc(var(--btn-h-md) - 4px); --bar-r:var(--r-sm); --bar-r-in:0; --bar-num-w:84px; --bar-val-w:5ch; --bar-title-gap:var(--space-md); --bar-num-gap:var(--space-2xs); --bar-field-gap:var(--space-xl); --bar-row-gap:var(--space-xs);
+  --bar-bg:var(--blk-20); --bar-bg-hover:var(--blk-12);      /* (a dark veil, so a bar shows on a card and on the sidebar alike) */ --bar-fill:var(--scrub-fill); --bar-fill-hover:var(--wht-16); --bar-stroke:transparent; --bar-edge:var(--bar-stroke); --bar-zero:var(--wht-16);
+  --bar-label:var(--tx2); --bar-label-hover:var(--tx); --bar-label-px:var(--space-lg); --bar-label-shadow:none; --bar-label-weight:var(--fw-regular);
+  --bar-handle:var(--wht-80); --bar-handle-hover:var(--white); --bar-handle-w:4px; --bar-handle-w-hover:4px; --bar-handle-inset:6px; --bar-handle-inset-hover:4px;
   /* transitions that repeat verbatim (the timing itself is --dur-* and --ease-*) */
   --tr-bg-bd-fg:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
   --tr-bg-fg:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
@@ -260,6 +264,8 @@
   --ease-out:cubic-bezier(.23,1,.32,1);          /* punchy ease-out for UI exits/entrances */
   --menu-in:menu-in var(--dur-fast) var(--ease-out);   /* how EVERY menu and dropdown opens (the dropdown's own fade and short drop); they close at once. Change it here. */
   --ease-ios:cubic-bezier(.32,.72,0,1);          /* iOS-feel curve (drawers, switches) */
+  --seg-lead:220ms cubic-bezier(.22,1,.36,1);    /* a sliding highlight's leading edge: leaves at once, lands without overshoot */
+  --seg-trail:440ms cubic-bezier(.34,1.56,.64,1) 50ms; /* ...its trailing edge: a beat later, on a spring, so the pill stretches and settles */
 
   /* Z-index scale */
   --z-sticky:50;
@@ -555,13 +561,9 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 .prop-name{font-size:var(--fs-lg);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-bottom:var(--space-md);min-height:14px}
 .prop-material-row{margin:var(--space-lg) 0 var(--space-lg)}
-/* The Shading angle: a thin row (the name, and a number to type or drag), between two hairlines, above the material strip. */
-.prop-shade{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);height:28px;margin:0 0 var(--space-lg);padding:0;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);font-size:var(--fs-12);color:var(--tx3)}
-.prop-shade{--fld-ring:none;--fld-h:22px;--fld-w:62px;--fld-px:6px;--fld-mr:-6px;--fld-bg:transparent;--fld-bd:0;--fld-r:6px;--fld-just:flex-end;--fld-tr:background 140ms var(--ease-out);--fld-bg-hover:var(--s2);--fld-fg-hover:var(--tx)}
+/* The Shading angle: the fill-bar scrubber of every value (initScrubber), above the material strip. */
 .prop-material-row+.prop-shade{margin-top:var(--space-xl)}      /* (the material strip above it has its own rounded box: the row does not touch it) */
 .prop-shade.is-off{opacity:.45;pointer-events:none}      /* (no part selected, or a line: the row stays and is greyed) */
-.prop-shade .size-field input{width:30px;text-align:right;background:transparent;border:0;color:var(--tx);font:inherit;font-variant-numeric:tabular-nums;cursor:ew-resize}
-.prop-shade .size-field input:focus{cursor:default;outline:none}
 /* Material chip under the part name — full-width row with a 36px shaded
    sphere preview, the material name, a usage hint, and quick-access action
    icons. Reuses the same preview thumbs as the materials grid so the
@@ -785,6 +787,64 @@ input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:var(--sl-thumb-
 input[type=range]:focus-visible::-moz-range-thumb{box-shadow:var(--sl-thumb-shadow),0 0 0 2px var(--blk-60),0 0 0 4px var(--ac-text)}
 input[type=range]:disabled{opacity:var(--op-4)}
 
+/* The fill-bar slider: every value slider of the app (initScrubber; bar: false keeps the old thin one, and the material rows and the
+   Properties panel keep their own). The name above; under it one row: a bar as tall as the number box that fills from the start
+   (or from the middle, with a faint mark at 0, for one that goes both ways) to the value, a white handle where the fill ends that
+   grows under the pointer (a hand: it can be taken), and the number with its unit in a box of one width at the end of the row.
+   Press anywhere on the bar to go there; drag along it; Shift snaps to twentieths of the range and onto 0. Everything it is drawn
+   with is a --bar-* token (in :root). .range-bar draws any range input this way. */
+:is(.scrub.scrub-bar,#_a#_b){gap:var(--bar-title-gap);padding:0}
+:is(.scrub-bar .scrub-head,#_a#_b){min-height:0;line-height:var(--lh-none)}
+:is(.scrub-bar .scrub-label,#_a#_b){line-height:var(--lh-none)}
+:is(.toggle+.field.has-scrub-bar,#_a#_b){margin-top:var(--space-md)}      /* (a switch above: room to tell the two apart) */
+:is(.field.has-scrub-bar,#_a#_b){margin-bottom:var(--bar-field-gap)}      /* (.has-scrub-bar: set by initScrubber on the field round a bar) */
+:is(.cmd-adv-b>.field.has-scrub-bar,#_a#_b#_c){margin-bottom:0}      /* (Advanced spaces its rows itself) */
+:is(.ex-fine>.field.has-scrub-bar,#_a#_b#_c){margin-bottom:0}      /* (Explode's Fine tune each axis: its bars 8px apart, as .ex-body .ex-fine .field means) */
+.scrub-bar .scrub-row{display:flex;align-items:center;gap:var(--bar-num-gap)}
+.scrub-bar .scrub-range{flex:1 1 auto;min-width:0;width:auto}
+input.range-bar{height:var(--bar-h);border-radius:var(--bar-r) var(--bar-r-in) var(--bar-r-in) var(--bar-r);--sl-z:50%;--bf-lo:0;--bf-hi:0;--bf-lo-k:0;--bf-hi-k:0;--bf-hi-full:0;
+  --bar-at-lo:calc((var(--bar-handle-w) / 2 + (100% - var(--bar-handle-w)) * var(--bf-lo)) * var(--bf-lo-k));
+  --bar-at-hi:calc((var(--bar-handle-w) / 2 * (1 + var(--bf-hi-full)) + (100% - var(--bar-handle-w)) * var(--bf-hi)) * var(--bf-hi-k));      /* (full: right to the end) */--bar-fill-now:var(--bar-fill);--bar-bg-now:var(--bar-bg)}
+input.range-bar::-webkit-slider-runnable-track{height:var(--bar-h);border-radius:var(--bar-r) var(--bar-r-in) var(--bar-r-in) var(--bar-r);background:linear-gradient(to right,transparent var(--bar-at-lo),var(--bar-fill-now) var(--bar-at-lo),var(--bar-fill-now) var(--bar-at-hi),transparent var(--bar-at-hi)),var(--bar-bg-now);box-shadow:inset 0 0 0 1px var(--bar-edge);transition:background-color var(--dur-fast)}
+input.range-bar::-moz-range-track{height:var(--bar-h);border-radius:var(--bar-r) var(--bar-r-in) var(--bar-r-in) var(--bar-r);background:linear-gradient(to right,transparent var(--bar-at-lo),var(--bar-fill-now) var(--bar-at-lo),var(--bar-fill-now) var(--bar-at-hi),transparent var(--bar-at-hi)),var(--bar-bg-now)}
+input.range-bar::-moz-range-progress{background:transparent}
+.scrub-bar.has-zero input.range-bar::-webkit-slider-runnable-track{background:linear-gradient(to right,transparent var(--sl-z),var(--bar-zero) var(--sl-z),var(--bar-zero) calc(var(--sl-z) + 1px),transparent calc(var(--sl-z) + 1px)),linear-gradient(to right,transparent var(--bar-at-lo),var(--bar-fill-now) var(--bar-at-lo),var(--bar-fill-now) var(--bar-at-hi),transparent var(--bar-at-hi)),var(--bar-bg-now)}      /* (a faint mark where 0 is) */
+input.range-bar::-webkit-slider-thumb{width:var(--bar-handle-w);height:calc(var(--bar-h) - 2 * var(--bar-handle-inset));margin-top:var(--bar-handle-inset);border-radius:var(--r-3xs);background:var(--bar-handle);box-shadow:none;transform:none;cursor:grab;transition:width var(--dur-fast) var(--ease-out),height var(--dur-fast) var(--ease-out),margin-top var(--dur-fast) var(--ease-out),background-color var(--dur-fast),opacity var(--dur-fast)}
+input.range-bar::-moz-range-thumb{width:var(--bar-handle-w);height:calc(var(--bar-h) - 2 * var(--bar-handle-inset));border-radius:var(--r-3xs);background:var(--bar-handle);box-shadow:none;transform:none;cursor:grab;transition:width var(--dur-fast) var(--ease-out),height var(--dur-fast) var(--ease-out)}
+/* under the pointer the bar lightens and the handle grows a little (wider, taller, full white): it can be taken; held, the hand closes */
+input.range-bar:hover{--bar-bg-now:var(--bar-bg-hover);--bar-fill-now:var(--bar-fill-hover)}
+input.range-bar:hover::-webkit-slider-thumb{width:var(--bar-handle-w-hover);height:calc(var(--bar-h) - 2 * var(--bar-handle-inset-hover));margin-top:var(--bar-handle-inset-hover);border-radius:var(--r-2xs);background:var(--bar-handle-hover)}
+input.range-bar:hover::-moz-range-thumb{width:var(--bar-handle-w-hover);height:calc(var(--bar-h) - 2 * var(--bar-handle-inset-hover));border-radius:var(--r-2xs);background:var(--bar-handle-hover)}
+input.range-bar::-webkit-slider-thumb{opacity:0}
+input.range-bar::-moz-range-thumb{opacity:0}
+input.range-bar:is(:hover,:active,:focus-visible)::-webkit-slider-thumb{opacity:1}      /* (the handle shows only under the pointer, held, or on the keyboard) */
+input.range-bar:is(:hover,:active,:focus-visible)::-moz-range-thumb{opacity:1}
+input.range-bar:active::-webkit-slider-thumb{cursor:grabbing}
+input.range-bar:active::-moz-range-thumb{cursor:grabbing}
+input.range-bar:is(:hover,:active)::-webkit-slider-thumb{transform:none;box-shadow:none}
+input.range-bar:is(:hover,:active)::-moz-range-thumb{transform:none;box-shadow:none}
+input.range-bar:focus-visible{outline:2px solid var(--ac-text);outline-offset:2px}
+input.range-bar:focus-visible::-webkit-slider-thumb{box-shadow:none}
+/* a name inside a bar fades while the bar is dragged (the bar is seen whole), and comes back when it is let go (.is-held: set by
+   the script on the one slider being dragged, so a press elsewhere costs the page nothing) */
+:is(#sidebar-right .scrub.scrub-bar .scrub-label,.cmd-num.has-bar>span:first-child,.photo-fx-row.has-bar>.prim-label){transition:opacity var(--dur-fast) var(--ease-out),color var(--dur-fast)}
+:is(#sidebar-right .scrub.scrub-bar.is-held .scrub-label,.cmd-num.has-bar.is-held>span:first-child,.photo-fx-row.has-bar.is-held>.prim-label,#_a#_b#_c#_d){opacity:0}
+/* the pointer on a slider row is the plain arrow (on the bar, its name and its number box alike); only the white handle shows the
+   hand, and a number being typed the text caret */
+:is(.scrub-bar :is(.scrub-label,.scrub-rhs,.scrub-value,.scrub-unit),.cmd-num.has-bar>span:first-child,.cmd-num.has-bar .size-field,.cmd-num.has-bar .size-field>span,.photo-fx-row.has-bar :is(.prim-label,.prim-val-wrap,.prim-unit),#_a#_b#_c#_d){cursor:default}
+:is(.scrub-bar .scrub-input,.cmd-num.has-bar .size-field input:focus,.photo-fx-row.has-bar .prim-value:focus,#_a#_b#_c#_d#_e){cursor:text}
+/* no outline round a bar's number box (--bar-stroke), only the accent edge while a number is typed in it */
+:is(.scrub-bar .scrub-rhs,.cmd-num.has-bar>.size-field,.photo-fx-row.has-bar .prim-val-wrap,.prim-row.prim-bar-row .prim-val-wrap,#_a#_b#_c#_d#_e){border-color:var(--bar-stroke)}
+:is(.scrub-bar.editing .scrub-rhs,.cmd-num.has-bar>.size-field:focus-within,.photo-fx-row.has-bar .prim-val-wrap:focus-within,.prim-row.prim-bar-row .prim-val-wrap:focus-within,#_a#_b#_c#_d#_e#_f){border-color:var(--ac)}
+/* the number box: one width for every bar, whatever its digits and unit, so the bars all end in one line (a unit is kept short:
+   the rest of it goes in the name, "Same place within, of the part" with %). The box is drawn round the number and
+   its unit together, the unit just after the number, so a short unit (°) and a long one (mm) both sit close */
+:is(.scrub-bar .scrub-rhs,#_a#_b#_c#_d){box-sizing:border-box;flex:0 0 auto;width:var(--bar-num-w);min-width:0;overflow:hidden;height:var(--bar-h);display:flex;align-items:center;justify-content:flex-end;gap:var(--space-3);padding:calc(var(--num-drop)*2) var(--num-px) 0;border:1px solid var(--bd);border-radius:var(--bar-r-in) var(--bar-r) var(--bar-r) var(--bar-r-in);background:var(--bar-bg);transition:var(--tr-bd-bg)}
+:is(.scrub-bar .scrub-rhs,#_a#_b#_c#_d):hover{border-color:var(--bd2)}
+:is(.scrub-bar.editing .scrub-rhs,#_a#_b#_c#_d){border-color:var(--ac)}
+:is(.scrub-bar .scrub-rhs :is(.scrub-value,.scrub-input),#_a#_b#_c#_d){flex:1 0 var(--bar-val-w);width:var(--bar-val-w);min-width:var(--bar-val-w);max-width:none;height:100%;field-sizing:fixed;justify-content:flex-end;text-align:right;padding:0;border:0;border-radius:0;background:transparent}
+:is(.scrub-bar .scrub-rhs .scrub-unit,#_a#_b#_c#_d){position:static;transform:none;flex:0 0 auto}
+
 /* Marquee (rubber-band) selection box drawn over the viewport while the user
    shift- or ctrl-drags. Display toggled via JS by adding/removing .active. */
 #marquee-box{position:fixed;pointer-events:none;z-index:var(--z-marquee);display:none}
@@ -935,6 +995,14 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .pf-preview .pf-now{fill:var(--ac-tint-15);stroke:var(--ac);stroke-width:2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .pf-preview .pf-was{fill:none;stroke:var(--tx3);stroke-width:1;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .pf-preview .pf-hole{stroke-dasharray:3 3}
+/* a turned part's other half (section-view.js mirrorY): the same lines, lighter, and nothing to pick on it; the axis between the halves */
+.pf-preview .pf-mirror{opacity:.4;pointer-events:none}
+.pf-preview .pf-axis{fill:none;stroke:var(--tx3);stroke-width:1;stroke-dasharray:6 4;opacity:.6;vector-effect:non-scaling-stroke;pointer-events:none}
+/* the button in the preview's top right corner that shows or hides the other half (round-card.js); lit while it shows */
+.pf-preview .pf-mirror-btn{position:absolute;top:var(--space-md);right:var(--space-md);z-index:2;color:var(--tx3);background:var(--surface-inset)}
+.pf-preview .pf-mirror-btn:hover{color:var(--tx);background:var(--s3)}
+.pf-preview .pf-mirror-btn.is-on{color:var(--tx);background:var(--s3)}
+.pf-preview .pf-mirror-btn[hidden]{display:none}
 .pf-legend{display:flex;align-items:center;gap:var(--space-md);margin:var(--space-md) 0 var(--space-xl);font-size:var(--fs-11);color:var(--tx3);line-height:var(--icon-md)}
 .pf-legend .pf-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)}
 .pf-leg{display:inline-flex;align-items:center;gap:var(--space-xs)}
@@ -944,6 +1012,16 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .pf-stats dt,.pf-stats dd{margin:0}
 .pf-stats dd{color:var(--tx2);text-align:right;font-variant-numeric:tabular-nums}
 .pf-stats:empty{display:none}
+.pf-side>button{display:grid;place-items:center}
+.pf-side>button svg{width:var(--icon-xs);height:var(--icon-xs)}
+#pf-ends,#pf-side{margin-bottom:var(--space-xl)}
+.pf-top{position:sticky;top:0;z-index:2;background:var(--surface-pop);box-shadow:0 calc(-2 * var(--space-xl)) 0 0 var(--surface-pop);margin-bottom:var(--space-xl)}      /* (the preview stays in sight while the options scroll under it) */
+.pf-top>.pf-legend{margin-bottom:0;padding-bottom:var(--space-md)}
+.section-cmd[data-cmd="profile"] .section-b{scrollbar-width:none}      /* (it still scrolls: wheel, touch, keys) */
+.section-cmd[data-cmd="profile"] .section-b::-webkit-scrollbar{display:none}
+.section-cmd[data-cmd="profile"] .sw-label{margin-bottom:var(--space-sm)}
+#pf-mitre-row{display:flex;flex-direction:column;gap:var(--space-md)}
+#pf-mitre-row[hidden]{display:none}
 .sw-list{display:flex;flex-direction:column;gap:var(--space-3);max-height:132px;overflow:auto}
 .sw-list[hidden]{display:none}
 .sw-empty{font-size:var(--fs-12);color:var(--tx3);padding:var(--space-sm) var(--space-2xs)}
@@ -968,9 +1046,17 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .cmd-seg>button.active{color:var(--tx-control-hover)}
 /* The highlight is one piece that slides to the chosen option. Its place is
    worked out from which button carries .active, so whatever sets that class
-   (a click, a preset, undo) moves it. */
-.cmd-seg::before{content:'';position:absolute;z-index:0;top:var(--seg-pad,3px);bottom:var(--seg-pad,3px);left:var(--seg-pad,3px);width:calc((100% - 2 * var(--seg-pad,3px))/var(--seg-n));border-radius:var(--r-xs);background:var(--bg4);
-  opacity:0;transform:translateX(calc(var(--seg-i)*100%));transition:transform .26s var(--ease-ios),opacity var(--dur-fast) linear}
+   (a click, a preset, undo) moves it. It moves by its two edges, like the
+   Library's tile toggle: a click marks which way it goes (data-seg-dir, set
+   in app.js), the leading edge leaves at once and the trailing one follows on
+   a spring, so it stretches across and settles. A change made by code (undo,
+   a preset) has no direction and just slides. */
+.cmd-seg::before{content:'';position:absolute;z-index:0;top:var(--seg-pad,3px);bottom:var(--seg-pad,3px);--seg-cell:calc((100% - 2 * var(--seg-pad,3px)) / var(--seg-n));
+  left:calc(var(--seg-pad,3px) + var(--seg-i) * var(--seg-cell));right:calc(var(--seg-pad,3px) + (var(--seg-n) - 1 - var(--seg-i)) * var(--seg-cell));border-radius:var(--r-xs);background:var(--bg4);
+  opacity:0;transition:left .26s var(--ease-ios),right .26s var(--ease-ios),opacity var(--dur-fast) linear}
+.cmd-seg{--seg-trail:440ms cubic-bezier(.3,1.3,.5,1) 50ms}      /* (a gentler spring: these pills are wider and travel further, and the squeeze grows with the distance) */
+.cmd-seg[data-seg-dir="fwd"]::before{transition:right var(--seg-lead),left var(--seg-trail),opacity var(--dur-fast) linear}
+.cmd-seg[data-seg-dir="back"]::before{transition:left var(--seg-lead),right var(--seg-trail),opacity var(--dur-fast) linear}
 .cmd-seg:has(>button.active)::before{opacity:1}
 .cmd-seg:has(>button:nth-child(2):last-child){--seg-n:2}
 .cmd-seg:has(>button:nth-child(3):last-child){--seg-n:3}
@@ -1010,7 +1096,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .section-cmd .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
 .section-cmd .toggle input:checked+.switch::after{transform:translateX(var(--switch-travel))}
 /* the number rows of the Remesh / Untriangulate card sit close: the card's own 6px gap is all there is between two fields */
-.section-cmd{--cmd-row-gap:var(--space-md);--cmd-row-h:28px}   /* the space between two rows of a command card (switch or number), in every card, and the height of a row (28 and 8: a row every 36px; they were 28 and 2, which left the fields of two rows almost touching) */
+.section-cmd{--cmd-row-gap:var(--space-xs);--cmd-row-h:28px}   /* the space between two rows of a command card (switch or number), in every card, and the height of a row (28 and 8: a row every 36px; they were 28 and 2, which left the fields of two rows almost touching) */
 .section-cmd[data-cmd="remesh"] .remesh-pane{gap:var(--cmd-row-gap)!important}
 :is(.section-cmd[data-cmd="remesh"] .remesh-pane>:is(.toggle,.cmd-num),#_a#_b#_c){box-sizing:border-box;height:var(--cmd-row-h);min-height:0;padding:0;margin-top:0;--fld-h:var(--cmd-row-h)}
 /* and the rows of a card's main section (Dynamic place, Lettering, Pivot, Fasteners, ...): the same 32px, and --cmd-row-gap between two of them (the section's own gap is 6px) */
@@ -1577,33 +1663,53 @@ body.msr-mode #canvas{cursor:crosshair}
    are lit have a shortcut with the modifiers held (Ctrl, Alt, Shift: held on
    the real keyboard, or clicked here). A shortcut in the list is a button:
    click it and press the new keys. --u is one key's width. */
-.modal.sc-modal{--scw:min(1340px,96vw);--u:min(48px,calc((var(--scw) - 505px) / 18.8));width:var(--scw);max-width:96vw;height:min(660px,90vh);max-height:90vh}
-.sc-modal-b{padding:0;display:grid;grid-template-columns:minmax(0,1fr) 400px;overflow:hidden}
-.sc-left{display:flex;flex-direction:column;justify-content:center;gap:var(--space-4xl);min-width:0;padding:var(--space-5xl);border-right:1px solid var(--surface-line)}
-.sc-right{display:flex;flex-direction:column;min-width:0;min-height:0}
+.modal.sc-modal{--scw:min(1500px,96vw);--sc-right-w:440px;--sc-left-px:47px;--sc-head-top:var(--space-xl);--sc-head-h:68px;--u:min(56px,calc((var(--scw) - var(--sc-right-w) - 105px) / 18.8));width:round(down,var(--scw),2px);max-width:96vw;height:round(down,min(680px,90vh),2px);max-height:90vh}      /* (even whole pixels: the window centres on a whole pixel) */
+.sc-modal-b{padding:0;display:grid;grid-template-columns:minmax(0,1fr) var(--sc-right-w);overflow:hidden}
+.sc-left{display:flex;flex-direction:column;justify-content:center;gap:var(--space-4xl);min-width:0;padding:var(--space-5xl) var(--space-3xl);border-right:1px solid var(--surface-line)}
+.sc-right{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}      /* (the list on the app's darkest ground, the keyboard on the window's) */
+.sc-right .sc-group-h{background:var(--bg)}
+:is(.sc-modal .sc-modal-b,#_a#_b){padding:0}      /* (the list's dark ground runs to the window's edges) */
+/* (the keyboard fills the left column, title to the profile button: its key size follows the column's width, and the gaps
+   between its blocks take what is left over at the largest size) */
+/* the window as two columns: the title, the profile and the keyboard on the left; the list's dark column the full height on the
+   right, the close button in its corner */
+:is(.modal.sc-modal,#_a#_b){display:grid;grid-template-columns:minmax(0,1fr) var(--sc-right-w);grid-template-rows:var(--sc-head-h) minmax(0,1fr);position:relative}      /* (a header of whole pixels: what is under it starts on a whole pixel) */
+:is(.sc-modal>.modal-h,#_a#_b){grid-column:1;grid-row:1;padding-right:var(--space-3xl)}
+:is(.sc-modal>.sc-modal-b,#_a#_b){display:contents}
+:is(.sc-modal .sc-left,#_a#_b){grid-column:1;grid-row:2;justify-content:center;padding:var(--space-xl) var(--space-3xl) var(--space-5xl) var(--sc-left-px);container-type:inline-size;border-right:0}
+:is(.sc-modal .sc-right,#_a#_b){grid-column:2;grid-row:1 / span 2;padding-top:var(--sc-head-top)}
+:is(.sc-modal .sc-search-wrap,#_a#_b){padding-right:calc(var(--space-xl) + 32px + var(--space-md))}
+:is(.sc-modal #sc-all,#_a#_b){width:104px;justify-content:center}      /* (a whole-pixel width, so the search field beside it ends on a whole pixel) */      /* (room for the close button at the end of the row) */
+:is(.sc-modal #shortcuts-close,#_a#_b){position:absolute;top:calc(var(--sc-head-top) + var(--space-2xl));right:var(--space-xl);z-index:2}      /* (on the search row's line, which is the title's) */
+:is(.sc-modal .sc-prof,#_a#_b){margin-left:auto}
+:is(.sc-right #shortcuts-body,#_a#_b){background-color:transparent}      /* (the list, painted the window's colour for the other lists, takes the dark ground) */
 .sc-read{display:flex;align-items:center;gap:var(--space-xl);height:28px;min-width:0;font-size:var(--fs-md);white-space:nowrap}
 .sc-read-keys{display:inline-flex;align-items:center;gap:var(--space-3);flex:none}
+:is(.sc-read-keys .kbd-chip,#_a#_b){height:22px;min-width:22px;padding:0 var(--space-md);border:0;border-radius:var(--r-pill);background:var(--ac);color:var(--white);font-size:var(--fs-11)}      /* (the keys being told about: blue pills) */
 .sc-read-name{color:var(--tx-control-hover);overflow:hidden;text-overflow:ellipsis}
 .sc-read-name.is-none,.sc-read-hint{color:var(--tx3)}
 .sc-read-rec{color:var(--ac-text)}
-.sc-kb{display:flex;gap:calc(var(--u) * .4);align-self:center;padding:var(--space-2xl);border-radius:var(--r-3xl);background:var(--bg);box-shadow:inset 0 0 0 1px var(--s3);user-select:none;-webkit-user-select:none}
+.sc-kb{--u:round(down,min(56px,calc((100cqi - 2 * var(--space-3xl)) / 18.8)),1px);display:flex;justify-content:space-between;gap:round(calc(var(--u) * .4),1px);align-self:stretch;padding:var(--space-3xl);border-radius:var(--r-3xl);background:linear-gradient(to bottom,var(--bg1),var(--bg));box-shadow:inset 0 1px 0 var(--wht-4),inset 0 0 0 1px var(--s3),0 16px 40px var(--blk-30);user-select:none;-webkit-user-select:none}
 .sc-kb-row{display:flex;height:var(--u)}
-.sc-kb-row.is-fn{height:calc(var(--u) * .8);margin-bottom:calc(var(--u) * .3)}
+.sc-kb-row.is-fn{height:round(calc(var(--u) * .8),1px);margin-bottom:round(calc(var(--u) * .3),1px)}
+.sc-kb-row>.sc-key:last-child{flex:1 0 auto}      /* (each key is whole pixels wide; the last of a row takes up what rounding left, so the rows end flush) */
 /* a key cap: its face, and a darker edge under it; a pressed cap sinks onto the edge */
-.sc-key{box-sizing:border-box;flex:none;display:flex;flex-direction:column;justify-content:space-between;width:calc(var(--u) * var(--w,1) - 4px);height:calc(100% - 4px);margin:var(--space-2xs);padding:var(--space-5) var(--space-5) var(--space-7);overflow:hidden;
-  border-radius:var(--r-sm);background:var(--bg3);box-shadow:inset 0 -3px 0 var(--blk-40),inset 0 0 0 1px var(--wht-4);color:var(--tx3);
+.sc-key{box-sizing:border-box;flex:none;display:flex;flex-direction:column;justify-content:space-between;width:round(down,calc(var(--u) * var(--w,1) - 4px),1px);height:calc(100% - 4px);margin:var(--space-2xs);padding:var(--space-sm) var(--space-sm) var(--space-md);overflow:hidden;
+  border-radius:var(--r-sm);background:linear-gradient(to bottom,var(--bg3),var(--bg2));box-shadow:var(--sc-cap-shadow);color:var(--tx3);--sc-cap-shadow:inset 0 1px 0 var(--wht-8),inset 0 -3px 0 var(--blk-40),0 1px 0 var(--blk-50);
   transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out),transform var(--dur-instant) var(--ease-out)}
 .sc-key.is-gap{visibility:hidden}
 .sc-key i{font-style:normal;font-size:var(--fs-11);line-height:var(--lh-none);white-space:nowrap}
-.sc-key em{font-style:normal;font-size:9.5px;line-height:1.15;color:var(--tx-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-key{container-type:inline-size}
+.sc-key em{font-style:normal;font-size:clamp(8px,28cqi,var(--fs-10));line-height:var(--lh-none);letter-spacing:var(--tracking-tight);color:var(--tx-control);white-space:nowrap;overflow:hidden;text-overflow:clip}      /* (the name shrinks to the key's width, down to 8px, so "Animate" fits a narrow window's key; cut, not dotted, past that) */
 .sc-key:not(.is-inert,.is-gap){cursor:pointer}
-.sc-key:not(.is-inert,.is-gap,.is-held,.has):hover{background:var(--bg4)}
+.sc-key:not(.is-inert,.is-gap,.is-held,.has):hover{background:linear-gradient(to bottom,var(--bg4),var(--bg3))}
 .sc-key.has{background:color-mix(in srgb,var(--bg4),var(--white) 7%);color:var(--tx-control-hover)}
 .sc-key.has:hover{background:color-mix(in srgb,var(--bg4),var(--white) 13%)}
 .sc-key.is-mod{color:var(--tx-control)}
-.sc-key.is-held{background:var(--ac);color:var(--white,#fff);padding-top:var(--space-sm);box-shadow:inset 0 -1px 0 var(--blk-30)}
-.sc-key.is-down{padding-top:var(--space-sm);box-shadow:inset 0 -1px 0 var(--blk-40),inset 0 0 0 1.5px var(--ac)}
-.sc-key.is-lit,.sc-key.is-filter{box-shadow:inset 0 -3px 0 var(--blk-40),inset 0 0 0 1.5px var(--ac);color:var(--ac-text)}
+.sc-key.is-held{background:var(--ac);color:var(--white,#fff);box-shadow:inset 0 -1px 0 var(--blk-30)}
+.sc-key.is-down{background:var(--ac);color:var(--white);box-shadow:inset 0 -1px 0 var(--blk-40);transform:translateY(2px)}      /* (a key pressed on the real keyboard: it sinks and lights) */
+.sc-key.is-down i,.sc-key.is-down em{color:var(--white)}
+.sc-key.is-lit,.sc-key.is-filter{box-shadow:inset 0 0 0 2px var(--white),inset 0 -3px 0 var(--blk-40);color:var(--tx-control-hover)}      /* (the key picked, or the one of the command under the pointer: a white ring, as when it is pressed) */
 /* The keyboard shortcuts window, coloured like the search results: the icon in front of each command, the group icons and the keys that have a command (one colour per kind of command) */
 .sc-row-icon{width:var(--icon-md);height:var(--icon-md);color:var(--tx3);stroke-width:1.8}
 .sc-colour [data-cat="file"]{--sc-c:var(--cat-file)}
@@ -1618,9 +1724,13 @@ body.msr-mode #canvas{cursor:crosshair}
 .sc-colour [data-cat="controls"]{--sc-c:var(--cat-controls)}
 .sc-colour [data-cat="tool"]{--sc-c:var(--cat-tool)}
 .sc-colour .sc-row-icon,.sc-colour .sc-group-h svg{color:var(--sc-c,var(--cat-app))}
-.sc-colour .sc-key.has[data-cat]{background:color-mix(in srgb,var(--sc-c) 26%,var(--bg4));box-shadow:inset 0 -3px 0 var(--blk-40),inset 0 0 0 1px color-mix(in srgb,var(--sc-c) 40%,transparent)}
-.sc-colour .sc-key.has[data-cat]:hover{background:color-mix(in srgb,var(--sc-c) 38%,var(--bg4))}
-.sc-colour .sc-key.has[data-cat] em{color:color-mix(in srgb,var(--sc-c) 55%,#fff)}
+.sc-colour .sc-key.has[data-cat]{background:var(--sc-c);box-shadow:inset 0 -3px 0 var(--blk-30),0 1px 0 var(--blk-50);color:var(--bg)}      /* (a key with a command: the solid colour of its kind, the writing dark on it, no outline) */
+.sc-colour .sc-key.has[data-cat]:hover{background:color-mix(in srgb,var(--sc-c) 85%,var(--white))}
+.sc-colour .sc-key.has[data-cat] i{color:var(--bg)}
+.sc-colour .sc-key.has[data-cat]:is(.is-lit,.is-filter){box-shadow:inset 0 0 0 2px var(--white),inset 0 -3px 0 var(--blk-30)}
+.sc-colour .sc-key.has[data-cat].is-down{background:var(--sc-c);box-shadow:inset 0 0 0 2px var(--white);transform:translateY(2px)}
+.sc-colour .sc-key.has[data-cat].is-down :is(i,em){color:var(--bg)}
+.sc-colour .sc-key.has[data-cat] em{color:color-mix(in srgb,var(--bg) 78%,var(--sc-c))}
 .sc-mouse{display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;gap:var(--space-md) 18px;height:52px;overflow:hidden;color:var(--tx2);font-size:var(--fs-sm)}
 .sc-mouse>svg{width:var(--icon-sm);height:var(--icon-sm);flex:none;color:var(--tx3)}
 .sc-mouse-i{display:inline-flex;align-items:center;gap:var(--space-7);white-space:nowrap}
@@ -1639,7 +1749,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .sc-group{margin:0 0 var(--space-2xl)}
 .sc-group-h{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:var(--space-md);padding:var(--space-md) 0 var(--space-sm);background:var(--surface-pop);color:var(--tx3);font-size:var(--fs-xs)}
 .sc-group-h svg{width:var(--icon-sm);height:var(--icon-sm);stroke:currentColor;fill:none;stroke-width:2;flex:0 0 auto}
-.sc-row{display:grid;grid-template-columns:var(--icon-md) minmax(0,1fr) auto 44px;align-items:center;column-gap:var(--space-sm);min-height:34px;padding:0 var(--space-2xs) 0 var(--space-md);border-radius:var(--r-sm);font-size:var(--fs-md);transition:background var(--dur-fast) var(--ease-out),opacity var(--dur-fast) var(--ease-out)}
+.sc-row{display:grid;grid-template-columns:var(--icon-md) minmax(0,1fr) auto auto;align-items:center;column-gap:var(--space-sm);min-height:34px;padding:0 var(--space-xs) 0 var(--space-md);border-radius:var(--r-sm);font-size:var(--fs-md);transition:background var(--dur-fast) var(--ease-out),opacity var(--dur-fast) var(--ease-out)}
 .sc-row:hover,.sc-row.is-hit{background:var(--s2)}
 .sc-row.is-hit{background:var(--s4)}
 .sc-row.is-off{opacity:var(--op-3)}
@@ -1651,7 +1761,7 @@ button.sc-row-keys{cursor:pointer;transition:var(--tr-bg)}
 button.sc-row-keys:hover{background:var(--s5)}
 .sc-none{color:var(--tx3);font-size:var(--fs-sm)}
 .sc-press{color:var(--ac-text);font-size:var(--fs-sm)}
-.sc-acts{display:flex;justify-content:flex-end;gap:var(--space-2xs);opacity:0;transition:var(--tr-op)}
+.sc-acts{display:flex;justify-content:flex-end;gap:var(--space-2xs);opacity:0;transition:var(--tr-op)}      /* (the hover buttons after the keys, as wide as they are: no room kept beyond them) */
 .sc-row:hover .sc-acts,.sc-row.is-rec .sc-acts{opacity:1}
 .sc-act{display:grid;place-items:center;width:20px;height:20px;padding:0;border:0;border-radius:var(--r-sm);background:none;color:var(--tx3);cursor:pointer}
 .sc-act:hover{background:var(--s5);color:var(--tx-control-hover)}
@@ -1665,6 +1775,14 @@ button.sc-row-keys:hover{background:var(--s5)}
 .sc-plus{color:var(--tx3);opacity:var(--op-5);font-size:var(--fs-10);padding:0 1px}
 .sc-or{color:var(--tx3);font-size:var(--fs-10);padding:0 var(--space-5)}
 .sc-empty{padding:48px var(--space-4xl);text-align:center;color:var(--tx3);font-size:var(--fs-md)}
+/* the key picked on the keyboard, under the search: a grey card with the key as a whole cap */
+.sc-keycard{flex:0 0 auto;display:flex;align-items:center;gap:var(--space-xl);margin:var(--space-xs) var(--space-xl) var(--space-lg) var(--space-3xl);padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg2)}
+.sc-keycard[hidden]{display:none}
+.sc-keycap{box-sizing:border-box;flex:none;display:grid;place-items:center;min-width:48px;height:48px;padding:0 var(--space-md);border-radius:var(--r-md);background:linear-gradient(to bottom,var(--bg4),var(--bg3));box-shadow:inset 0 1px 0 var(--wht-8),inset 0 -3px 0 var(--blk-40),0 1px 0 var(--blk-50);color:var(--tx-control-hover);font-size:var(--fs-3xl);font-weight:var(--fw-medium);line-height:var(--lh-none)}
+.sc-keycard-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-xs)}
+.sc-keycard-l{color:var(--tx3);font-size:var(--fs-xs)}
+.sc-keycard-n{color:var(--tx-control-hover);font-size:var(--fs-md);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-keycard-x{width:24px;height:24px}
 .sc-footer{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:var(--space-xl);padding:var(--space-lg) var(--space-3xl) var(--space-xl);border-top:1px solid var(--surface-line);color:var(--tx3);font-size:var(--fs-xs)}
 .sc-footer>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sc-footer>span:last-child{flex:none}
@@ -1673,12 +1791,18 @@ button.sc-row-keys:hover{background:var(--s5)}
 .sc-modal .modal-h h3{margin-right:auto}
 /* the title in the website's serif, larger, and no line under the bar */
 .modal.sc-modal .modal-h{border-bottom:0;padding-left:47px;padding-top:var(--space-5xl);padding-bottom:var(--space-md)}      /* (the title starts where the keyboard does) */
-.modal.sc-modal .modal-h h3{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:32px;line-height:1.1;letter-spacing:-.005em}
+.modal.sc-modal .modal-h h3{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:32px;line-height:36px;letter-spacing:-.005em}
 .sc-prof{position:relative}
-.sc-prof-btn{display:inline-flex;align-items:center;gap:var(--space-md);height:var(--btn-h-sm);padding:0 var(--space-md) 0 var(--space-xl);border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx-control);font:inherit;font-size:var(--fs-sm);cursor:pointer;transition:var(--tr-bg-fg)}
+.sc-prof-btn{display:inline-flex;align-items:center;gap:var(--space-sm);height:var(--btn-h-md);padding:0 var(--space-md) 0 var(--space-xs);border:0;border-radius:var(--r-pill);background:var(--s3);color:var(--tx-control);font:inherit;font-size:var(--fs-md);cursor:pointer;transition:var(--tr-bg-fg)}
+/* the profile as an account: a round picture (the profile's first letter, or the person for the app's own keys), its name beside it */
+.sc-prof-av{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--ac);color:var(--white)}
+.sc-prof-av b{display:none;font-size:var(--fs-sm);font-weight:var(--fw-medium);line-height:var(--lh-none)}
+.sc-prof-av.has-initial b{display:block}
+.sc-prof-av.has-initial svg{display:none}
+.sc-prof-btn .sc-prof-av svg{width:var(--icon-xs);height:var(--icon-xs);color:var(--white)}
 .sc-prof-btn:hover,.sc-prof.open .sc-prof-btn{background:var(--s5);color:var(--tx-control-hover)}
 .sc-prof-btn svg{width:var(--icon-sm);height:var(--icon-sm);color:var(--tx3)}
-.sc-prof-btn span{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-prof-btn .sc-prof-name{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sc-prof-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:5;width:250px;visibility:hidden;pointer-events:none}
 .sc-prof.open .sc-prof-menu{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
 .sc-prof-i{display:flex;align-items:center;border:0;font:inherit;text-align:left;cursor:pointer}
@@ -2199,6 +2323,10 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* Photo mode: its two lists are the ordinary medium dropdown (the pill they had came from the .prim-select class of a shape's row) */
 #photo-section .prim-row{--dd-h:var(--scrub-h);--dd-fs:var(--btn-fs-md);--dd-r:var(--btn-r-md);--dd-px:var(--btn-px-md)}
 #photo-section .prim-row .cs-wrap{width:var(--scrub-w)}      /* (as wide as the number fields above it) */
+/* The right sidebar's slider bars are as tall as its buttons (32; --bar-h is 28 elsewhere), and its lists of buttons as far apart as its slider rows (8), so a card
+   of sliders and buttons reads as one column of controls (Filters & flags). Photo mode keeps its smaller sliders, below. */
+#sidebar-right{--bar-h:var(--btn-h-md)}
+#sidebar-right .btn-list{gap:var(--space-md)}
 /* Photo mode is a long list: its sliders and lists are the small control height, its switches the smaller switch (the travel is
    worked out again here, as the one in :root was worked out from the larger switch) */
 #photo-section{--scrub-h:var(--ctl-h-sm);--switch-w:var(--switch-w-xs);--switch-h:var(--switch-h-xs);--switch-knob:var(--switch-knob-xs);
@@ -2371,6 +2499,51 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .vpc .vpb svg{width:var(--icon-btn-float);height:var(--icon-btn-float)}
 .vpc.tl .vpb-sep{height:1px;width:18px;margin:var(--space-3) auto;background:var(--bar-sep)}
 .vpc.tr .vpb-sep{width:1px;height:18px;margin:0 var(--space-3);background:var(--bar-sep)}
+/* Photo mode's toolbar (_PhotoBar): it takes the bottom toolbar's place while Photo mode is on. Its lists are buttons with the choice
+   written on them; the Effects panel is the Photo mode card's own rows, in the card's small sizes; Save is the one blue button. */
+/* the two bars swap with a short fade and a small rise, not a cut: the one that leaves goes down a little, the one that comes rises into its place */
+#vp-photo-bar{display:flex;opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,10px);transition:opacity .2s var(--ease-out),transform .28s var(--ease-out),bottom var(--dur-200) var(--ease-out),visibility 0s .28s}
+body.photo-mode #vp-photo-bar{opacity:1;visibility:visible;pointer-events:auto;transform:translateX(-50%);transition:opacity .26s var(--ease-out) .1s,transform .34s var(--ease-out) .1s,bottom var(--dur-200) var(--ease-out),visibility 0s}
+.vpc.tr:not(#vp-photo-bar){transition:opacity .2s var(--ease-out),transform .28s var(--ease-out),bottom var(--dur-200) var(--ease-out),visibility 0s}
+body.photo-mode .vpc.tr:not(#vp-photo-bar){opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,10px);transition:opacity .16s var(--ease-out),transform .22s var(--ease-out),bottom var(--dur-200) var(--ease-out),visibility 0s .22s}
+@media (prefers-reduced-motion:reduce){#vp-photo-bar,body.photo-mode #vp-photo-bar,.vpc.tr:not(#vp-photo-bar),body.photo-mode .vpc.tr:not(#vp-photo-bar){transition:none}}
+/* Photo mode has no key hints in the corner, and its own card in the right panel is gone (its rows live on the toolbar) */
+.vp-tips{transition:opacity .2s var(--ease-out)}
+body.photo-mode .vp-tips{opacity:0;visibility:hidden;pointer-events:none}
+#photo-section{display:none}
+/* Ctrl held in Photo mode (depth of field on): the pointer becomes the focus reticle; Ctrl+press sets the focus, dragging up or down pushes it further or pulls it nearer.
+   The tag next to the pointer is light and small, and only there while the focus is being moved. */
+body.photo-mode #canvas.focus-alt{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 10V5h5M18 5h5v5M23 18v5h-5M10 23H5v-5' stroke='%23000' stroke-opacity='.4' stroke-width='3.4'/%3E%3Cpath d='M5 10V5h5M18 5h5v5M23 18v5h-5M10 23H5v-5' stroke='%23fff' stroke-width='1.6'/%3E%3Ccircle cx='14' cy='14' r='2.2' fill='%23fff' stroke='%23000' stroke-opacity='.4'/%3E%3C/g%3E%3C/svg%3E") 14 14, crosshair!important}
+body.photo-mode #canvas.focus-drag{cursor:ns-resize!important}
+/* The lens rings (Photo mode, V held: wireFocus in app.js): three rings of a lens where the press was, hollow (the picture shows
+   through the middle): focus outside, aperture, zoom inside. The one the drag turns is bright, the others faint; its name and setting
+   over the white dot at the top. No fill but the bands, nothing to catch the pointer. */
+.photo-focus-ring{position:fixed;left:0;top:0;z-index:var(--z-vp-pop);width:244px;height:244px;margin:-122px 0 0 -122px;pointer-events:none;
+  opacity:0;transform:scale(.92) rotate(-6deg);transition:opacity .14s var(--ease-out),transform .22s var(--ease-out)}      /* (no drop shadow: it was drawn again on every turn) */
+.photo-focus-ring.show{opacity:1;transform:none}
+.photo-focus-ring svg{width:100%;height:100%;display:block;overflow:visible;font-family:var(--font-sans);font-variant-numeric:tabular-nums}
+.photo-focus-ring .fr-ring{opacity:.38;transition:opacity .16s var(--ease-out)}
+.photo-focus-ring .fr-ring.is-active{opacity:1}
+.photo-focus-ring .fr-band{fill:none;stroke:rgba(12,13,16,.8)}
+.photo-focus-ring .fr-ring.is-active .fr-band{stroke:rgb(14,15,18)}      /* (the ring being turned is solid: nothing shows through it) */
+.photo-focus-ring .fr-ticks{fill:none;stroke:rgba(255,255,255,.28);stroke-width:1;stroke-linecap:round}
+.photo-focus-ring .fr-num{fill:rgba(255,255,255,.75);font-size:10px;text-anchor:middle}
+.photo-focus-ring .fr-ring.is-active .fr-num{fill:rgb(255,255,255)}      /* (the ring being turned: white figures) */
+.photo-focus-ring [data-ring="aperture"] .fr-num,.photo-focus-ring [data-ring="zoom"] .fr-num{font-size:9px}
+.photo-focus-ring .fr-mark{fill:none;stroke:var(--er);stroke-width:1.6;stroke-linecap:round;opacity:0}
+.photo-focus-ring .fr-ring.is-active .fr-mark{opacity:1}
+.photo-focus-ring.is-snap .fr-ring.is-active .fr-mark{stroke-width:2.6}      /* (held on a marked value: the mark a little bolder) */      /* (the red mark across the band at the top, on the ring being turned only: where its setting is read) */
+.photo-focus-ring .fr-name{fill:rgba(255,255,255,.9);font-size:9.5px;text-anchor:middle;letter-spacing:.04em;paint-order:stroke;stroke:rgba(0,0,0,.45);stroke-width:2.5px}
+@media (prefers-reduced-motion:reduce){.photo-focus-ring{transition:none}}
+#vp-photo-bar .vpb.vpb-text{width:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:var(--space-sm);padding:0 var(--space-md);font-size:var(--fs-12);font-weight:var(--fw-regular);white-space:nowrap}
+#vp-photo-bar .vpb.vpb-text svg{flex:0 0 auto}
+#vp-photo-bar .vpb.is-open{background:var(--s4);color:var(--tx)}
+#vp-photo-bar .vpb.vp-photo-save{background:var(--ac);color:var(--white)}
+#vp-photo-bar .vpb.vp-photo-save:hover{filter:brightness(1.08)}
+#vp-photo-bar .vp-photo-fx{width:320px;box-sizing:border-box;padding:var(--space-lg) var(--space-xl);max-height:calc(100vh - 160px);overflow-y:auto;
+  --scrub-h:var(--ctl-h-sm);--switch-w:var(--switch-w-xs);--switch-h:var(--switch-h-xs);--switch-knob:var(--switch-knob-xs);--switch-travel:calc(var(--switch-w) - var(--switch-knob) - var(--switch-pad) * 2)}
+.photo-moved-note{display:none;font-size:var(--fs-xs);color:var(--tx3);line-height:16px;padding:var(--space-md) 0}
+body.photo-mode .photo-moved-note{display:block}
 /* (where the unseen holder of the viewport settings stands: see #vp-settings-pop) */
 #vp-last-tool:disabled{opacity:.4;pointer-events:none}      /* (nothing used yet) */
 .vpc.tr #vp-settings-pop{top:auto;bottom:44px;right:0;transform-origin:bottom right;max-height:min(520px,calc(100vh - 138px));}
@@ -3342,6 +3515,10 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58p
    window is short; what cannot run right now is dimmed. */
 #ctx-menu .ctx-menu-row.is-off{opacity:.38;cursor:default}
 #ctx-menu .ctx-menu-row.is-off:hover{background:none}
+/* The viewport's gizmos and quick wheels (the lens rings of Photo mode, the command wheel, the quick remesh pill) share one look, the
+   lens rings': near-black, white figures, light ridges, a red mark at the setting; the one under the pointer lifted a shade. */
+:root{--gz-bg:rgba(14,15,18,.94);--gz-bg-2:rgb(26,28,32);--gz-hot:rgb(50,53,60);--gz-hot-2:rgb(38,41,47);--gz-line:rgba(255,255,255,.07);--gz-ridge:rgba(255,255,255,.2);
+  --gz-tx:rgba(255,255,255,.55);--gz-tx-2:rgba(255,255,255,.78);--gz-tx-hot:rgb(255,255,255);--gz-mark:var(--er)}
 /* ── Quick wand (hold Q: a ring of commands around the pointer) ─────────── */
 #quick-wand{position:fixed;inset:0;display:none;z-index:var(--z-wand);pointer-events:none;user-select:none;font-size:var(--fs-xs);color:var(--tx);opacity:0;transition:opacity var(--dur-instant) var(--ease-out)}
 #quick-wand.is-in{opacity:1}
@@ -3393,6 +3570,16 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58p
 #quick-wand .qw-hint{position:fixed;left:50%;bottom:72px;translate:-50% 0;padding:var(--space-5) var(--space-xl);border-radius:var(--r-pill);background:var(--surface-pop);box-shadow:var(--surface-ring);color:var(--tx2);font-size:var(--fs-xs);white-space:nowrap}
 #quick-wand .qw-hint:empty{display:none}
 #quick-wand .qw-lab.is-hot{background:color-mix(in srgb, var(--ac) 40%, var(--bg3));color:var(--tx);scale:1.03}
+/* the gizmos' look (--gz-*): near-black slices, the one under the pointer lifted a shade with white on it (Delete keeps its red) */
+#quick-wand .qw-slice,#quick-wand .qw-sub{fill:var(--gz-bg);stroke:var(--gz-bg)}
+#quick-wand .qw-sub{fill:var(--gz-bg-2);stroke:var(--gz-bg-2)}
+#quick-wand .qw-slice.is-hot,#quick-wand .qw-pop{fill:var(--gz-hot);stroke:var(--gz-hot)}
+#quick-wand .qw-sub.is-hot,#quick-wand .qw-pop2{fill:var(--gz-hot-2);stroke:var(--gz-hot-2)}
+#quick-wand .qw-slice.is-off,#quick-wand .qw-slice.is-off.is-hot,#quick-wand .qw-sub.is-off,#quick-wand .qw-sub.is-off.is-hot{fill:var(--gz-bg);stroke:var(--gz-bg)}
+#quick-wand .qw-item svg,#quick-wand .qw-subico div{color:var(--gz-tx-2)}
+#quick-wand .qw-item.is-hot,#quick-wand .qw-item.is-hot svg,#quick-wand .qw-subico.is-hot div{color:var(--gz-tx-hot)}
+#quick-wand .qw-lab,#quick-wand .qw-hint,#quick-wand .qw-lab.is-off,#quick-wand .qw-lab.is-off.is-hot{background:var(--gz-bg);box-shadow:0 0 0 1px var(--gz-line);color:var(--gz-tx-2)}
+#quick-wand .qw-lab.is-hot{background:var(--gz-hot);color:var(--gz-tx-hot)}
 @media (prefers-reduced-motion:reduce){#quick-wand,#quick-wand .qw-ring{transition:none;transform:none}#quick-wand .qw-pop{filter:none}#quick-wand .qw-sub,#quick-wand .qw-subico,#quick-wand .qw-lab{animation:none}#quick-wand .qw-pop,#quick-wand .qw-pop2{transition:none}#quick-wand .qw-pop.is-on,#quick-wand .qw-pop2.is-on{transform:none}#quick-wand .qw-item.is-hot{scale:1;translate:-50% -50%}}
 
 /* a row that opens a list beside it (Open recent on a tab's menu) */
@@ -3793,7 +3980,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .wl-recents-head .wl-label{margin:0}
 #welcome-recents-clear{all:unset;box-sizing:border-box;align-items:center;height:22px;padding:0 var(--space-md);margin-right:-8px;border-radius:var(--r-sm);font-size:var(--fs-12);color:var(--tx3);cursor:pointer}
 #welcome-recents-clear:hover,#welcome-recents-clear:focus-visible{color:var(--er);background:var(--er-tint-10)}
-.wl-recents{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;gap:var(--space-xs);padding-bottom:calc(44px + var(--space-xl));scrollbar-width:none}
+.wl-recents{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;gap:var(--space-xs);padding-bottom:var(--space-xl);scrollbar-width:none}
 .wl-recents.more-below{-webkit-mask-image:linear-gradient(to bottom,var(--black) calc(100% - 30px),transparent);mask-image:linear-gradient(to bottom,var(--black) calc(100% - 30px),transparent)}
 .wl-recents.more-above{-webkit-mask-image:linear-gradient(to bottom,transparent,var(--black) 24px);mask-image:linear-gradient(to bottom,transparent,var(--black) 24px)}
 .wl-recents.more-above.more-below{-webkit-mask-image:linear-gradient(to bottom,transparent,var(--black) 24px,var(--black) calc(100% - 30px),transparent);mask-image:linear-gradient(to bottom,transparent,var(--black) 24px,var(--black) calc(100% - 30px),transparent)}
@@ -3832,12 +4019,6 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 /* a file held over the window */
 .wl-dropveil{position:absolute;inset:0 12px 10px;z-index:4;display:none;place-items:center;border:1.5px dashed var(--ac);border-radius:var(--r-2xl);background:color-mix(in srgb,var(--surface-pop) 90%,var(--ac));color:var(--tx);font-size:var(--fs-xl);pointer-events:none}
 .wl-stage.drag-over .wl-dropveil{display:grid}
-.wl-foot{position:absolute;left:0;right:0;bottom:0;background:var(--surface-pop);display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);height:44px;padding:0 var(--space-5xl);font-size:var(--fs-xs);color:var(--tx3);white-space:nowrap}
-.wl-foot>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.wl-foot{transition:opacity var(--dur-base,180ms) var(--ease-out)}
-.wl-foot.is-away{opacity:0;pointer-events:none}
-.wl-foot::before{content:'';position:absolute;left:0;right:0;bottom:100%;height:28px;background:linear-gradient(to bottom,transparent,var(--surface-pop));pointer-events:none}      /* (the fade where the list runs under the hints) */
-.wl-foot kbd{font:inherit;color:var(--tx2);background:var(--bg3);border-radius:var(--r-xs);padding:1px var(--space-5);margin-right:var(--space-sm)}
 @media (max-width:860px){.wl-start{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.wl-nav .wl-link:first-child{display:none}.wl-tile kbd{display:none}}
 /* ── Save scene ─────────────────────────────────────────────────────────── */
@@ -3901,6 +4082,32 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 /* every row of a name and a field, whatever card it is in: no dead gap between the two (the name carries the space as its own padding, so it drags too) */
 .prim-row{column-gap:0}.prim-row>.prim-label{padding-right:var(--space-lg)}
 .photo-fx-row .prim-label{padding:0 var(--space-lg)}
+/* a number field's row with the fill-bar slider (_scrubField with bar): the bar with the row's name inside it, the field at the end */
+:is(.cmd-num.has-bar,#_a#_b#_c){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:var(--bar-num-gap);height:auto;--fld-w:var(--bar-num-w);--fld-h:var(--bar-h)}
+:is(.cmd-num.has-bar+.cmd-num.has-bar,#_a#_b#_c#_d){margin-top:var(--bar-row-gap)}      /* (one bar under another: a little more room than between two switches) */
+:is(.cmd-num.has-bar>.field-bar,#_a#_b#_c){grid-column:1;grid-row:1;width:100%;min-width:0}
+:is(.cmd-num.has-bar>span:first-child,#_a#_b#_c){min-width:0;grid-column:1;grid-row:1;position:relative;z-index:1;pointer-events:none;padding:0 var(--bar-label-px);color:var(--bar-label);text-shadow:var(--bar-label-shadow);font-weight:var(--bar-label-weight);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(.cmd-num.has-bar:hover>span:first-child,#_a#_b#_c){color:var(--bar-label-hover)}
+:is(.cmd-num.has-bar>.size-field,#_a#_b#_c){grid-column:2;grid-row:1;justify-self:end;width:var(--bar-num-w);min-width:0;overflow:hidden;height:var(--bar-h);margin-right:0;background:var(--bar-bg);border-radius:var(--bar-r-in) var(--bar-r) var(--bar-r) var(--bar-r-in)}
+:is(.cmd-num.has-bar>.size-field input,#_a#_b#_c#_d){flex:0 0 var(--bar-val-w);width:var(--bar-val-w);min-width:0}      /* (a text box is wide by itself: the number gets the bar's fixed room) */
+/* Photo mode's effects: the switch, the fill-bar slider with the effect's name inside it, the number box (no fill of its own) */
+:is(.photo-fx-row.has-bar,#_a#_b){column-gap:var(--bar-num-gap);row-gap:0;margin:var(--space-2xs) 0}
+:is(.photo-fx-row.has-bar>.prim-toggle,#_a#_b){margin-right:var(--space-md)}
+/* the shape parameters: the name inside the bar, the number box at the end */
+:is(.prim-row.prim-bar-row,#_a#_b){grid-template-columns:minmax(0,1fr) auto;column-gap:var(--bar-num-gap);row-gap:0;margin:var(--space-2xs) 0}
+:is(.prim-row.prim-bar-row>.prim-slider,#_a#_b#_c){display:block;grid-column:1;grid-row:1;width:100%;min-width:0}
+:is(.prim-row.prim-bar-row>.prim-label,#_a#_b){grid-column:1;grid-row:1;position:relative;z-index:1;pointer-events:none;padding:0 var(--bar-label-px);color:var(--bar-label);text-shadow:var(--bar-label-shadow);font-weight:var(--bar-label-weight);transition:opacity var(--dur-fast) var(--ease-out)}
+:is(.prim-row.prim-bar-row.is-held>.prim-label,#_a#_b#_c){opacity:0}
+:is(.prim-row.prim-bar-row .prim-val-wrap,#_a#_b#_c){grid-column:2;grid-row:1;width:var(--bar-num-w);height:var(--bar-h);background:var(--bar-bg);border-radius:var(--bar-r-in) var(--bar-r) var(--bar-r) var(--bar-r-in)}
+/* (its switch is the round check box of the app, not a sliding switch: the box itself is shown, its switch drawing is not) */
+:is(.photo-fx-row.has-bar>.prim-toggle,#_a#_b){width:18px;height:18px;justify-self:start}
+:is(.photo-fx-row.has-bar>.prim-toggle>span,#_a#_b){display:none}
+:is(.photo-fx-row.has-bar>.prim-toggle>input,#_a#_b){position:static;opacity:1;pointer-events:auto;box-sizing:border-box}
+:is(.photo-fx-row.has-bar>.prim-toggle,#_a#_b)>input:checked::after{width:100%;height:100%}      /* (the tick in the middle of the circle inside its edge, not of a box 3px bigger */
+:is(.photo-fx-row.has-bar>.photo-bar,#_a#_b){grid-column:2;grid-row:1;width:100%;min-width:0}
+:is(.photo-fx-row.has-bar>.prim-label,#_a#_b){grid-column:2;grid-row:1;position:relative;z-index:1;pointer-events:none;padding:0 var(--bar-label-px);color:var(--bar-label);text-shadow:var(--bar-label-shadow);font-weight:var(--bar-label-weight)}
+:is(.photo-fx-row.has-bar:hover>.prim-label,#_a#_b){color:var(--bar-label-hover)}
+:is(.photo-fx-row.has-bar .prim-val-wrap,#_a#_b#_c){width:var(--bar-num-w);height:var(--bar-h);background:var(--bar-bg);border-radius:var(--bar-r-in) var(--bar-r) var(--bar-r) var(--bar-r-in)}
 .cmd-num{gap:0}.cmd-num>span:first-child{flex:1 1 auto;min-width:0;padding-right:var(--space-lg)}.cmd-num>.cmd-seg:only-child{flex:1 1 auto}
 /* a row that is greyed out (Photo mode off, or that effect off) gives none of the signs of a draggable field: no drag pointer, no lit edge, no lit name */
 #photo-fx#photo-fx.is-off :is(.prim-val-wrap,.prim-unit,.prim-label,input:not([type=checkbox])),#photo-fx#photo-fx .photo-fx-row.is-off :is(.prim-val-wrap,.prim-unit,.prim-label,input:not([type=checkbox])){cursor:default}
@@ -3917,6 +4124,14 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs .scrub-value:hover{background:none}
 #sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs .scrub-unit{position:static;transform:none;flex:0 0 auto}
 #sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs:has(.scrub-unit:not(:empty)) :is(.scrub-value,.scrub-input){padding-right:0}
+/* the fill-bar slider in the sidebar: one row, the name inside the bar at its left (over the fill, so it stays legible on blue), the
+   number box at the end; the bar under the name takes the press and the drag */
+#sidebar-right#sidebar-right .scrub.scrub-bar:not(.mat-row-val,.mat-row-val *){position:relative;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:0;padding:var(--space-xs) 0;min-height:0}
+#sidebar-right#sidebar-right .scrub.scrub-bar:not(.mat-row-val,.mat-row-val *) .scrub-head{display:flex;position:absolute;z-index:1;left:var(--bar-label-px);right:calc(var(--bar-num-w) + var(--bar-num-gap) + var(--bar-label-px));top:var(--space-xs);height:var(--bar-h);align-items:center;pointer-events:none}
+#sidebar-right#sidebar-right .scrub.scrub-bar:not(.mat-row-val,.mat-row-val *) .scrub-label{padding-right:0;color:var(--bar-label);text-shadow:var(--bar-label-shadow);font-weight:var(--bar-label-weight)}
+#sidebar-right#sidebar-right .scrub.scrub-bar:not(.mat-row-val,.mat-row-val *):hover .scrub-label{color:var(--bar-label-hover)}
+#sidebar-right#sidebar-right .scrub.scrub-bar:not(.mat-row-val,.mat-row-val *) .scrub-range{display:block}
+#sidebar-right#sidebar-right .scrub.scrub-bar:not(.mat-row-val,.mat-row-val *) .scrub-rhs{flex:0 0 auto;width:var(--bar-num-w);min-width:0;height:var(--bar-h);border-radius:var(--bar-r-in) var(--bar-r) var(--bar-r) var(--bar-r-in)}
 .scrub:not(.mat-row-val,.mat-row-val *) .scrub-head{min-height:var(--num-h)}
 .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs{gap:var(--space-sm)}
 /* a number in a row of a command panel, and a Shape parameter */
@@ -4124,15 +4339,20 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58p
 .lib-inspector .li-id{flex:1 1 auto;min-width:0}
 /* the name of the part, alone at the top, in the serif of the website */
 .lib-inspector .li-name{color:var(--tx);font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:24px;line-height:1.15;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lib-inspector .li-facts{flex:0 0 auto;margin-top:calc(var(--space-sm) * -1);color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-inspector .li-facts{margin-top:var(--space-xs);color:var(--tx3);font-size:var(--fs-11);line-height:var(--lh-note);font-variant-numeric:tabular-nums;text-wrap:balance}      /* (under the name, beside the star: it wraps rather than cuts off the size) */
 .lib-inspector .li-fav.active{color:#e8b64c}
 .lib-inspector .li-fav.active svg{fill:currentColor}
 .lib-inspector .li-params{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:none}
 .lib-inspector .li-params .prim-section{margin-top:0;padding-top:0;border-top:0}
-.lib-inspector .li-actions{flex:0 0 auto;display:flex;gap:var(--space-sm)}
-.lib-inspector .li-actions .btn{flex:1 1 auto;justify-content:center;height:var(--btn-h-md,32px)}
-.lib-inspector .btn.primary{background:var(--btn-primary-bg);border-color:transparent;color:var(--btn-primary-fg)}
-.lib-inspector .btn.primary:hover{background:var(--btn-primary-bg-hover)}
+.lib-inspector .li-top .lc-icon-btn{flex:0 0 auto}
+/* Add to scene: the accent + of the Animate dock, floating in the bottom right corner of the panel (the parameters scroll under
+   it, with room at their end so the last row comes out from under it) */
+.lib-inspector{position:relative}
+.lib-inspector .li-params{padding-bottom:calc(var(--win-ico-btn) + var(--space-lg))}
+.lib-inspector .li-add{all:unset;box-sizing:border-box;position:absolute;right:var(--space-2xl);bottom:var(--space-2xl);z-index:2;box-shadow:var(--shadow-md,0 4px 12px rgba(0,0,0,.35));display:grid;place-items:center;width:var(--win-ico-btn);height:var(--win-ico-btn);border-radius:var(--win-ico-r);background:var(--ac);color:var(--white);cursor:pointer;transition:filter var(--dur-fast) var(--ease-out)}
+.lib-inspector .li-add:hover{filter:brightness(1.1)}
+.lib-inspector .li-add:focus-visible{box-shadow:var(--ring-focus)}
+.lib-inspector .li-add svg{width:var(--icon-md);height:var(--icon-md);stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .lib-inspector .li-empty{margin:auto 0;color:var(--tx3);font-size:var(--fs-12);line-height:var(--lh-note)}
 /* the picked tile: an accent ring and a bright name */
 .lib-item.is-picked{color:var(--tx);box-shadow:0 0 0 1.5px var(--ac)}
@@ -4150,7 +4370,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58p
 .lib-view-btn:hover{color:var(--tx2);background:var(--s2)}
 .lib-view-btn.active{color:var(--tx-control-hover);background:var(--wht-16)}
 .lib-view-btn :is(i,svg){width:var(--icon-xs);height:var(--icon-xs);stroke-width:2}
-@container libdock (max-width:900px){.lib-inspector{flex-basis:min(var(--lib-insp-w),330px);flex-direction:column;gap:var(--space-lg)}.lib-inspector .li-side{display:contents}.lib-inspector .li-top{order:0}.lib-inspector .li-view{order:1;flex:0 0 clamp(150px,40%,280px)}.lib-inspector .li-params{order:2}.lib-inspector .li-actions{order:3}}
+@container libdock (max-width:900px){.lib-inspector{flex-basis:min(var(--lib-insp-w),330px);flex-direction:column;gap:var(--space-lg)}.lib-inspector .li-side{display:contents}.lib-inspector .li-top{order:0}.lib-inspector .li-view{order:1;flex:0 0 clamp(150px,40%,280px)}.lib-inspector .li-params{order:2}}
 @container libdock (max-width:640px){.lib-inspector,#lib-insp-grip{display:none}#vp-library-pop .lib-view-toggle{display:none}}
 @container libdock (max-width:500px){#vp-library-pop .cs-wrap:has(#lib-shelf){display:none}}
 #vp-library-pop{container:libdock / inline-size}
@@ -4564,6 +4784,11 @@ html,body{user-select:none;-webkit-user-select:none}
 html.no-motion *,html.no-motion *::before,html.no-motion *::after{animation-duration:.001ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
 #settings-modal .set-row.set-stack,.vp-cam-pop .set-row.set-stack{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--space-lg)}
 #settings-modal .set-row.set-stack>span:first-child,.vp-cam-pop .set-row.set-stack>span:first-child{flex:none;width:100%}
+/* Settings › Performance › Edges and resolution: the Reload row only while the switch differs from what the view is drawn with (a
+   row is a flex box, so [hidden] alone would not hide it); Resolution's three choices as wide as a button row */
+#settings-modal #set-msaa-reload-row[hidden]{display:none}
+#settings-modal #set-res{width:240px;--seg-pad:2px}
+#settings-modal #set-res>button{padding:var(--space-sm) var(--space-md);font-size:var(--fs-12)}
 /* a text link in Settings (the credits of About): the accent for text, no underline until the pointer is on it, a ring for the keyboard */
 #settings-modal .set-pane-b a:not(.btn){color:var(--ac-text);text-decoration:none;border-radius:var(--r-sm);transition:color var(--dur-fast) var(--ease-out)}
 #settings-modal .set-pane-b a:not(.btn):hover{color:var(--ac);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
@@ -4837,6 +5062,43 @@ body.dock-resizing .is-float>.mat-dock-h{cursor:default}
 .tree-lock{display:inline-grid;place-items:center;flex:none;margin-right:var(--space-xs);color:var(--icon-lock)}
 .tree-lock .ti{width:var(--icon-xs);height:var(--icon-xs)}
 #prop-body .prop-head .prop-head-note{flex:none}
+/* The Properties card is one height for every selection. The name and, under it, what the selection is (one line each); the triangle card (the count,
+   the saving, the bar, its caption, then two figures side by side and the size on a line of its own); a tag row that slides sideways; the material
+   strip; the Shading angle. Each keeps its place when it has nothing to say, so a part, a group, a line, the scene and an empty scene are all as high
+   and nothing below the card moves. */
+#prop-body .prop-head{margin-bottom:0}
+#prop-body .prop-head .prop-lock-badge{width:24px;padding:0}      /* (the lock is an icon: "Lock" and "Locked" are in its tooltip) */
+#prop-body .prop-sub{height:15px;line-height:15px;margin:0 0 var(--space-xl);font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+#prop-body .prop-card{box-sizing:border-box;padding:var(--space-xl);border-radius:var(--r-2xl);background:color-mix(in srgb,var(--tx) 3%,transparent)}
+#prop-body .prop-card .prop-hero{margin:0;display:flex;flex-direction:column;gap:var(--space-sm)}
+#prop-body .prop-card .prop-hero-top{height:28px;align-items:center}
+#prop-body .prop-card .prop-hero-sub{height:15px;margin:0;line-height:15px}
+#prop-body .prop-card .prop-hero-sub.is-none{visibility:hidden}
+#prop-body .prop-card .prop-hero .prop-bar{flex:0 0 3px;margin:0}
+#prop-body .prop-card .prop-hero-cap{height:15px;margin:0;line-height:15px}
+.prop-bar-fill.whole{background:var(--tx3)}
+#prop-body .prop-card .prop-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);row-gap:var(--space-lg);column-gap:0;margin:var(--space-lg) 0 0;padding-top:var(--space-lg);border-top:1px solid var(--surface-line);line-height:16px}
+#prop-body .prop-stat{display:flex;flex-direction:column;gap:var(--space-2xs);min-width:0}
+#prop-body .prop-stat+.prop-stat:not(.wide){padding-left:var(--space-xl);border-left:1px solid var(--surface-line)}
+#prop-body .prop-stat.wide{grid-column:1/-1}
+#prop-body .prop-grid .prop-label{color:var(--tx3)}
+#prop-body .prop-grid .prop-value{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-12);line-height:16px}
+#prop-body .prop-tags{box-sizing:border-box;flex-wrap:nowrap;gap:var(--space-sm);height:24px;min-height:24px;margin:var(--space-xl) 0 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;mask-image:linear-gradient(90deg,transparent 0,currentColor var(--tf-l,0px),currentColor calc(100% - var(--tf-r,0px)),transparent 100%)}
+#prop-body .prop-tags::-webkit-scrollbar{display:none}
+#prop-body .prop-tags>*{flex:none;white-space:nowrap}
+#prop-body .prop-tags>:is(.tree-badge,.tree-inst){box-sizing:border-box;height:24px;display:inline-flex;align-items:center}
+#prop-body .prop-tags .tree-badge{padding:0 var(--space-md);font-size:var(--fs-11);letter-spacing:normal;text-transform:none;border-radius:var(--r-sm)}
+#prop-body .prop-tags-empty{font-size:var(--fs-11);color:var(--tx3)}
+#vp-section-pill{position:absolute;top:var(--space-xl);left:56px;z-index:var(--z-vp-pop)}      /* (top left, beside the camera pill: the mode pills in the middle, Exploded and the others, would cover it) */
+/* Section view: the small card beside its pill (section-plane.js) */
+#vp-section-pop{position:fixed;z-index:var(--z-vp-pop);width:272px;box-sizing:border-box;padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg3);border:1px solid var(--s3);box-shadow:var(--surface-shadow);color:var(--tx);font-size:var(--fs-md);display:flex;flex-direction:column;gap:var(--space-md);animation:var(--menu-in)}
+#vp-section-pop[hidden]{display:none}
+#vp-section-pop .bp-h{font-weight:var(--fw-medium)}
+#vp-section-pop .bp-s{color:var(--tx2);font-size:var(--fs-sm);line-height:1.45}
+#vp-section-pop .sec-axes{display:flex;gap:var(--space-xs)}
+#vp-section-pop .bp-btn{flex:1;height:var(--btn-h-md);border-radius:var(--r-md);border:0;background:var(--s2);color:var(--tx);font:inherit;cursor:pointer}
+#vp-section-pop .bp-btn:hover{background:var(--s3)}
+#vp-section-pop .bp-btn[aria-pressed="true"]{background:var(--ac-soft);color:var(--ac-text)}
 /* A press scaled the button to .92 (or .97): while that animates the icon is resampled, so it goes soft and sharp again with every click. The press
    is shown by dimming instead, and nothing is scaled. */
 .vpb:active,.tree-icon-btn:active,.lc-icon-btn:active,.dlg-x:active,.dlg-popup .dlg-x:active,.tbtn:active,.lc-pill:active,.vp-pill:active,.btn:active,.sel-bar-grid .btn:active,#draw-card .dr-grid button:active,#draw-card #dr-edit .btn:active{transform:none!important;opacity:.72}
@@ -4973,11 +5235,11 @@ html input.scrub-drag,html input.scrub-drag:focus,html input.scrub-drag:hover{cu
 input[type=checkbox],input[type=radio],input[type=range],input[type=color],input[type=file]{cursor:pointer}
 /* ── The check box of the app (every box that is not a switch) ────────────────────────────────────────────────
    One look: an 18px circle with a 1.5px edge, the accent when ticked, with the check of the icon set (12px, 3px stroke): the one of the
-   Notes. The boxes of the flatten and batch-rename windows, the stamp and options of the picture and video windows, and "Don't ask again". */
-:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]{appearance:none;-webkit-appearance:none;width:18px;height:18px;flex:0 0 18px;margin:0;border-radius:50%;border:1.5px solid var(--s7);background:transparent;cursor:pointer;display:grid;place-items:center;transition:border-color var(--dur-140) ease,background var(--dur-140) ease}
-:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]:hover{border-color:var(--wht-30)}
-:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
-:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]:checked::after{content:'';width:18px;height:18px;background:var(--tick) center/12px 12px no-repeat}
+   Notes. The boxes of the flatten and batch-rename windows, Photo mode's effects, the stamp and options of the picture and video windows, and "Don't ask again". */
+:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,.photo-fx-row.has-bar .prim-toggle,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]{appearance:none;-webkit-appearance:none;width:18px;height:18px;flex:0 0 18px;margin:0;border-radius:50%;border:1.5px solid var(--s7);background:transparent;cursor:pointer;display:grid;place-items:center;transition:border-color var(--dur-140) ease,background var(--dur-140) ease}
+:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,.photo-fx-row.has-bar .prim-toggle,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]:hover{border-color:var(--wht-30)}
+:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,.photo-fx-row.has-bar .prim-toggle,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
+:is(#_flat-dialog .flat-tog,.brn-tog,.imp-skip,.photo-fx-row.has-bar .prim-toggle,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-overlay-row,.ss-stamp-check)) input[type=checkbox]:checked::after{content:'';width:18px;height:18px;background:var(--tick) center/12px 12px no-repeat}
 
 /* A field that has the focus gets no blue rectangle: it keeps its ordinary border (the value being edited is still highlighted). The rename box of the parts tree is the one exception: it has to be seen. */
 /* ── Floating windows are the lowest layer of what floats ───────────────────────────────────────────────────────────
@@ -4994,6 +5256,9 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
    never opened behind one. */
 .vpc{z-index:var(--z-view-layer)}
 .vp-cmd-host{z-index:var(--z-view-layer)}
+/* (the sun gizmo, in the view's bottom-left corner, is part of the view, not a toolbar: a dock opened at the bottom, a command card or a
+   window goes over it instead of it covering their buttons) */
+#sun-gizmo-wrap{z-index:calc(var(--z-toolbar) - 1)}
 .vpc:has(.vp-prim-pop[style*="block"]),.vpc:has(.vp-pill-menu.show){z-index:var(--z-view-pop)}
 /* …but a window that floats is a window: a popped-out Materials or Library window stands in front of the view's toolbars, tips
    and command cards when it is moved over them (Luka, 12 Oct: "toolbars in viewport are now sitting on top of our windows").
@@ -5049,10 +5314,13 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 #vp-materials-pop#vp-materials-pop .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle),#vp-library-pop#vp-library-pop .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle){display:inline-flex;align-items:center;padding:1px;gap:var(--space-2xs);border-radius:var(--btn-r-sm)}
 #vp-materials-pop#vp-materials-pop .mat-dock-h :is(.mat-view-btn,.lib-view-btn),#vp-library-pop#vp-library-pop .mat-dock-h :is(.mat-view-btn,.lib-view-btn){width:28px;height:28px;border-radius:var(--r-sm)}
 #vp-materials-pop#vp-materials-pop .mat-dock-h :is(.mat-view-btn,.lib-view-btn) :is(svg,i),#vp-library-pop#vp-library-pop .mat-dock-h :is(.mat-view-btn,.lib-view-btn) :is(svg,i){width:var(--icon-xl);height:var(--icon-xl);stroke-width:1.8}
-/* sliding thumb: one pill glides between the two buttons; it settles with a small spring when it moves right */
+/* sliding thumb: one pill glides between the two buttons. Its two edges move on their own clocks: the leading edge leaves at once
+   and lands without overshoot, the trailing edge follows a beat later on a spring, so the pill stretches across the gap, squeezes a
+   hair past its size as it lands and settles back to 28 px. Edges, not a transform, so the stretch needs no keyframes and does not
+   play when the panel opens. (Each state holds the timing of the move INTO it, which is how the direction picks the leading edge.) */
 :is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle){position:relative}
-:is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle)::before{content:"";position:absolute;left:1px;top:1px;width:28px;height:28px;border-radius:var(--r-sm);background:var(--wht-16);transform:translateX(0);transition:transform var(--dur-base) var(--ease-ios);pointer-events:none}
-:is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle):has(> :nth-child(2).active)::before{transform:translateX(calc(28px + var(--space-2xs)));transition-timing-function:var(--ease-spring)}
+:is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle)::before{content:"";position:absolute;top:1px;bottom:1px;left:1px;right:calc(1px + 28px + var(--space-2xs));border-radius:var(--r-sm);background:var(--wht-16);transition:left var(--seg-lead),right var(--seg-trail);pointer-events:none}
+:is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle):has(> :nth-child(2).active)::before{left:calc(1px + 28px + var(--space-2xs));right:1px;transition:right var(--seg-lead),left var(--seg-trail)}
 :is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-btn,.lib-view-btn){position:relative;z-index:1}
 :is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-btn,.lib-view-btn):is(.active,.active:hover){background:transparent}
 @media (prefers-reduced-motion:reduce){:is(#vp-materials-pop#vp-materials-pop,#vp-library-pop#vp-library-pop) .mat-dock-h :is(.mat-view-toggle,.lib-view-toggle)::before{transition:none}}
@@ -5088,7 +5356,7 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 #vp-animate-pill.has-play,#vp-notes-pill.has-play{padding-right:var(--space-md)}
 #vp-notes-pill[hidden],#vp-notes-pill [hidden]{display:none}
 #vp-notes-pill.is-paused .anim-pill-dot{animation:none;opacity:.55}
-body.anim-mode #vp-mode-bar{display:none}
+body.anim-mode #vp-mode-bar,body.photo-mode #vp-mode-bar{display:none}      /* (no Edit mesh in Animate or Photo mode) */
 #vp-animate-pill[hidden],#vp-animate-pill [hidden]{display:none}
 .anim-pill-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:currentColor;animation:anim-pill-pulse 1.4s ease-in-out infinite}
 #vp-animate-pill.is-paused .anim-pill-dot{animation:none;opacity:.55}
@@ -5216,6 +5484,12 @@ body.anim-mode #vp-mode-bar{display:none}
 :is(#_anim-dialog,#vp-animate-pop) .anim-xyz-c .anim-l{text-align:center}
 :is(#_anim-dialog,#vp-animate-pop) .anim-xyz-c .anim-v{text-align:center;color:var(--tx3);font-variant-numeric:tabular-nums}
 :is(#_anim-dialog,#vp-animate-pop) .anim-v{flex:0 0 56px;text-align:right;font-size:var(--fs-11);color:var(--tx2);font-variant-numeric:tabular-nums}
+/* The sliders are the fill-bar of every value (input.range-bar): the bar, and the number in its box joined to its end, as initScrubber
+   draws them; the three of a row (X, Y, Z) are bars rounded at both ends with the number under them. */
+:is(#_anim-dialog,#vp-animate-pop) .anim-speed:has(>input.range-bar){gap:var(--bar-num-gap)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-speed>.anim-v{box-sizing:border-box;flex:0 0 64px;height:var(--bar-h);display:flex;align-items:center;justify-content:flex-end;padding:0 var(--num-px);border:1px solid var(--bar-stroke);border-radius:var(--bar-r-in) var(--bar-r) var(--bar-r) var(--bar-r-in);background:var(--bar-bg);color:var(--tx);font-size:var(--fs-12)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-speed>.anim-dice{margin-left:var(--space-md)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-xyz-c input.range-bar{--bar-r-in:var(--bar-r)}
 :is(#_anim-dialog,#vp-animate-pop) .mac-sel{width:100%}
 /* the timeline of the loop points: a ruler, the part of the cycle that is used, two handles, the playhead */
 :is(#_anim-dialog,#vp-animate-pop) .anim-tl{padding:var(--space-sm) 0 var(--space-md);border-top:0}
@@ -5465,6 +5739,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58
 .adk-insp .dlg-body{flex:1 1 auto;min-height:0;overflow:auto}
 .adk-insp .dlg-foot{flex:0 0 auto}
 #vp-animate-pop.no-insp .adk-insp{display:none}
+#vp-animate-pop.no-insp .adk-insp-grip{display:none}
 #vp-animate-pop.no-left .adk-rh{padding:0;justify-content:center;gap:0}
 #vp-animate-pop.no-left .adk-rh :is(.adk-n,em,.adk-act,span){display:none}
 #vp-animate-pop.no-left .adk-lay .adk-rh{padding-left:0}
@@ -5482,7 +5757,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58
 @container adkdock (max-width:860px){.adk-insp{--adk-iw:300px}}
 .adk-body{position:relative}
 @container adkdock (max-width:820px){
-  .adk-insp{display:none}
+  .adk-insp,.adk-insp-grip{display:none}
   #vp-animate-pop.insp-force .adk-insp{display:flex;position:absolute;top:0;right:0;bottom:0;z-index:12;width:min(var(--adk-iw),92%);box-shadow:-14px 0 28px -12px var(--blk-50)}
 }
 @container adkdock (max-width:560px){#vp-animate-pop .anim-alpha{display:none}}
@@ -5584,7 +5859,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .section-cmd[data-cmd="elements"] #el-weld-row[hidden]{display:none}
 /* Edit mesh's bar: one column at the right edge under the view cube, in the same dark pill as the toolbar on the left. The brush size,
    the weld distance and the count of what is picked do not fit in it: they stand out to its left, beside the button they go with. */
-.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:0;padding:var(--space-sm);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:var(--surface-shadow-bar),var(--surface-ring)}
+.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:0;padding:var(--space-xs);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:var(--surface-shadow-bar),var(--surface-ring)}
 .vpc.el-bar[hidden]{display:none}
 .vpc.el-bar{transition:opacity 220ms var(--ease-out),translate 260ms cubic-bezier(.2,.9,.3,1)}
 .vpc.el-bar.is-out{opacity:0;translate:14px 0;pointer-events:none}
@@ -5594,21 +5869,36 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .vpc.el-bar:not(.is-out):not([hidden])>*:nth-child(n+4){animation-delay:120ms}
 @keyframes el-bar-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.vpc.el-bar{transition:none}.vpc.el-bar:not(.is-out):not([hidden])>*{animation:none}}
-.el-bar .el-row{display:grid;grid-template-columns:30px;gap:var(--space-xs)}
-.el-bar .vpb-sep{flex:0 0 1px;height:1px;width:18px;margin:var(--space-md) auto;background:var(--bar-sep)}      /* (the same room above a divider as below it, and between the buttons of a group) */
+.el-bar{--el-row-gap:var(--space-2xs)}
+.el-bar .el-row{display:grid;grid-template-columns:30px;gap:var(--el-row-gap)}      /* (the padding, gaps and dividers of the left bar, .vp-bar-col: the two bars match) */
+.el-bar .vpb-sep{flex:0 0 1px;height:1px;width:18px;margin:var(--space-xs) auto;background:var(--bar-sep)}
 .el-bar .el-row>button,.el-ibtn{position:relative;width:30px;height:30px;display:grid;place-items:center;padding:0;background:transparent;border:0;border-radius:var(--r-sm);color:var(--icon-fg-float);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
 .el-bar .el-row>button>span,.el-ibtn>span{display:none}
 .el-bar .el-row [data-lucide],.el-bar .el-row .lucide,.el-bar .el-row svg{width:var(--icon-btn-float);height:var(--icon-btn-float);display:block}
 .el-bar .el-row>button:hover,.el-ibtn:hover:not(:disabled){color:var(--tx);background:var(--s4)}
 .el-bar .el-row>button.active,.el-bar .el-row>button.active:hover,.el-ibtn:has(>input:checked),.el-ibtn:has(>input:checked):hover{color:var(--tx-control-hover);background:var(--s6)}
-/* the two groups where one of three is on (how a pick is made, the gizmo's axes): one grey pill that slides to the button that is on (it moves with `top`, not a transform: an animated transform gets its own layer and the icons over it were drawn soft while it moved) */
+/* the two groups where one of three is on (how a pick is made, the gizmo's axes): one grey pill that slides to the button that is on (one step is a button and the row's gap, --el-row-gap, so it lands on each button; it moves with `top`, not a transform: an animated transform gets its own layer and the icons over it were drawn soft while it moved) */
 :is(#el-tool,#el-space){position:relative}
-:is(#el-tool,#el-space)::before{content:'';position:absolute;top:0;left:0;width:30px;height:30px;border-radius:var(--r-sm);background:var(--s6);pointer-events:none;transition:top var(--dur-slow) var(--ease-ios),opacity var(--dur-fast) var(--ease-out)}
-:is(#el-tool,#el-space):has(>button:nth-child(2).active)::before{top:32px}
-:is(#el-tool,#el-space):has(>button:nth-child(3).active)::before{top:64px}
+:is(#el-tool,#el-space)::before{content:'';position:absolute;--el-step:calc(30px + var(--el-row-gap));top:0;bottom:calc(100% - 30px);left:0;width:30px;border-radius:var(--r-sm);background:var(--s6);pointer-events:none;transition:top var(--dur-slow) var(--ease-ios),bottom var(--dur-slow) var(--ease-ios),opacity var(--dur-fast) var(--ease-out)}
+:is(#el-tool,#el-space):has(>button:nth-child(2).active)::before{top:var(--el-step);bottom:calc(100% - var(--el-step) - 30px)}
+:is(#el-tool,#el-space):has(>button:nth-child(3).active)::before{top:calc(2 * var(--el-step));bottom:calc(100% - 2 * var(--el-step) - 30px)}
+/* (a click marks the way, as in .cmd-seg: the leading edge goes first, the trailing one follows on a spring) */
+:is(#el-tool,#el-space)[data-seg-dir="fwd"]::before{transition:bottom var(--seg-lead),top var(--seg-trail),opacity var(--dur-fast) var(--ease-out)}
+:is(#el-tool,#el-space)[data-seg-dir="back"]::before{transition:top var(--seg-lead),bottom var(--seg-trail),opacity var(--dur-fast) var(--ease-out)}
 :is(#el-tool,#el-space):not(:has(>button.active))::before{opacity:0}
 :is(#el-tool,#el-space)>button.active,:is(#el-tool,#el-space)>button.active:hover{background:transparent}
 @media (prefers-reduced-motion:reduce){:is(#el-tool,#el-space)::before{transition:none}}
+/* Translate, Rotate, Scale in the left bar: the same grey pill that slides to the one that is on (and leads with the edge it goes to) */
+.vp-seg-col{position:relative;display:flex;flex-direction:column;gap:var(--vp-seg-gap);--vp-seg-gap:var(--space-2xs);--vp-seg-step:calc(30px + var(--vp-seg-gap))}
+.vp-seg-col::before{content:'';position:absolute;top:0;bottom:calc(100% - 30px);left:0;width:30px;border-radius:var(--r-sm);background:var(--s6);pointer-events:none;transition:top var(--dur-slow) var(--ease-ios),bottom var(--dur-slow) var(--ease-ios),opacity var(--dur-fast) var(--ease-out)}
+.vp-seg-col:has(>.vpb:nth-child(2).active)::before{top:var(--vp-seg-step);bottom:calc(100% - var(--vp-seg-step) - 30px)}
+.vp-seg-col:has(>.vpb:nth-child(3).active)::before{top:calc(2 * var(--vp-seg-step));bottom:calc(100% - 2 * var(--vp-seg-step) - 30px)}
+.vp-seg-col[data-seg-dir="fwd"]::before{transition:bottom var(--seg-lead),top var(--seg-trail),opacity var(--dur-fast) var(--ease-out)}
+.vp-seg-col[data-seg-dir="back"]::before{transition:top var(--seg-lead),bottom var(--seg-trail),opacity var(--dur-fast) var(--ease-out)}
+.vp-seg-col:not(:has(>.vpb.active))::before{opacity:0}
+:is(.vp-seg-col>.vpb.active,.vp-seg-col>.vpb.active:hover,#_a#_b#_c){background:transparent}
+.vp-seg-col>.vpb{position:relative;z-index:1}
+@media (prefers-reduced-motion:reduce){.vp-seg-col::before{transition:none}}
 .el-ibtn:disabled{opacity:var(--op-3);cursor:default}
 .el-ibtn.danger:hover:not(:disabled){color:var(--er);background:var(--er-soft)}
 .el-ibtn>input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
@@ -6373,16 +6663,16 @@ window.moSplash = function (msg, pct) {
           <div class="brand-menu-titles">
             <div class="brand-menu-title">MeshOptimiser</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.36.1</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.37.0</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>One Boolean card, five styles</li>
-            <li>Photo mode: a studio render</li>
-            <li>Decimate keeps closer to the shape</li>
-            <li>Profile: move several points at once</li>
-            <li>New scene tabs open at once</li>
+            <li>Section view: cut the scene with a plane</li>
+            <li>Photo mode: toolbar, lens rings, softboxes</li>
+            <li>Remove thickness for thin-walled parts</li>
+            <li>OBJ and FBX exports carry textures</li>
+            <li>Profile: round, grow and trim the outline</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -6545,9 +6835,11 @@ window.moSplash = function (msg, pct) {
         <button class="vpb em-toolbtn" id="em-tool-btn" title="Selection tool: Click" aria-label="Selection tool"><i data-lucide="mouse-pointer-2"></i></button>
         <div id="em-tool-pop" class="vp-prim-pop" style="display:none" role="menu" aria-label="Selection tool"></div>
         <div class="vpb-sep"></div>
+        <div class="vp-seg-col" id="gz-group" role="group" aria-label="Gizmo">
         <button class="vpb" id="gz-translate" title="Translate gizmo (E): hold Shift to snap to round steps"><i data-lucide="move-3d"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-3d"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scale-3d"></i></button>
+        </div>
         <div class="vpb-sep"></div>
         <button class="vpb" id="msr-toggle" title="Measure (M): click two points; Esc cancels"><i data-lucide="ruler"></i></button>
         <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="spline-pointer"></i></button>
@@ -6562,6 +6854,9 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="vw-wire" data-mode="wire" style="display:none" tabindex="-1" aria-hidden="true" title="Wireframe (Alt+2)"><i data-lucide="cube-wire"></i></button>
         <button class="vpb" id="vw-xray" data-mode="xray" style="display:none" tabindex="-1" aria-hidden="true" title="X-ray (Alt+3)"><i data-lucide="cube-xray"></i></button>
         <button class="vpb" id="vw-heat" data-mode="heat" style="display:none" tabindex="-1" aria-hidden="true" title="Heatmap — colour parts by triangle density (Alt+4)"><i data-lucide="flame"></i></button>
+        <div class="vpb-sep"></div>
+        <!-- Photo mode on and off (the Photo mode card's switch); while it is on, its toolbar takes the bottom toolbar's place (_PhotoBar) -->
+        <button class="vpb" id="tg-photo-mode" title="Photo mode" aria-pressed="false"><i data-lucide="camera"></i></button>
         </div>
       </div>
       <!-- Edit mesh's tools, shown while it is on: how a pick is made, the gizmo's axes, the selection, and the tools that change the mesh
@@ -6731,6 +7026,8 @@ window.moSplash = function (msg, pct) {
         </div>
         </div>
       </div>
+      <!-- Photo mode's toolbar: in Photo mode it stands where the bottom toolbar is (which steps aside). Filled by _PhotoBar in app.js. -->
+      <div class="vpc tr" id="vp-photo-bar" role="toolbar" aria-label="Photo mode"></div>
       <div class="vpc vp-stats"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles<span id="vp-tris-delta" class="vp-delta" aria-live="polite"></span></div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
       <!-- Command panels (Split, Remove holes): hidden until their command runs,
            then shown here, bottom-left of the viewport, the way Plasticity does. -->
@@ -7129,26 +7426,53 @@ window.moSplash = function (msg, pct) {
     <div class="section section-cmd" data-cmd="profile" hidden>
       <div class="section-h"><span>Profile: clean outline</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
-        <div class="cmd-lede">Fills the chambers of a straight profile, closes narrow gaps and extrudes the outline again, square or mitred ends alike.</div>
-        <div class="pf-preview"><svg id="pf-svg" class="no-mod-ring" tabindex="0" preserveAspectRatio="xMidYMid meet" aria-label="The cross-section, before and after. Wheel zooms, a middle or right drag pans, double-click fits. With Edit points on: click a point to pick it (Shift adds, Ctrl takes away), drag on the background to pick the points in a box, Ctrl+A picks all; drag a picked point to move them (it snaps to the section as it was; Shift lines it up with another point), double-click an edge to add one, Delete takes the picked ones out, Alt-click takes one out"></svg><div class="pf-keys"><span class="pf-leg"><span class="pf-key"></span>Now</span><span class="pf-leg"><span class="pf-key pf-key-new"></span>New</span></div></div>
+        <div class="pf-top">
+        <div class="pf-preview"><svg id="pf-svg" class="no-mod-ring" tabindex="0" preserveAspectRatio="xMidYMid meet" aria-label="The cross-section, before and after. Wheel zooms, a middle or right drag pans, double-click fits. With Edit points on: click a point to pick it (Shift adds, Ctrl takes away), drag on the background to pick the points in a box, Ctrl+A picks all; drag a picked point to move them (it snaps to the section as it was; Shift lines it up with another point), double-click an edge to add one, Delete takes the picked ones out, Alt-click takes one out"></svg></div>
         <div class="pf-legend">
           <span class="pf-step" id="pf-step" hidden><button type="button" class="lc-icon-btn" id="pf-prev" title="The profile before"><i data-lucide="chevron-left"></i></button><span id="pf-pos"></span><button type="button" class="lc-icon-btn" id="pf-next" title="The next profile"><i data-lucide="chevron-right"></i></button></span>
           <span id="pf-name" class="pf-name"></span>
           <button type="button" class="lc-icon-btn pf-edit" id="pf-edit" title="Edit points: drag one, double-click an edge to add one, Delete or Alt-click takes one out"><i data-lucide="pen-line"></i></button>
         </div>
+        </div>
         <div class="pf-edit-row"><span id="pf-edit-hint" class="pf-hint"></span><button type="button" class="cmd-link" id="pf-edit-reset" hidden title="Back to the section the options make">Reset points</button></div>
         <div class="toggle" title="Fill the hollow cells inside the profile. Off: they stay, only the outline is cleaned"><span id="pf-fill-lbl">Fill chambers</span><label><input type="checkbox" id="pf-fill" checked aria-labelledby="pf-fill-lbl"><span class="switch"></span></label></div>
         <div class="toggle" title="A bar with drilled holes, slots or notches cut across it is taken too, and they are filled. Off: such a bar is left as it is"><span id="pf-machining-lbl">Fill holes and cuts across</span><label><input type="checkbox" id="pf-machining" checked aria-labelledby="pf-machining-lbl"><span class="switch"></span></label></div>
         <div class="field" title="Notches, slots and teeth narrower than this are closed flush. 0 closes none"><div id="pf-width-scrub"></div></div>
+        <div class="field" title="Every corner rounded with this radius, outside and inside (less where the edges beside it are short). 0 leaves them sharp"><div id="pf-round-scrub"></div></div>
+        <div class="field" title="The whole section grown by this: walls thicker, chambers smaller, outlines that come close join. Below 0 it shrinks"><div id="pf-offset-scrub"></div></div>
+        <div class="sw-label">Ends</div>
+        <div class="cmd-seg" id="pf-ends" role="group" aria-label="Ends">
+          <button type="button" class="active" data-e="found" title="The ends as they are, square or mitred">As they are</button>
+          <button type="button" data-e="square" title="Both ends cut square, where the longer side ends now">Square</button>
+          <button type="button" data-e="mitre" title="Both ends cut at an angle, leaning in towards the short side (a frame piece)">Mitre</button>
+        </div>
+        <div id="pf-mitre-row" hidden>
+          <div class="field" title="How far each end leans from square"><div id="pf-mitre-scrub"></div></div>
+          <div class="sw-label">Short side, as drawn above</div>
+          <div class="cmd-seg pf-side" id="pf-side" role="group" aria-label="Short side of the mitre">
+            <button type="button" data-s="0" title="Right"><i data-lucide="arrow-right"></i></button>
+            <button type="button" class="active" data-s="1" title="Top"><i data-lucide="arrow-up"></i></button>
+            <button type="button" data-s="2" title="Left"><i data-lucide="arrow-left"></i></button>
+            <button type="button" data-s="3" title="Bottom"><i data-lucide="arrow-down"></i></button>
+          </div>
+        </div>
+        <div class="field" title="Each end moved out by this along the profile (a bent one along its curve). Below 0 it is trimmed"><div id="pf-extend-scrub"></div></div>
         <details class="cmd-adv" id="pf-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
+            <div class="field" id="pf-keepch-row" title="With Fill chambers on, the chambers at least this wide stay open (the narrower side of each). 0 fills them all"><div id="pf-keepch-scrub"></div></div>
+            <div class="field" id="pf-keepholes-row" title="With Fill holes and cuts across on, the holes and slots at least this wide are cut into the new part again. 0 fills them all. Needs a closed part"><div id="pf-keepholes-scrub"></div></div>
+            <div class="toggle" title="A section that is nearly a mirror image (within 2 % of its size) is made exactly one: the half with more material is mirrored onto the other"><span id="pf-sym-lbl">Make symmetric</span><label><input type="checkbox" id="pf-sym" aria-labelledby="pf-sym-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" id="pf-match-row" title="A section edited by hand (Edit points) goes to every other profile with the same section, turned or mirrored, of any length"><span id="pf-match-lbl">Same edit on matching profiles</span><label><input type="checkbox" id="pf-match" checked aria-labelledby="pf-match-lbl"><span class="switch"></span></label></div>
             <div class="field" title="Points that bend the outline less than this are dropped: fewer triangles, the same shape"><div id="pf-straight-scrub"></div></div>
             <div class="field" title="The part's Shading angle (as in Properties): edges sharper than this stay sharp, gentler ones (the round beads) shade smooth"><div id="pf-smooth-scrub"></div></div>
             <button type="button" class="cmd-link" id="pf-reset">Reset to defaults</button>
           </div>
         </details>
-        <dl class="pf-stats" id="pf-stats"></dl>
+        <details class="cmd-adv" id="pf-more">
+          <summary><span>Details</span></summary>
+          <div class="cmd-adv-b"><dl class="pf-stats" id="pf-stats"></dl></div>
+        </details>
         <button class="btn primary" id="pf-run" data-cmd-primary title="Build the selected profiles again. Ctrl+Z takes it back."><i data-lucide="check"></i><span id="pf-run-lbl">Apply</span></button>
         <div class="field-help" id="pf-info"></div>
       </div>
@@ -7167,7 +7491,7 @@ window.moSplash = function (msg, pct) {
           <button type="button" data-m="outline" title="The outline of the whole part spun round: fins, ribs and the room between them solid">Solid</button>
           <button type="button" data-m="belt" title="A band swept along a closed path; the gaps between its ribs filled">Belt</button>
         </div>
-        <div class="pf-preview"><svg id="rc-svg" class="no-mod-ring" tabindex="0" preserveAspectRatio="xMidYMid meet" aria-label="The profile, before and after. Wheel zooms, a middle or right drag pans, double-click fits. With Edit points on: click a point to pick it (Shift adds, Ctrl takes away), drag on the background to pick the points in a box, Ctrl+A picks all; drag a picked point to move them (it snaps to the profile as it was; Shift lines it up with another point), double-click an edge to add one, Delete takes the picked ones out, Alt-click takes one out"></svg><div class="pf-keys"><span class="pf-leg"><span class="pf-key"></span>Now</span><span class="pf-leg"><span class="pf-key pf-key-new"></span>New</span></div></div>
+        <div class="pf-preview"><svg id="rc-svg" class="no-mod-ring" tabindex="0" preserveAspectRatio="xMidYMid meet" aria-label="The profile, before and after. Wheel zooms, a middle or right drag pans, double-click fits. With Edit points on: click a point to pick it (Shift adds, Ctrl takes away), drag on the background to pick the points in a box, Ctrl+A picks all; drag a picked point to move them (it snaps to the profile as it was; Shift lines it up with another point), double-click an edge to add one, Delete takes the picked ones out, Alt-click takes one out"></svg><button type="button" class="lc-icon-btn pf-mirror-btn" id="rc-mirror" title="Show the other half of the part (mirrored across the axis)" aria-label="Show the other half" aria-pressed="true"><i data-lucide="flip-vertical"></i></button></div>
         <div class="pf-legend">
           <span class="pf-step" id="rc-step" hidden><button type="button" class="lc-icon-btn" id="rc-prev" title="The part before"><i data-lucide="chevron-left"></i></button><span id="rc-pos"></span><button type="button" class="lc-icon-btn" id="rc-next" title="The next part"><i data-lucide="chevron-right"></i></button></span>
           <span id="rc-name" class="pf-name"></span>
@@ -7413,8 +7737,8 @@ window.moSplash = function (msg, pct) {
             <div class="toggle" title="Re-join and re-triangulate the flat face round each hole"><span id="fh-tidy-lbl">Leftover vertices</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="Remove closed pieces sealed inside the part"><span id="fh-enclosed-lbl">Inner pieces</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
             <div class="toggle" title="Flatten raised details lower than the limit into their face"><span id="fh-raised-lbl">Raised details</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Tallest raised detail that is flattened"><span>Up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
             <div class="toggle" title="Keep big openings, like a washer's bore"><span id="fh-shape-lbl">Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" aria-labelledby="fh-shape-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Tallest raised detail that is flattened"><span>Height up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm</span></label></div>
             <div class="cmd-num" title="Holes narrower than this are left alone"><span>Smallest hole</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-min" value="0"><span>mm</span></label></div>
             <div class="cmd-num" title="Deepest hole reach, as a multiple of the size limit"><span>Depth limit</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-depth" value="10"><span>× size</span></label></div>
             <div class="cmd-num" title="Largest angle between triangles still counted as one flat face"><span>Flatness</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-flat" value="0.57"><span>°</span></label></div>
@@ -7755,7 +8079,6 @@ window.moSplash = function (msg, pct) {
   <aside id="sidebar-right" class="panel">
 
     <div class="section section-fixed">
-      <div class="section-h"><span>Properties</span></div>
       <div class="section-b" id="prop-body">
         <div class="prop-head"><span class="prop-name" style="color:var(--tx3)">Empty scene</span></div>
         <div class="prop-tags"></div>
@@ -7883,7 +8206,7 @@ window.moSplash = function (msg, pct) {
       <div class="section-b" style="display:flex;flex-direction:column;gap:0">
         <div class="field" style="margin:0"><div id="tri-scrub"></div></div>
         <div class="field" style="margin:0"><div id="aspect-scrub"></div></div>
-        <div class="btn-list" style="margin-top:var(--space-md)">
+        <div class="btn-list" style="margin-top:var(--space-3)">
           <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="land-plot"></i>Flag low-poly</button>
           <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="rectangle-horizontal"></i>Flag slivers</button>
         </div>
@@ -7910,6 +8233,7 @@ window.moSplash = function (msg, pct) {
           <label class="prim-toggle"><input type="checkbox" id="toggle-photo"><span></span></label>
         </div>
         <div id="photo-fx" class="is-off" inert style="display:flex;flex-direction:column">
+        <div class="photo-moved-note">While Photo mode is on, its effects are under Effects on the toolbar below the picture.</div>
         <div class="prim-row" title="The soft disc under the model that catches its shadow">
           <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
           <label class="prim-toggle"><input type="checkbox" id="photo-stage" checked><span></span></label>
@@ -7931,6 +8255,10 @@ window.moSplash = function (msg, pct) {
         <div class="prim-row" title="Studio: the HDRI and the sun as they are. Product, Dramatic and Soft add a rim light behind the model and a fill beside the camera, which follow the view">
           <label class="prim-label" for="photo-lights">Lights</label>
           <select id="photo-lights" class="mac-sel"><option value="studio">Studio</option><option value="product" selected>Product</option><option value="dramatic">Dramatic</option><option value="soft">Soft</option></select>
+        </div>
+        <div class="prim-row" title="Bright studio panels in the reflections: metal and gloss show clean light streaks instead of a dim blur">
+          <label class="prim-label" for="photo-softbox">Softboxes</label>
+          <label class="prim-toggle"><input type="checkbox" id="photo-softbox" checked><span></span></label>
         </div>
         <div class="prim-row" title="Edge smoothness, samples for occlusion and glow, and how many frames a still view is refined over">
           <label class="prim-label" for="photo-quality">Quality</label>
@@ -7970,9 +8298,9 @@ window.moSplash = function (msg, pct) {
           <label class="prim-label" for="photo-dof" style="grid-column:2" title="Depth of field: how soft what is out of focus gets">Depth of field</label>
           <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-dof" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
         </div>
-        <div class="prim-row photo-fx-row" id="photo-row-focus" title="Where the picture is sharp. Alt+click a point of the model in the view to focus there" style="grid-template-columns:minmax(0,1fr) auto auto;gap:var(--space-sm)">
+        <div class="prim-row photo-fx-row" id="photo-row-focus" title="Where the picture is sharp. Ctrl+click a point of the model in the view to focus there; hold V over the view for the lens rings: move the pointer up or down to turn one, the wheel goes from focus to aperture to zoom" style="grid-template-columns:minmax(0,1fr) auto auto;gap:var(--space-sm)">
           <span class="prim-label" id="photo-focus-val" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Orbit pivot</span>
-          <button id="photo-focus-pick" type="button" class="btn-sm" title="Click a point of the model in the view to focus there (Alt+click does it at any time; Esc gives up)">Pick</button>
+          <button id="photo-focus-pick" type="button" class="btn-sm" title="Click a point of the model in the view to focus there (Ctrl+click does it at any time; Esc gives up)">Pick</button>
           <button id="photo-focus-reset" type="button" class="btn-sm" title="Focus on the point the camera turns round again" disabled>Pivot</button>
         </div>
         <div class="prim-row" title="Pixel density of the saved PNG, as a multiple of the view">
@@ -8634,7 +8962,7 @@ window.moSplash = function (msg, pct) {
     <div class="modal-h">
       <h3 id="shortcuts-title">Keyboard shortcuts</h3>
       <div class="sc-prof" id="sc-prof">
-        <button type="button" class="sc-prof-btn" id="sc-prof-btn" aria-label="Key profile"><i data-lucide="user" aria-hidden="true"></i><span>Default</span><i data-lucide="chevron-down" aria-hidden="true"></i></button>
+        <button type="button" class="sc-prof-btn" id="sc-prof-btn" aria-label="Key profile"><span class="sc-prof-av" id="sc-prof-av" aria-hidden="true"><i data-lucide="user"></i><b></b></span><span class="sc-prof-name">Default</span><i data-lucide="chevron-down" aria-hidden="true"></i></button>
         <div class="sc-prof-menu" id="sc-prof-menu"></div>
       </div>
       <button class="x" id="shortcuts-close" title="Close (Esc)">✕</button>
@@ -8649,8 +8977,13 @@ window.moSplash = function (msg, pct) {
         <div class="sc-search-wrap">
           <i data-lucide="search" aria-hidden="true"></i>
           <input id="shortcuts-search" class="sc-search" type="text" placeholder="Search shortcuts…" autocomplete="off" spellcheck="false">
-          <button type="button" class="sc-chip" id="sc-keyfilter" hidden></button>
           <button type="button" class="sc-chip" id="sc-all">All commands</button>
+        </div>
+        <!-- the key picked on the keyboard (the list shows only its commands): the key itself, what is on it, a way back to all -->
+        <div class="sc-keycard" id="sc-keycard" hidden>
+          <span class="sc-keycap" id="sc-keycap"></span>
+          <span class="sc-keycard-t"><span class="sc-keycard-l">Key</span><span class="sc-keycard-n" id="sc-keycard-n"></span></span>
+          <button type="button" class="sc-act sc-keycard-x" id="sc-keyfilter" title="Show every key" aria-label="Show every key"><i data-lucide="x" aria-hidden="true"></i></button>
         </div>
         <div id="shortcuts-body" class="sc-list"></div>
         <div class="sc-footer">
@@ -8706,10 +9039,6 @@ window.moSplash = function (msg, pct) {
           <div class="wl-dropveil" aria-hidden="true">Drop to open</div>
         </div>
 
-        <div class="wl-foot">
-          <span>Opens STEP · IGES · BREP · GLB · glTF · FBX · OBJ · 3MF · STL · USD · Collada</span>
-          <span><kbd>Shift+C</kbd>Search commands</span>
-        </div>
       </div>
 
       <div id="welcome-load-pane" style="display:none">
@@ -9132,7 +9461,7 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=115"></script>
-<script type="module" src="js/app.js?v=20261172-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1-campop1-campop2-campop3-campop4-campop5-campop6-lensmm1-texball1-texfmt1-texthumb1-matheld1-texsets1-mateditreopen1-clnbox1-texask1-texdrop1-estnode1-isoundo1-isoundo2-matundo1-texthumb2-texsmall1-texsmall2-alignsel1-texsmall3-copyshadow1-copyshadow2-links1-valrows1-three186-photoacc1-sun1-orthokey2-bvhv1-pfalign1-pffast1-pfcur1-pfpan1-pfgrab1-modring1-pfgrid1-pfsel1-rcstats1-rcaxis1-ktx186-bool1-spare1"></script>
+<script type="module" src="js/app.js?v=20261172-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1-campop1-campop2-campop3-campop4-campop5-campop6-lensmm1-texball1-texfmt1-texthumb1-matheld1-texsets1-mateditreopen1-clnbox1-texask1-texdrop1-estnode1-isoundo1-isoundo2-matundo1-texthumb2-texsmall1-texsmall2-alignsel1-texsmall3-copyshadow1-copyshadow2-links1-valrows1-three186-photoacc1-sun1-orthokey2-bvhv1-pfalign1-pffast1-pfcur1-pfpan1-pfgrab1-modring1-pfgrid1-pfsel1-rcstats1-rcaxis1-ktx186-bool1-spare1-pffollow3-pfmore4-bar79-libadd1-segstretch1-treeglide0-shadescrub1-animbar1-sunlayer1-photobar2-aaset1-exw1-cadlight1-anim1-anim2-dotcrowd4-round3d0-mirror1-focusring1-ring2-mirrortog1-lensrings1-lensrings2-lensrings3-lensrings4-5-6-snap1-nodolly-perf-uisound1-uisound2-3-blackui1-qr2-qcblack-qcnoband-click2-snap25-vkey-sound3-idlesleep-tock-metal-tickclick-noloop-propcard1-section1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

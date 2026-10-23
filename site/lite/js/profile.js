@@ -20,6 +20,8 @@
 // Everything is in the part's own coordinates. Nothing here touches three.js or the page.
 
 import { simplifyLoop } from './revolve.js?v=8';
+import { profileDistance, offsetLoops, roundCorners, findMirror, makeSymmetric, groupShapes, inside as insideLoop } from './section2d.js?v=1';
+import { booleanOf, bodiesOf } from './booleans.js?v=3';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -415,20 +417,6 @@ function findMachined(P, I, cand, size) {
   for (const L of ref.s.loops) for (const p of L) if (!(at(planes[0], p) < at(planes[1], p))) return { why: 'its two end cuts cross' };
   return { a, h0, h1, across, ends: { planes }, sec: ref.s, machined: same < N };
 }
-// The farthest any point of profile B is from profile A.
-function profileDistance(A, B) {
-  let worst = 0;
-  for (const L of B) for (const p of L) {
-    let d = Infinity;
-    for (const M of A) for (let k = 0; k < M.length; k++) {
-      const a = M[k], b = M[(k + 1) % M.length], ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey || 1;
-      const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / l2));
-      d = Math.min(d, Math.hypot(a[0] + t * ex - p[0], a[1] + t * ey - p[1]));
-    }
-    worst = Math.max(worst, d);
-  }
-  return worst;
-}
 
 // ── a bent profile ──────────────────────────────────────────────────────────
 // An arched frame member, a bent tube, a curved rail: one cross-section carried along a curve. It is walked: the bar is cut square
@@ -578,6 +566,14 @@ export function sweepOpen(shapes, path, frames) {
 // opts.fillMachining: a bar with holes, slots or notches cut across it is taken too, and they are filled (see findMachined).
 // opts.shapes: build from this section instead ([{ outer, holes }] in the section's own (x, y), as shapesAfter gives it: a section
 // edited by hand); width, chambers and straightening are then not applied. opts.tolerance: how far an end may be from flat.
+// opts.keepChambersAbs: with the chambers filled, the ones at least this wide (the narrower side of their box, part units) stay.
+// opts.offsetAbs: the section grown by this (shrunk when below 0), after the gaps are closed. opts.roundAbs: every corner rounded
+// with this radius (less where its edges are short). opts.symmetric: a section within 2 % of its size of a mirror image is made
+// exactly one (the half with more material, mirrored). These four, like the width, do not touch a section given by hand.
+// opts.endCut: { type: 'found' (the ends as they are) | 'square' | 'mitre', angle (degrees from square, both ends, or angles:
+// [near, far]), side ([x, y] in the section: the short side of the mitre) } (straight profiles; a bent one keeps square ends).
+// opts.extend: [near, far] in part units, each end moved out (in when below 0) along the profile. opts.keepHolesAbs: holes and
+// cuts across at least this wide are cut into the new part again (keepHoles, after the build: it needs Manifold).
 // opts.dryRun: find and measure only.
 // Returns { ok, why?, axis, axisName, length, chambers (filled), chambersFound, notches, machined, width, sectionSize, endAngles,
 // mitred, profileBefore, profileAfter (loops), shapesAfter ([{ outer, holes }]), positions, index }.
@@ -662,7 +658,7 @@ function shapeProfile(P, I, opts, { found, outer, chambersFound, secSize }) {
   const { a, h0, h1, ends, sec } = found, len = found.curved ? found.length : h1 - h0, keep = !!opts.keepChambers;
   const W = opts.widthAbs >= 0 ? opts.widthAbs : (opts.width ?? 0.04) * secSize;
   const tol = opts.simplifyAbs >= 0 ? opts.simplifyAbs : secSize * 2e-4;
-  let notches = 0, kept;
+  let notches = 0, kept, chambersKept = 0, symmetry = null;
   const given = !!(opts.shapes && opts.shapes.length);
   if (given) {
     // a section given (edited by hand): taken as it is, each outline counter-clockwise and each chamber clockwise
@@ -672,9 +668,16 @@ function shapeProfile(P, I, opts, { found, outer, chambersFound, secSize }) {
   } else {
     // with the chambers kept every outline is a shape of its own (a core inside a chamber too), and each chamber goes with the
     // smallest outline round it
-    const outs = keep ? sec.loops.filter(L => area2(L) > 0) : outer;
+    // the chambers that stay: all of them, or (filled) the ones at least keepChambersAbs wide; an outline inside a chamber (a core)
+    // stays when its chamber does
+    const holesAll = sec.loops.filter(L => area2(L) < 0);
+    const wideOf = (H) => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const p of H) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); } return Math.min(x1 - x0, y1 - y0); };
+    const holesKept = keep ? holesAll : opts.keepChambersAbs > 0 ? holesAll.filter(H => wideOf(H) >= opts.keepChambersAbs) : [];
+    const inKept = (L) => { let host = null; for (const H of holesAll) if (inside(L[0], H) && (!host || Math.abs(area2(H)) < Math.abs(area2(host)))) host = H; return !host || holesKept.includes(host); };
+    const outs = holesKept.length ? sec.loops.filter(L => area2(L) > 0 && (outer.includes(L) || inKept(L))) : outer;
+    chambersKept = holesKept.length;
     const shapes = outs.map(L => ({ src: L, outer: L, holes: [] }));
-    if (keep) for (const H of sec.loops.filter(L => area2(L) < 0)) {
+    for (const H of holesKept) {
       let host = null;
       for (const S of shapes) if (inside(H[0], S.src) && (!host || Math.abs(area2(S.src)) < Math.abs(area2(host.src)))) host = S;
       if (host) host.holes.push(H);
@@ -685,15 +688,167 @@ function shapeProfile(P, I, opts, { found, outer, chambersFound, secSize }) {
       S.holes = S.holes.map(H => (tol > 0 ? simplifyLoop(H, tol) : H)).filter(H => H.length >= 3);
     }
     kept = shapes.filter(S => S.outer.length >= 3).map(S => ({ outer: S.outer, holes: S.holes }));
+    // made symmetric, grown or shrunk, rounded (in that order: the last two keep a mirror image one)
+    const e2d = secSize * 1e-6, loopsOf = () => kept.flatMap(S => [S.outer, ...S.holes]);
+    if (opts.symmetric) {
+      const m = findMirror(loopsOf()), tolS = Math.max(secSize * 0.02, tol * 2);
+      if (m && m.off <= tolS) {
+        const sym = groupShapes(makeSymmetric(loopsOf(), m, e2d));
+        if (sym.length) { kept = sym; symmetry = { made: true, off: m.off, angle: Math.round(Math.atan2(m.dir[1], m.dir[0]) * 180 / Math.PI * 10) / 10 }; }
+      } else symmetry = { made: false, off: m ? m.off : null };
+    }
+    if (opts.offsetAbs) {
+      const g = groupShapes(offsetLoops(loopsOf(), opts.offsetAbs, e2d));
+      if (!g.length) return { ok: false, why: 'nothing is left of the section shrunk by that much' };
+      kept = g;
+    }
+    if (opts.roundAbs > 0) {
+      const ct = Math.max(tol, secSize * 2e-4);
+      kept = kept.map(S => ({ outer: roundCorners(S.outer, opts.roundAbs, ct), holes: S.holes.map(H => roundCorners(H, opts.roundAbs, ct)) }));
+    }
   }
   // each end: along a, where its plane is at the point (x, y) of the section (a bent profile: square to its path)
   const endAt = ({ n, d }) => (p) => (d - p[0] * dot(n, sec.e1) - p[1] * dot(n, sec.e2)) / dot(n, a);
-  const square = found.curved || ends.planes.every(q => dot(q.n, a) > 1 - 1e-9);
-  const angles = found.curved ? [0, 0] : ends.planes.map(q => Math.round(Math.acos(Math.min(1, dot(q.n, a))) * 180 / Math.PI * 10) / 10);
+  let square = found.curved || ends.planes.every(q => dot(q.n, a) > 1 - 1e-9);
+  let angles = found.curved ? [0, 0] : ends.planes.map(q => Math.round(Math.acos(Math.min(1, dot(q.n, a))) * 180 / Math.PI * 10) / 10);
+  const pts = kept.flatMap(S => S.outer);
+  const ext = Array.isArray(opts.extend) ? opts.extend.map(v => +v || 0) : [0, 0];
+  let H0 = null, H1 = null, path = found.path, frames = found.frames, lenAfter = len, lenFound = len;
+  if (!found.curved) {
+    H0 = endAt(ends.planes[0]); H1 = endAt(ends.planes[1]);
+    lenFound = 0; for (const p of pts) lenFound = Math.max(lenFound, H1(p) - H0(p));          // (its longest side, as lengthAfter is measured)
+    const cut = opts.endCut;
+    if (cut && (cut.type === 'square' || cut.type === 'mitre')) {
+      // the long side keeps where it was: square ends at the farthest the old ones reach, a mitre leans in from there
+      let lo = Infinity, hi = -Infinity; for (const p of pts) { lo = Math.min(lo, H0(p)); hi = Math.max(hi, H1(p)); }
+      if (cut.type === 'square') { H0 = () => lo; H1 = () => hi; square = true; angles = [0, 0]; }
+      else {
+        const sd = cut.side || [0, 1], sl = Math.hypot(sd[0], sd[1]) || 1, s = [sd[0] / sl, sd[1] / sl];
+        const an = (cut.angles || [cut.angle ?? 45, cut.angle ?? 45]).map(v => Math.max(0, Math.min(75, +v || 0)));
+        const k0 = Math.tan(an[0] * Math.PI / 180), k1 = Math.tan(an[1] * Math.PI / 180);
+        let s0 = Infinity; for (const p of pts) s0 = Math.min(s0, p[0] * s[0] + p[1] * s[1]);
+        H0 = (p) => lo + k0 * (p[0] * s[0] + p[1] * s[1] - s0); H1 = (p) => hi - k1 * (p[0] * s[0] + p[1] * s[1] - s0);
+        square = !an[0] && !an[1]; angles = an.map(v => Math.round(v * 10) / 10);
+      }
+    }
+    if (ext[0] || ext[1]) { const g0 = H0, g1 = H1; H0 = (p) => g0(p) - ext[0]; H1 = (p) => g1(p) + ext[1]; }
+    let shortest = Infinity; lenAfter = 0;
+    for (const p of pts) { const l = H1(p) - H0(p); shortest = Math.min(shortest, l); lenAfter = Math.max(lenAfter, l); }
+    if (!(shortest > secSize * 1e-4)) return { ok: false, why: (cut && cut.type === 'mitre' ? 'the bar is too short for that mitre' : 'nothing is left of the bar') + ' (its two end cuts meet)' };
+  } else if (ext[0] || ext[1]) {
+    const t = trimPath(found.path, found.frames, ext[0], ext[1]);
+    if (!t) return { ok: false, why: 'nothing is left of the bar trimmed by that much' };
+    path = t.path; frames = t.frames; lenAfter = t.length;
+  }
   const axisName = found.curved ? null : Math.abs(a[0]) === 1 ? 'X' : Math.abs(a[1]) === 1 ? 'Y' : Math.abs(a[2]) === 1 ? 'Z' : null;
   const res = { ok: true, curved: !!found.curved, pathSegments: found.curved ? found.path.length - 1 : 1, turnDeg: found.curved ? Math.round(found.turnDeg) : 0, axis: found.curved ? null : a, axisName, length: len, chambers: keep || given ? 0 : chambersFound, chambersFound, notches, machined: !!found.machined, width: W, sectionSize: secSize,
-    endAngles: angles, mitred: !square, profileBefore: sec.loops, profileAfter: kept.flatMap(S => [S.outer, ...S.holes]), shapesAfter: kept, edited: given, before: { triangles: I.length / 3 } };
+    endAngles: angles, mitred: !square, lengthAfter: lenAfter, lengthFound: lenFound, chambersKept, symmetry, endCutIgnored: !!(found.curved && opts.endCut && opts.endCut.type && opts.endCut.type !== 'found'), profileBefore: sec.loops, profileAfter: kept.flatMap(S => [S.outer, ...S.holes]), shapesAfter: kept, edited: given, before: { triangles: I.length / 3 } };
   if (opts.dryRun) return res;
-  const g = found.curved ? sweepOpen(kept, found.path, found.frames) : extrudeLoops(kept, a, sec.e1, sec.e2, endAt(ends.planes[0]), endAt(ends.planes[1]));
-  return { ...res, after: { triangles: g.index.length / 3 }, positions: g.positions, index: g.index };
+  const g = found.curved ? sweepOpen(kept, path, frames) : extrudeLoops(kept, a, sec.e1, sec.e2, H0, H1);
+  // what keepHoles needs to find the holes again: the section as cut (with its chambers) and the ends as they were
+  const holeJob = !found.curved && found.machined && opts.keepHolesAbs > 0 ? { loops: sec.loops, a, e1: sec.e1, e2: sec.e2, planes: ends.planes, minW: opts.keepHolesAbs, chambersFilled: !keep, size: secSize } : null;
+  return { ...res, after: { triangles: g.index.length / 3 }, positions: g.positions, index: g.index, holeJob };
+}
+
+// A bent profile's path made longer (d > 0) or shorter at each end: out along the first and last segment, or in along the path.
+function trimPath(path0, frames0, d0, d1) {
+  let P = path0.map(p => p.slice()), F = frames0.slice();
+  const seg = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  const end = (P, F, d) => {
+    if (d >= 0) { const l = seg(P[1], P[0]) || 1; P[0] = [0, 1, 2].map(k => P[0][k] + (P[0][k] - P[1][k]) / l * d); return true; }
+    let rem = -d;
+    while (P.length >= 2) {
+      const l = seg(P[0], P[1]);
+      if (l > rem) { P[0] = [0, 1, 2].map(k => P[0][k] + (P[1][k] - P[0][k]) * rem / l); return true; }
+      rem -= l; P.shift(); F.shift();
+    }
+    return false;
+  };
+  if (!end(P, F, d0)) return null;
+  P.reverse(); F.reverse();
+  if (!end(P, F, d1)) return null;
+  P.reverse(); F.reverse();
+  if (P.length < 2) return null;
+  let length = 0; for (let i = 1; i < P.length; i++) length += seg(P[i - 1], P[i]);
+  return length > 0 ? { path: P, frames: F, length } : null;
+}
+
+// ── holes and cuts across, kept ─────────────────────────────────────────────
+// After the build (Wm: Manifold): the holes, slots and notches cut across a bar (Fill holes and cuts across) that are at least
+// holeJob.minW wide are cut into the new part again. What was cut away is the bar the section makes (a hair inside the part's own
+// faces, so the faces they share leave no slivers) less the part; each piece of it that is wide enough (the middle of its three
+// sizes: a hole's width, a slot's width) is a hole. It is cut a little beyond where it was, so it breaks through the new outline,
+// and where the chambers were filled it is carried on through them (a hole drilled into a hollow bar goes on to the far wall).
+// Returns r with the new part and holesKept, or r as it was with holesWhy.
+export function keepHoles(Wm, P, I, r, offsetAbs = 0) {
+  const j = r && r.holeJob; if (!j || !r.positions) return r;
+  const { a, e1, e2, planes, minW, size } = j, d = size * 1e-4, eps = size * 1e-6;
+  const endAt = ({ n, d: dd }) => (p) => (dd - p[0] * dot(n, e1) - p[1] * dot(n, e2)) / dot(n, a);
+  const E0 = endAt(planes[0]), E1 = endAt(planes[1]);
+  const inner = groupShapes(offsetLoops(j.loops, -d, eps));
+  if (!inner.length) return { ...r, holesKept: 0, holesWhy: 'the section is too thin to look for holes in' };
+  const bar = extrudeLoops(inner, a, e1, e2, p => E0(p) + d, p => E1(p) - d);
+  const gone = booleanOf(Wm, 'subtract', bar, { positions: P, index: I });
+  if (!gone.ok) return { ...r, holesKept: 0, holesWhy: 'the part is not a closed solid, so its holes cannot be told from its gaps' };
+  if (gone.empty) return { ...r, holesKept: 0 };
+  const chambers = j.chambersFilled ? j.loops.filter(L => area2(L) < 0).map(L => L.slice().reverse()) : [];
+  const chamberSolid = chambers.length ? extrudeLoops(chambers, a, e1, e2, E0, E1) : null;
+  const margin = Math.max(size * 0.02, d * 10) + Math.abs(offsetAbs);
+  const cuts = [], seen = []; let found = 0;
+  const nearOutline = (p) => { let best = Infinity; for (const S of inner) for (const L of [S.outer, ...S.holes]) for (let k = 0; k < L.length; k++) { const a0 = L[k], b0 = L[(k + 1) % L.length], ex = b0[0] - a0[0], ey = b0[1] - a0[1], l2 = ex * ex + ey * ey || 1, t = Math.max(0, Math.min(1, ((p[0] - a0[0]) * ex + (p[1] - a0[1]) * ey) / l2)); best = Math.min(best, Math.hypot(a0[0] + t * ex - p[0], a0[1] + t * ey - p[1])); } return best; };
+  for (const b of bodiesOf(gone.positions, gone.index)) {
+    const V = b.positions, nv = V.length / 3;
+    const ext = (u) => { let lo = Infinity, hi = -Infinity; for (let i = 0; i < nv; i++) { const h = V[3 * i] * u[0] + V[3 * i + 1] * u[1] + V[3 * i + 2] * u[2]; lo = Math.min(lo, h); hi = Math.max(hi, h); } return [lo, hi]; };
+    const sz = [a, e1, e2].map(u => { const [lo, hi] = ext(u); return hi - lo; }).sort((x, y) => x - y);
+    if (sz[1] < minW * 0.98 || sz[0] < Math.max(minW * 0.02, d * 20)) continue;
+    // the way it goes through: square to its faces that lie on the bar's outline (where it breaks through), or else the direction
+    // across the bar along which it is thinnest
+    let dir = null;
+    const M = [0, 0, 0, 0, 0, 0]; let onOut = 0;
+    for (let t = 0; t < b.index.length; t += 3) {
+      const A = b.index[t] * 3, B = b.index[t + 1] * 3, C = b.index[t + 2] * 3;
+      const n = cross([V[B] - V[A], V[B + 1] - V[A + 1], V[B + 2] - V[A + 2]], [V[C] - V[A], V[C + 1] - V[A + 1], V[C + 2] - V[A + 2]]);
+      const ar = Math.hypot(n[0], n[1], n[2]); if (!(ar > 0)) continue;
+      const m = [(V[A] + V[B] + V[C]) / 3, (V[A + 1] + V[B + 1] + V[C + 1]) / 3, (V[A + 2] + V[B + 2] + V[C + 2]) / 3];
+      if (nearOutline([dot(m, e1), dot(m, e2)]) > d * 0.5) continue;
+      const x = dot(n, e1) / ar, y = dot(n, e2) / ar, q = [x * e1[0] + y * e2[0], x * e1[1] + y * e2[1], x * e1[2] + y * e2[2]];
+      M[0] += ar * q[0] * q[0]; M[1] += ar * q[0] * q[1]; M[2] += ar * q[0] * q[2]; M[3] += ar * q[1] * q[1]; M[4] += ar * q[1] * q[2]; M[5] += ar * q[2] * q[2]; onOut += ar;
+    }
+    if (onOut > 0) { const ev = eigenVectors(M); dir = ev[ev.vals.indexOf(Math.max(...ev.vals))]; }
+    else {
+      let best = Infinity;
+      for (let deg = 0; deg < 180; deg += 3) {
+        const c = Math.cos(deg * Math.PI / 180), s = Math.sin(deg * Math.PI / 180), u = [c * e1[0] + s * e2[0], c * e1[1] + s * e2[1], c * e1[2] + s * e2[2]];
+        const [lo, hi] = ext(u); if (hi - lo < best) { best = hi - lo; dir = u; }
+      }
+    }
+    // its outline seen along that way (the hull of its points), as a prism along it
+    const [u, w] = basis(dir), pts = [];
+    for (let i = 0; i < nv; i++) { const p = [V[3 * i], V[3 * i + 1], V[3 * i + 2]]; pts.push([dot(p, u), dot(p, w)]); }
+    const hull = hull2(pts); if (hull.length < 3) continue;
+    const [lo, hi] = ext(dir);
+    cuts.push(extrudeLoops([hull], dir, u, w, lo - margin, hi + margin));
+    // (a hole drilled through two walls is two pieces: counted once)
+    let mid = [0, 0, 0]; for (let i = 0; i < nv; i++) for (let k = 0; k < 3; k++) mid[k] += V[3 * i + k] / nv;
+    if (!seen.some(h => Math.abs(dot(h.dir, dir)) > 0.999 && insideLoop([dot(mid, h.u), dot(mid, h.w)], h.hull))) found++;
+    seen.push({ dir, u, w, hull });
+    if (chamberSolid) {
+      const through = booleanOf(Wm, 'intersect', extrudeLoops([hull], dir, u, w, lo - size * 2, hi + size * 2), chamberSolid);
+      if (through.ok && !through.empty) cuts.push({ positions: through.positions, index: through.index });
+    }
+  }
+  if (!cuts.length) return { ...r, holesKept: 0 };
+  const res = booleanOf(Wm, 'subtract', { positions: r.positions, index: r.index }, cuts);
+  if (!res.ok || res.empty) return { ...r, holesKept: 0, holesWhy: 'the holes could not be cut into the new part' };
+  return { ...r, positions: res.positions, index: res.index, after: { triangles: res.index.length / 3 }, holesKept: found };
+}
+// the convex hull of 2D points, counter-clockwise (monotone chain)
+function hull2(pts) {
+  const p = pts.slice().sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  if (p.length < 3) return p;
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
 }

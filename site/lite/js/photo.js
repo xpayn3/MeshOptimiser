@@ -134,8 +134,16 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus,
       const dx = vec2(u.texel.x, 0), dy = vec2(0, u.texel.y);
       const xa = lin(viewZAt(uv.add(dx))).sub(l0), xb = l0.sub(lin(viewZAt(uv.sub(dx))));
       const ya = lin(viewZAt(uv.add(dy))).sub(l0), yb = l0.sub(lin(viewZAt(uv.sub(dy))));
-      const gx = mix(xb, xa, step(abs(xa), abs(xb))).div(u.texel.x);
-      const gy = mix(yb, ya, step(abs(ya), abs(yb))).div(u.texel.y);
+      // (where the two sides slope opposite ways about as steeply, the pixel is on a crest or in a dip, not at an edge: their mean is the
+      // surface's slope there. Taking the gentler one tilted the plane, and every crest and dip of a wavy surface got a dark spot.)
+      const slope = (a, b) => {
+        const aa = abs(a), ab = abs(b);
+        const gentler = mix(b, a, step(aa, ab));
+        const turn = step(a.mul(b), 0).mul(step(max(aa, ab), min(aa, ab).mul(4).add(1e-12)));
+        return mix(gentler, a.add(b).mul(0.5), turn);
+      };
+      const gx = slope(xa, xb).div(u.texel.x);
+      const gy = slope(ya, yb).div(u.texel.y);
       return { z0, zOn: (off) => unlin(l0.add(gx.mul(off.x)).add(gy.mul(off.y))) };
     };
 
@@ -152,6 +160,7 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus,
         const ca = cos(ang), sa = sin(ang);
         let occ = float(0);
         for (const [tx, ty] of taps) {
+          const tl = Math.max(Math.hypot(tx, ty), 0.05);              // (how far out on the disc this tap is: its distance in the world is tl·radius)
           const rx = ca.mul(tx).sub(sa.mul(ty)), ry = sa.mul(tx).add(ca.mul(ty));
           const off = vec2(rx.div(u.aspect), ry).mul(reach);
           const z = viewZAt(screenUV.add(off));
@@ -159,7 +168,11 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera, getFocus,
           // camera than the pixel without standing in front of it, and the panel used to shade itself in a pattern that followed the noise.
           const diff = z.sub(zOn(off));                             // > 0: that point stands out of this pixel's surface, towards the camera
           const inRange = smoothstep(0, 1, u.radius.mul(1.5).div(max(abs(diff), 1e-6)));
-          const blocks = step(u.radius.mul(0.02), diff);
+          // It shades by how steeply that point rises over this pixel's surface (the sine of the angle it stands at), and not at all below
+          // about 17°: a wall at a corner shades fully, the far rim of a shallow hollow not. (A point a hair above the surface counted in
+          // full: every gentle dip of a scanned table top went black, and the triangles of a faceted curve showed.)
+          const sinUp = diff.div(max(length(vec2(diff, u.radius.mul(tl))), 1e-6));
+          const blocks = clamp(sinUp.sub(0.3).div(0.7), 0, 1);
           occ = occ.add(blocks.mul(inRange));
         }
         const a = float(1).sub(occ.div(taps.length).mul(1.6));

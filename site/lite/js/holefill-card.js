@@ -307,11 +307,11 @@ export function installHoleFillCard(app) {
     for (const k of keys) _fhEl(k)?.addEventListener('change', () => { try { localStorage.setItem(KEY, JSON.stringify({ ...take(), _t3: true })); } catch (_) {} mark(); });
     document.getElementById('fh-reset')?.addEventListener('click', () => { const keep = _fhEl('size')?.value; put(_FH_DEF); if (keep != null) _fhEl('size').value = keep; try { localStorage.setItem(KEY, JSON.stringify({ ...take(), _t3: true })); } catch (_) {} mark(); });
     _scrubField(_fhEl('size'),  { min: 1,    max: 2000, step: 1 });
-    _scrubField(_fhEl('min'),   { min: 0,    max: 2000, step: 0.5,  decimals: 1 });
-    _scrubField(_fhEl('depth'), { min: 1,    max: 100,  step: 1 });
-    _scrubField(_fhEl('flat'),  { min: 0.05, max: 10,   step: 0.05, decimals: 2 });
-    _scrubField(_fhEl('rise'),  { min: 0.01, max: 1000, step: 0.05, decimals: 2 });
-    _scrubField(_fhEl('move'),  { min: 0,    max: 100,  step: 0.1,  decimals: 2 });
+    _scrubField(_fhEl('min'),   { min: 0,    max: 2000, step: 0.5,  decimals: 1, bar: [0, 20] });
+    _scrubField(_fhEl('depth'), { min: 1,    max: 100,  step: 1,                 bar: [1, 50] });
+    _scrubField(_fhEl('flat'),  { min: 0.05, max: 10,   step: 0.05, decimals: 2, bar: [0.05, 5] });
+    _scrubField(_fhEl('rise'),  { min: 0.01, max: 1000, step: 0.05, decimals: 2, bar: [0.01, 5] });
+    _scrubField(_fhEl('move'),  { min: 0,    max: 100,  step: 0.1,  decimals: 2, bar: [0, 5] });
   }
   document.getElementById('btn-fill-holes')?.addEventListener('click', _fillHoles);
   window.__moAgent = Object.assign(window.__moAgent || {}, { fillHoles: _Job.strict(_fillHoles) });

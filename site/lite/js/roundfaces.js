@@ -23,9 +23,24 @@
 //                        pts: Float32Array }  — what the app keeps for a part from a STEP (_Brep)
 //   opts.tolerance     how far the surface may move from the true face, in the mesh's units (default a thousandth of the size)
 //   opts.segments      a full turn keeps at least this many facets (default 12)
-// Returns { ok, positions, index, cad, collapsed, before, after } or { ok: false, why }.
+// Returns { ok, positions, index, cad, collapsed, rings, lines, before, after } or { ok: false, why }.
+//
+// Pipes first (pipegrid.js): the round faces that are clean grids (the straight runs and the bends of a pipe, a hose, a bent rod)
+// lose whole rings and whole lines, so the quads stay quads in line with each other; the point by point pass below then only works
+// on what that could not read as a grid, and leaves the places it rebuilt alone.
+
+import { rebuildPipeGrids } from './pipegrid.js?v=1';
 
 export function simplifyRoundFaces(positions, index, opts = {}) {
+  const pre = rebuildPipeGrids(positions, index, opts);
+  // (no point is moved, by either pass: every point keeps its own normal, see keepNormals in meshops.js)
+  if (!pre.changed) return { ...collapseRoundFaces(positions, index, opts), rings: 0, lines: 0, keepNormals: true };
+  const r = collapseRoundFaces(positions, pre.index, { ...opts, cad: pre.cad, locked: pre.lockedKeys });
+  if (r.ok === false) return r;
+  return { ...r, before: (index.length / 3) | 0, rings: pre.rings, lines: pre.lines, why: undefined, keepNormals: true };
+}
+
+function collapseRoundFaces(positions, index, opts = {}) {
   const cad = opts.cad;
   if (!cad || !cad.faces || !cad.faces.length) return { ok: false, why: 'the part has no CAD faces (open the STEP with them)' };
   const T0 = (index.length / 3) | 0, V = (positions.length / 3) | 0;
@@ -160,6 +175,7 @@ export function simplifyRoundFaces(positions, index, opts = {}) {
   // the points to try, cheapest collapse first, pass after pass
   const candidate = new Uint8Array(nP);
   for (let t = 0; t < T0; t++) if (isRound(fOf[t])) for (let k = 0; k < 3; k++) candidate[place[tri[t * 3 + k]]] = 1;
+  if (opts.locked && opts.locked.size) for (let c = 0; c < nP; c++) if (candidate[c] && opts.locked.has(keyAt(px(c), py(c), pz(c)))) candidate[c] = 0;      // (rebuilt by pipegrid.js: left as it is)
   let collapsed = 0, dirty = []; for (let c = 0; c < nP; c++) if (candidate[c]) dirty.push(c);
   const neighboursOf = (a) => { const s = new Set(); for (const t of around[a]) if (alive[t]) for (const x of corners(t)) if (x !== a) s.add(x); return s; };
   for (let pass = 0; pass < 64 && dirty.length; pass++) {
