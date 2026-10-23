@@ -376,6 +376,14 @@
   "chars": 2096
  },
  {
+  "slug": "remove-thickness",
+  "title": "Remove thickness",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Make a thin-walled part the one surface it stands for: a hollow pipe keeps its outside, a part bent from sheet keeps one face.",
+  "chars": 1771
+ },
+ {
   "slug": "remove-fillets",
   "title": "Remove fillets and chamfers",
   "group": "look",
@@ -504,12 +512,20 @@
   "chars": 1792
  },
  {
+  "slug": "section-view",
+  "title": "Section view",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Cut the whole scene with one plane to look inside it: everything on one side is cut away and the inside of the cut is drawn flat.",
+  "chars": 1896
+ },
+ {
   "slug": "photo-mode",
   "title": "Photo mode",
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Draw the model the slow, pretty way, with studio light, a soft floor shadow and a few picture effects, and save a PNG up to four times the size of the view.",
-  "chars": 2384
+  "chars": 3765
  },
  {
   "slug": "save-scene",

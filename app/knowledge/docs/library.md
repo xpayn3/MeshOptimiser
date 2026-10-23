@@ -47,8 +47,8 @@ What you set in the right half is what the part has when it goes in. The numbers
 ## Add a part
 
 1. For a fastener, first choose its thread size and length. They sit at the right of the row of tabs, beside the word **Fasteners**, and show only on the shelves they are for: open the tab **Fasteners** or **Nuts**. M6 and 24 mm to begin with. Every screw, nut and washer you add comes out in that size, even one you changed in the right half.
-2. Add the part in one of three ways: double-click its tile, or press the blue **+** (Add to scene) in the bottom right corner of the right half, or drag the tile into the viewport.
-3. A double-click or the **+** puts the part on the selected part, or on the floor at the origin when nothing is selected.
+2. Add the part in one of three ways: double-click its tile, or press **Add to scene** in the right half, or drag the tile into the viewport.
+3. A double-click or **Add to scene** puts the part on the selected part, or on the floor at the origin when nothing is selected.
 4. When you drag, a see-through copy follows the pointer and shows where the part will stand: square to the face under the pointer, or upright on the floor. It has the parameters you set. Let go to drop it.
 5. The part is there, with a row of its own in the parts tree.
 

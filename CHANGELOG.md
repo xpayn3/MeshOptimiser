@@ -4,6 +4,71 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.37.0
+
+Released 24 Oct 2026 · Vršič.
+
+v0.36.1 made Photo mode look like a studio render. v0.37.0 gives it a camera's controls (a toolbar of its own, lens rings, softboxes in the reflections) and adds a Section view that cuts the whole scene with a plane, Remove thickness for thin-walled parts, textures in OBJ and FBX exports, a Profile that cleans and shapes the outline, and a Properties card that keeps one height whatever is selected.
+
+**Section view and Properties**
+
+- ![new][new] **Section view.** *Section view* in the command search (Ctrl+K) puts one plane through the whole scene. A small card gives the axis (X, Y, Z), *Flip* (keep the other side) and *Position* (0 to 100 % of the scene's extent along the axis); the *Section* pill in the view turns it off, as does Esc. The parts are cut by the plane and the inside of the cut is drawn in one flat blue, so a hollow solid reads as solid there. Nothing can be picked while it is on (a click or hover on the view or on a tree row does nothing, and the selection is cleared when it starts), but the panels work: Explode moves the parts and the cut faces with them, and the camera orbits, pans and zooms. It is light: only the meshes the plane passes through get a cut face, and moving the plane is a comparison per mesh. Not yet: the selection outlines, wireframes and CAD edges are not cut, transparent parts get no cut face, and there is one plane, not a section box.
+- ![polish][polish] **The Properties card is the same height for every selection.** The name has a line under it saying what is selected (*Single part*, *Instance · ×42*, *5 groups · 1,508 parts · 16 materials*, *Whole scene · 12 parts*). The triangle count, the saving, the bar and its caption, Vertices and Box volume side by side and the Size on a line of its own sit in one card, and the Size is no longer cut off. The bar is plain grey when the whole scene is selected, and a line shows its points. The tags are one line that slides sideways (*3 flagged*, *12 hidden*, *40 instanced*; *Nothing flagged* when there are none). Lock is an icon, and the "Properties" heading above the card is gone.
+- ![fix][fix] **The Properties card said a group's volume was larger than the group.** It showed 5.54 m³ for a group whose box holds 2.98 m³, because it added up the box of every part and boxes overlap. It shows the box of the whole selection now, and the row is called *Box volume* (for one part it was always its box, not the material).
+
+**Photo mode**
+
+- ![new][new] **A button on the tool pill and a toolbar of its own.** The camera at the foot of the tool pill on the left switches Photo mode on and off. While it is on, a floating pill takes the bottom toolbar's place: leave, Lights, Backdrop, Look and Quality (each button names what is chosen), Effects (the floor disc, softboxes, every effect's switch and bar, and the focus), the size of the saved picture, and Save photo.
+- ![new][new] **Lens rings, and the left sidebar steps aside.** Ctrl+click on the model (depth of field on) sets the focus; holding V over the view shows a lens's three rings at the pointer: focus, aperture (f/1.4 to f/16) and zoom (the lens in millimetres). Moving the pointer up or down turns one, the wheel goes from ring to ring, and the rings hold on round distances, stops and classic lenses (Shift turns finely). Photo mode folds the left sidebar away and opens it again on leaving.
+- ![new][new] **Softboxes in the reflections.** Metal and gloss reflected the studio as a dim grey blur; the studio now has four bright panels hung in it, so chrome shows clean streaks along its curves. A *Softboxes* switch on the card (on) leaves them out.
+- ![new][new] **Claude can set up Photo mode.** The new `photo_mode` tool switches it on or off and sets the lights, backdrop, finish, quality, floor, every effect and the focus; `render_image` and `screenshot` with `photo_mode` true keep those settings. `set_camera_view` can also turn, tilt and zoom the camera round the model and set the lens (`lens_mm`).
+- ![new][new] **Sounds for the lens rings and the quick wheels.** The rings tick as their ridges go by and click as they catch a mark; the command wheel (Q), the colour wheel and the quick remesh pill (B) pop as they open, tick from one choice to the next and click when one is run. Nothing else makes a sound; the app makes them itself, and *Settings › General › Sound › Interface sounds* switches them off.
+- ![polish][polish] **No Edit mesh in Photo mode.** Entering Photo mode leaves Edit mesh and its button is hidden until Photo mode is left; its marks were drawn into the picture.
+- ![fix][fix] **Photo mode pictures had the CAD edge lines on them.** Photo mode hides them and they come back when it is left.
+- ![fix][fix] **Photo mode's occlusion drew dark blotches on gently uneven surfaces (a scanned table top) and showed the triangles of faceted curves.** A point shades by how steeply it rises over the surface and not at all below about 17°, so a wall at a corner shades as before and the far rim of a shallow hollow does not.
+
+**Remove thickness and Simplify round faces**
+
+- ![new][new] **Remove thickness.** A thin-walled part becomes the one surface it stands for: a hollow pipe keeps its outside, a part bent from sheet keeps one face. *Move into the wall* 50 % makes it the middle surface instead, and walls up to *Thickness up to* are found. A wall that cannot be split in two sides is left alone and the card says why. Command search: Remove thickness; Claude: `remove_thickness`. On the Scania oil pump pipe: walls 1.005 mm, 2,376 → 1,148 triangles.
+- ![fix][fix] **Simplify round faces crumpled pipes and bends.** It now takes whole edge loops out first (whole rings of a bend and whole lines along a tube, as many as the deviation and *Segments per turn* allow), and the card says how many went. On the Scania oil pump pipe: 18 rings and 30 lines, 2,376 → 1,040 triangles, closed.
+- ![fix][fix] **Remove thickness and Simplify round faces changed the shading of the faces they kept** (flat metal next to a fillet took on a gradient). Every point keeps the part's own normal now.
+
+**Profile and Round part**
+
+- ![new][new] **Profile: clean outline does more than clean.** *Round corners up to*, *Grow outline by* (walls thicker, chambers smaller), *Ends* square or mitred, *Extend each end by*; under Advanced, *Keep chambers wider than*, *Keep holes wider than*, *Make symmetric* and *Same edit on matching profiles*. The readout shows the new length, the chambers and holes kept, and is folded under *Details*.
+- ![new][new] **Round part: the profile shows the whole part.** The preview drew one half of a turned part's profile; the other half is drawn too, mirrored across the axis, lighter and with no points on it. A button in the preview's top right corner switches it off and on.
+- ![fix][fix] **Profile and Round part stayed on the old part when I selected another one.** With either card open, selecting another part moves the card to it, as if it were opened there; clicking empty space keeps it where it is.
+
+**Pictures and exports**
+
+- ![new][new] **OBJ and FBX exports carry their textures.** An OBJ is written with each picture beside it and its .mtl points at them (`map_Kd`, `norm`, `map_Bump`, `map_Pr`, `map_Pm`, `map_d`); a binary FBX carries the colour map and the normal map inside it. Pictures keep their size and format, and the OBJ reader reads the normal map and the PBR values back. Before, both formats left every picture out.
+- ![new][new] **Picture quality switches** under *Settings › Performance*: *Sharp textures at an angle* (on) and *Finer shadows* (off, a 4096 px shadow picture for crisper edges, about 50 MB more graphics memory). Both apply at once and every open tab follows.
+- ![new][new] **Settings › Performance › Edges and resolution.** *Smooth edges* switches the view's multisampling off or on (a Reload row applies it); *Resolution* (Auto, Full, Low) is set here too.
+- ![fix][fix] **Bumps of an OBJ, FBX, 3MF, USD or Collada model pointed the wrong way** (a normal map's dents came out as bumps). The normal maps' green is turned with the UVs, as for a GLB, and DirectX maps come out right too.
+- ![fix][fix] **The material editor's Normal scale turned a GLB's bumps inside out,** and a normal map loaded into the editor came in inside out. The knob keeps the turn, and a new map is given the turn the scene's UVs need.
+- ![fix][fix] **A USDZ export shrank every picture to 1024 px.** Pictures keep their size up to 4096, the most AR Quick Look takes.
+- ![fix][fix] **Textures went blurry on a surface seen at a slant.** Every texture of a model, and every one added in the material editor, is filtered at the graphics card's best (anisotropic filtering), so the grain stays sharp at a grazing angle.
+- ![fix][fix] **The CAD view's looks made the model dark and lit it strangely.** Ceramic and Mono left about half of the model near-black and every face looking up went orange-brown. Measured on the Gearbox, the model averaged 0.22 (Ceramic, Mono) and 0.34 (Light) against 0.44 in the plain view; now 0.37, 0.35 and 0.42.
+
+**Look and feel**
+
+- ![new][new] **Every value slider is a fill bar:** the name above, under it a bar that fills in blue (from the middle, with a faint mark at 0, for the ones that go both ways) and the number at its end; the white handle grows under the pointer, and Shift snaps to twentieths of the range and onto 0. It is in every card and the right sidebar (Exploded view, Decimate, Filters & flags, Shape parameters, Photo mode, Remove holes, Smart fit, Select hidden). The Properties panel and the material rows keep their compact ones.
+- ![new][new] **The Shading angle in Properties is a fill-bar scrubber.** Letting go of the bar applies the angle as one undo step; a typed number or the arrow keys apply it after a short pause.
+- ![new][new] **The Animate window's sliders are fill bars too,** and its settings pane can be made wider or narrower by dragging its left edge (remembered; a double-click puts it back, Reset layout forgets it).
+- ![new][new] **Every sliding highlight stretches as it moves.** The option pickers of the cards, the Library and Materials view toggles and the edit bar's pivot buttons: the leading edge leaves at once and the trailing edge follows on a spring. Reduced motion still jumps.
+- ![new][new] **The quick wheels wear the lens rings' look.** The quick remesh pill (B), the command wheel (Q) and the colour wheel (C) are near-black with white figures, one set of colours for all of them.
+- ![polish][polish] **The right sidebar and the Edit mesh bar have even spacing.** The sidebar's slider bars are as tall as its buttons (32 px) and its lists sit 8 px apart; Explode's X, Y and Z bars are 8 px apart; the Edit mesh bar has the spacing of the tool bar on the left (38 px wide, both).
+- ![polish][polish] **The Library's Add to scene is a floating +** in the bottom right corner of the part's panel, with the triangles and size under its name.
+- ![fix][fix] **Edit mesh: zoomed out, the points were too big, the picked ones bigger still.** Each dot is sized by how far its point is from the nearest other point (down to 3.5 px for crowded ones, 6 px for a lone corner), a picked point is the size of the others, only orange, and the dots are drawn after the lines.
+- ![fix][fix] **In Edit mesh, the grey highlight of World / Local / Normal sat below its button** (the pivot highlight 2 px and 4 px above it too); it lands on the button that is on.
+- ![fix][fix] **The sun gizmo covered the docks.** With an HDRI on, the round sun dial sat over an open Animate, Materials or Library dock; it goes under them now.
+
+**Around the app**
+
+- ![fix][fix] **Merge by showed the old preview when I picked other parts, as many as before,** and **Align and spread kept saying how many were selected when it opened.** Both look at the selection as it is now.
+- ![fix][fix] **The scene tab's menu said "Open&"**, and six other places had the same slip ("Remove lettering and logos&", "Select by layer&", "Working&" and others). They end in "…" again.
+- ![fix][fix] **The updater's browser test stopped before its first check.** It copies the release builder from where it moved to.
+
 ## v0.36.1
 
 Released 23 Oct 2026.

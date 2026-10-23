@@ -1387,7 +1387,8 @@
     const p = T.part('Sphere');
     const row = [...document.querySelectorAll('.prim-row')].find(r => r.querySelector('input[type=range]:not([data-prim-size])'));
     if (!row) return 'skipped (no numeric shape parameter)';
-    T.eq(getComputedStyle(row.querySelector('.prim-slider')).display, 'none', 'the slider row');
+    // (a shape's number is a fill bar now, as every value slider in the app: its slider is the bar and shows; a row of the old look hides it)
+    T.assert(row.classList.contains('prim-bar-row') ? getComputedStyle(row.querySelector('.prim-slider')).display !== 'none' : getComputedStyle(row.querySelector('.prim-slider')).display === 'none', 'the slider row');
     const fid = row.dataset.primField, f = row.querySelector('.prim-value'), v0 = +f.value, tri0 = p.triCount, h0 = state.history.length;
     const b = f.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2;
     const ev = (type, cx) => f.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, button: 0, clientX: cx, clientY: y }));

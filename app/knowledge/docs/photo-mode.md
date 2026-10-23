@@ -23,6 +23,16 @@ Photo mode is for pictures, not for working. It lights the model with the loft s
 
 Each effect has its own switch and a number you drag or click to type. An effect that is off is left out of the picture and costs nothing.
 
+## The toolbar
+
+The camera at the foot of the tool pill on the left switches Photo mode on and off. While it is on, a floating pill takes the place of the bottom toolbar: **Leave**, **Lights**, **Backdrop**, **Look** and **Quality** (each button names what is chosen, and a click lists the others), **Effects** (a panel with the floor disc, the softboxes, every effect’s switch and bar, and the focus), the size of the saved picture, and **Save photo**. The left sidebar folds away while Photo mode is on and opens again when you leave it. Edit mesh is not available in Photo mode.
+
+## The lens rings
+
+With depth of field on, `Ctrl` + click on the model sets the focus there. Hold `V` over the view and a lens’s three rings appear at the pointer: focus, aperture (f/1.4 to f/16, how strong the depth of field is) and zoom (the lens in millimetres). Move the pointer up or down to turn the ring that is lit, and turn the wheel to go from one ring to the next. The rings hold for a moment on round distances, stops and classic lenses; hold `Shift` to turn them finely. The rings tick and click as they turn; **Settings**, **General**, **Sound**, **Interface sounds** switches those sounds off, here and in the quick wheels.
+
+**Softboxes** hangs four bright panels in the studio, so metal and gloss reflect clean streaks along their curves. Switch it off for the plainer reflection.
+
 > Photo mode is not saved with the scene, and it starts off every time. For a quick picture of the normal view, use [Screenshots](meshoptimiser://docs/screenshots).
 
 Related: [screenshots](meshoptimiser://docs/screenshots), [view-modes](meshoptimiser://docs/view-modes), [colours-materials](meshoptimiser://docs/colours-materials)

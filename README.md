@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.37.0 (Vršič)** — A Section view that cuts the whole scene with a plane, a Photo mode with a toolbar, lens rings and softboxes, Remove thickness for thin-walled parts, textures in OBJ and FBX exports, a Profile that shapes its outline, a Properties card of one height, and 17 fixes.
+
+- ![new][new] **Section view:** one plane through the scene, the cut drawn flat; Explode works, nothing can be picked.
+- ![new][new] **Photo mode:** a toolbar of its own, lens rings (hold V), softboxes in the reflections; Claude can set it up.
+- ![new][new] **Remove thickness:** a thin-walled part becomes the one surface it stands for.
+- ![new][new] **OBJ and FBX exports carry their textures;** normal maps come out the right way up.
+- ![new][new] **Profile:** round corners, grow the outline, trim the ends, keep the chambers and holes you want.
+
 **v0.36.1** — One Boolean card with five styles, a Photo mode that looks like a studio render, a reducer that keeps closer to the shape (meshoptimizer 1.3), new scene tabs that open at once, and 9 fixes.
 
 - ![new][new] **Boolean card:** Union, Subtract, Intersect, *Without* and *Split*, with Cinema 4D's options, one undo step.
