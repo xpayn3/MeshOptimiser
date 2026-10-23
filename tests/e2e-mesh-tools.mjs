@@ -2,7 +2,8 @@
 //
 // Drives the mesh tools in the real app in headless Chrome. On the biggest part of the model (handed to the page as a file): Close
 // cracks, Remove slivers, Patch holes, Remesh evenly, Smooth surface, Convex hull, Convex pieces and Merge bodies each run, open
-// their card, run again from a new setting and go back with one undo. Then on two boxes built here: Union, Subtract and Intersect.
+// their card, run again from a new setting and go back with one undo. Then on two boxes built here: Union, Subtract and Intersect,
+// and the Boolean card (Split with Keep the original A and Hide B, Without with Delete B: one undo, and redo).
 // Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or APP_PORT.
 import { spawn } from 'child_process';
 import fs from 'fs';
@@ -124,6 +125,44 @@ try {
     check(op + ': the first part becomes the result (longest side ' + L + ', expected ' + longest + '), the other stays', r && r.parts === 1 && Math.abs(L - longest) < 0.01 && s.parts === 2, { r, L, s });
     await call('undo'); await sleep(400);
     check(op + ': one undo puts it back', Math.abs((await sizeOf(A.id)) - 10) < 0.01);
+  }
+  // the Boolean card: A and B picked in that order, a style and its options, Apply; every change it makes is one undo step
+  const live = () => evalJS(`window.state.parts.filter(p => !p.deleted).map(p => ({ id: p.partId, v: p.visible !== false, n: p.name, t: p.triCount }))`);
+  const card = async (kind, after, keep) => {
+    await evalJS(`(() => { window.state.selected = new Set([${A.id}, ${B.id}]); window.__moAgent.booleanCard(${JSON.stringify(kind)}); return true; })()`);
+    await sleep(300);
+    return evalJS(`(async () => {
+      const q = (s) => document.querySelector('.section-cmd[data-cmd="boolean"] ' + s);
+      q('#bo-after button[data-after="${after}"]').click();
+      const k = q('#bo-keep'); if (k.checked !== ${keep}) { k.checked = ${keep}; k.dispatchEvent(new Event('change')); }
+      const shown = !q('').closest('.section-cmd').hidden, a = q('#bo-a').textContent, b = q('#bo-b').textContent;
+      q('#bo-run').click();
+      for (let i = 0; i < 200 && (q('#bo-run').disabled && !q('#bo-info').classList.contains('is-result')); i++) await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 400));
+      return { shown, a, b, info: q('#bo-info').textContent };
+    })()`);
+  };
+  {
+    const r = await card('split', 'hide', true);
+    const L = await live();
+    check('Boolean card opens on the style asked for, A and B named in the order they were picked', r.shown && /BoxA/.test(r.a) && /BoxB/.test(r.b), r);
+    const vis = L.filter(p => p.v);
+    check('Split, Keep the original A, Hide B: four parts, the copy and the inside shown, A and B hidden', L.length === 4 && vis.length === 2 && vis.some(p => / inside$/.test(p.n)) && !L.find(p => p.id === A.id).v && !L.find(p => p.id === B.id).v, { L, info: r.info });
+    await call('undo'); await sleep(500);
+    const U = await live();
+    check('Split: one undo takes the whole of it back (two parts, both shown, A whole)', U.length === 2 && U.every(p => p.v) && Math.abs((await sizeOf(A.id)) - 10) < 0.01, U);
+    await call('redo'); await sleep(500);
+    const R = await live();
+    check('Split: redo brings the four parts back as they were', R.length === 4 && R.filter(p => p.v).length === 2, R);
+    await call('undo'); await sleep(500);
+  }
+  {
+    const r = await card('without', 'delete', false);
+    const L = await live();
+    check('Without, Delete B: one part left, A open where B cut it (' + (L[0] && L[0].t) + ' triangles)', L.length === 1 && L[0].id === A.id && L[0].t > 12, { L, info: r.info });
+    await call('undo'); await sleep(500);
+    const U = await live();
+    check('Without: one undo brings B back and A whole', U.length === 2 && U.every(p => p.v && p.t === 12), U);
   }
 } catch (e) { fail++; console.log('HARNESS ERROR:', e.message); }
 console.log(`\n${pass} passed, ${fail} failed`);

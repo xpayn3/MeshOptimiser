@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.36.1** — One Boolean card with five styles, a Photo mode that looks like a studio render, a reducer that keeps closer to the shape (meshoptimizer 1.3), new scene tabs that open at once, and 9 fixes.
+
+- ![new][new] **Boolean card:** Union, Subtract, Intersect, *Without* and *Split*, with Cinema 4D's options, one undo step.
+- ![new][new] **Photo mode:** contact shadow, a glossy floor, a backdrop and studio lights that follow the view.
+- ![new][new] **Decimate keeps closer to the shape,** 30 to 35 % less deviation, in a third of the time.
+- ![new][new] **Profile and Round:** several points moved at once; Make solid takes an axis.
+- ![fix][fix] **New scene tabs open at once;** Decimate *Within* works on large curved parts.
+
 **v0.36.0 (Triglav)** — The biggest update so far: three.js r186 under the view and three-mesh-bvh 0.9.16 for picking, USD and Collada files, a Profile tool, a still view refined in Photo mode, textures where you pick them, the lens in millimetres, and 27 fixes.
 
 - ![new][new] **three.js r186 (from r172):** shaders built without holding the page up, GPU memory given back, the HDRI turns its light with it; **three-mesh-bvh 0.9.16** picks the right colour group on multi-colour parts.

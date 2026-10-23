@@ -84,7 +84,7 @@ try {
       await sleep(1500);
       const open = await sceneCounts();
       await evalJS('window.__moResetScene(); true');
-      await sleep(2500);                                        // (the old buffers go after the next frame: see _drainDisposeQueue)
+      await sleep(2500);                                        // (the old buffers are freed at once: _disposeStale; this lets the GPU catch up)
       const cleared = await sceneCounts();
       const heap = await heapMB();
       rows.push({ round: i + 1, open, cleared, heap });

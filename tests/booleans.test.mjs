@@ -35,6 +35,24 @@ ok(!!W && !!W.Manifold, 'Manifold loads');
   ok(far.ok && far.empty, 'two parts that do not touch intersect in nothing');
 }
 {
+  // the Boolean card's other styles: A without B, Split, intersect with several B, Optimise points
+  const a = boxes([[0, 0, 0, 10, 10, 10]]), b = boxes([[5, 5, 5, 15, 15, 15]]);
+  const w = booleanOf(W, 'without', a, b);
+  const area = (g) => { let s = 0; const P = g.positions, I = g.index; for (let t = 0; t < I.length; t += 3) { const p = 3 * I[t], q = 3 * I[t + 1], r = 3 * I[t + 2]; const ux = P[q] - P[p], uy = P[q + 1] - P[p + 1], uz = P[q + 2] - P[p + 2], vx = P[r] - P[p], vy = P[r + 1] - P[p + 1], vz = P[r + 2] - P[p + 2]; s += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2; } return s; };
+  ok(w.ok && Math.abs(area(w) - (600 - 75)) < 1e-3, 'without: A\'s own faces less the 3 × 25 inside B, no faces close the cut: area ' + area(w).toFixed(3));
+  const edges = new Map(); for (let t = 0; t < w.index.length; t += 3) for (let k = 0; k < 3; k++) { const x = w.index[t + k], y = w.index[t + (k + 1) % 3], key = Math.min(x, y) + ',' + Math.max(x, y); edges.set(key, (edges.get(key) || 0) + 1); }
+  ok([...edges.values()].some(n => n === 1), 'without: the cut is left open (it has open edges)');
+  const sp = booleanOf(W, 'split', a, b);
+  ok(sp.ok && Math.abs(volume(sp) - 875) < 1e-3 && sp.second && Math.abs(volume(sp.second) - 125) < 1e-3, 'split: 875 outside B and 125 inside, as two meshes: ' + volume(sp).toFixed(3) + ' + ' + (sp.second ? volume(sp.second).toFixed(3) : '-'));
+  ok(booleanOf(W, 'split', a, boxes([[50, 50, 50, 60, 60, 60]])).empty, 'split: a B that does not reach A splits nothing');
+  const b2 = boxes([[0, 5, 0, 10, 15, 10]]);
+  const every = booleanOf(W, 'intersect', a, [b, b2]), any = booleanOf(W, 'intersect', a, [b, b2], { all: false });
+  ok(Math.abs(volume(every) - 125) < 1e-3, 'intersect with two B: what A shares with every one = ' + volume(every).toFixed(3));
+  ok(Math.abs(volume(any) - 500) < 1e-3, 'intersect with two B, all false: what A shares with any of them = ' + volume(any).toFixed(3));
+  const u = booleanOf(W, 'union', a, [b, b2]), t = booleanOf(W, 'union', a, [b, b2], { tol: 0.01 });
+  ok(t.ok && Math.abs(volume(t) - volume(u)) < 1e-3 && t.index.length <= u.index.length, 'Optimise points keeps the shape: ' + u.index.length / 3 + ' → ' + t.index.length / 3 + ' triangles');
+}
+{
   // a box with one face missing is not closed: left as it was
   const g = boxes([[0, 0, 0, 10, 10, 10], [20, 0, 0, 30, 10, 10]]);
   const open = { positions: g.positions, index: g.index.slice(0, g.index.length - 6) };

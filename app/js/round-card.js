@@ -13,7 +13,7 @@
 // Once applied, the view is Wireframe with the lines on the parts in work only, so each change of Segments around shows; closing
 // the card puts the view back as it was, unless it was changed by hand meanwhile.
 import { fillRoundGrooves, outlineRevolve, sweepBelt, revolveLoops, sweepLoops } from './revolve.js?v=9';
-import { withUvs } from './meshops.js?v=18';
+import { withUvs } from './meshops.js?v=19';
 import { sectionView } from './section-view.js?v=7';
 
 export function installRoundCard(app) {

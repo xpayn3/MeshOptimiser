@@ -7,7 +7,8 @@
 //                                              removeCadFaces (whole CAD faces out, the gap patched and remeshed: cadcut.js) |
 //                                              remeshCadFaces (CAD faces remeshed, nothing taken out: cadcut.js) |
 //                                              cleanProfile (a straight profile made solid, its narrow gaps filled: profile.js)
-//   runBoolean(kind, a, b)                    kind: union | subtract | intersect; a, b: { positions, index } in the same space
+//   runBoolean(kind, a, b, opts)              kind: union | subtract | intersect | without | split; a, b: { positions, index } in the same
+//                                             space (b may be a list); split hands back the part inside B as `second`
 // Both resolve with { ok, why?, positions, normals, index, ...the tool's own numbers }.
 // opts.uv: the part's UV sets ({ uv: Float32Array, uv1: ... }, one pair per vertex of `positions`; for a boolean, of a.positions): the
 // result then has them too, as `uvs`, carried from the part as it was (uvcarry.js); its vertices may be split where a UV seam runs.
@@ -20,7 +21,7 @@ import { convexHull, convexPieces } from './convex.js?v=2';
 import { removeBlends } from './defeature.js?v=4';
 import { simplifyRoundFaces } from './roundfaces.js?v=1';
 import { cleanProfile } from './profile.js?v=5';
-import { manifoldReady, mergeBodies, booleanOf } from './booleans.js?v=2';
+import { manifoldReady, mergeBodies, booleanOf } from './booleans.js?v=3';
 import { creasedNormals } from './voxel.js?v=2';
 import { carryUvs } from './uvcarry.js?v=2';
 
@@ -50,8 +51,13 @@ export async function runMeshOp(name, positions, index, opts = {}) {
 
 export async function runBoolean(kind, a, b, opts = {}) {
   const uv = opts.uv || null, srcP = uv ? a.positions.slice() : null, srcI = uv ? a.index.slice() : null;
-  const r = booleanOf(await manifoldReady(), kind, a, b);
-  if (r.ok && r.empty) return { ok: false, why: kind === 'intersect' ? 'the parts do not overlap: nothing is left' : 'nothing is left of it' };
-  return withUvs(shade(r, opts.smoothDeg), srcP, srcI, uv);
+  const r = booleanOf(await manifoldReady(), kind, a, b, opts);
+  if (r.ok && r.empty) return { ok: false, why: kind === 'intersect' ? 'the parts do not overlap: nothing is left' : kind === 'split' ? 'B does not cut through A: A is wholly outside or inside it, so there is nothing to split' : 'nothing is left of it' };
+  const main = withUvs(shade(r, opts.smoothDeg), srcP, srcI, uv);
+  if (main && main.ok !== false && r.second) {                    // (split: the part inside B, shaded and with its UVs the same way)
+    const s = withUvs(shade(r.second, opts.smoothDeg), srcP, srcI, uv);
+    if (s && s.ok !== false) main.second = s; else delete main.second;
+  }
+  return main;
 }
 export { withUvs };

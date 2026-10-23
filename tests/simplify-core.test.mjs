@@ -2,7 +2,7 @@
 // The reported error is an estimate; the test measures the real distance on a sphere and
 // requires the estimate to be in the right range (not far below what was measured).
 import { MeshoptSimplifier as S } from '../app/vendor/meshoptimizer/meshopt_simplifier.module.js';
-import { packAttributes, reduceIndex, analyseCreases, lockSharp } from '../app/js/simplify-core.js';
+import { packAttributes, reduceIndex, reduceWithin, analyseCreases, lockSharp } from '../app/js/simplify-core.js';
 
 await S.ready;
 S.useExperimentalFeatures = true;
@@ -133,6 +133,32 @@ const hard = reduceIndex(S, cyl.index, cyl.positions, tiny, null, { sharp: 40 })
 ok(hard.idx.length <= tiny * 1.25 && !hard.sharpKept, `a goal the rims cannot keep to falls back and is reached (${hard.idx.length / 3} triangles)`);
 const sph = reduceIndex(S, s.index, s.positions, target, packAttributes(s.geom), { sharp: 40 });
 ok(!sph.sharpKept && sph.idx.length === withAttr.idx.length, 'a smooth sphere is reduced exactly as before');
+
+// — the moved run (opts.update, meshoptimizer 1.x's simplifyWithUpdate) —
+const posBefore = s.positions.slice(), attrBefore = attrs.data.slice();
+const moved = reduceIndex(S, s.index, s.positions, target, attrs, { sharp: 40, update: true });
+ok(moved.upd && moved.upd.positions.length === s.positions.length && moved.upd.attrs.length === attrs.data.length, 'update: the moved positions and attributes come back as upd');
+ok(moved.idx.length <= target * 1.25, `update: reaches the target (${moved.idx.length / 3} triangles)`);
+ok(s.positions.every((x, i) => x === posBefore[i]) && attrs.data.every((x, i) => x === attrBefore[i]), "update: the caller's arrays are not touched");
+const offSphere = (P, idx) => { let w = 0; for (const v of new Set(idx)) w = Math.max(w, Math.abs(Math.hypot(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]) - R)); return w; };
+const devMoved = maxDeviation(moved.upd.positions, moved.idx, s.positions), devPlain = maxDeviation(s.positions, withAttr.idx, s.positions);
+console.log('sphere at 10 %: largest distance plain', devPlain.toFixed(4), 'moved', devMoved.toFixed(4), '; moved vertices off the sphere by at most', offSphere(moved.upd.positions, moved.idx).toFixed(4));
+ok(devMoved <= devPlain * 1.05, 'update: the surface lands no further from the original than the plain run');
+ok(offSphere(moved.upd.positions, moved.idx) <= devPlain, 'update: the moved vertices stay close to the sphere');
+ok(moved.err > 0 && moved.err >= devMoved * 0.25 && moved.err <= devMoved * 8 + 1e-6, `update: estimate ${moved.err.toFixed(4)} in a sensible range of the measured ${devMoved.toFixed(4)}`);
+const noUpd = reduceIndex(S, s.index, s.positions, target, attrs, { sharp: 40 });
+ok(!noUpd.upd && noUpd.idx.length === withAttr.idx.length, 'without update: as before, nothing moved');
+const S0 = Object.create(S); S0.simplifyWithUpdate = undefined;
+ok(!reduceIndex(S0, s.index, s.positions, target, attrs, { update: true }).upd, 'a simplifier without simplifyWithUpdate: the usual paths');
+
+// — within a distance —
+const lim = 0.05 * R;
+const wPlain = reduceWithin(S, s.index, s.positions, lim, false), wMoved = reduceWithin(S, s.index, s.positions, lim, true);
+const dP = maxDeviation(s.positions, wPlain.idx, s.positions), dM = maxDeviation(wMoved.upd.positions, wMoved.idx, s.positions);
+console.log(`within ${lim}: plain ${wPlain.idx.length / 3} triangles (measured ${dP.toFixed(3)}), moved ${wMoved.idx.length / 3} (measured ${dM.toFixed(3)})`);
+ok(!wPlain.upd && wMoved.upd, 'within: only the moved run hands back moved arrays');
+ok(wPlain.idx.length < s.index.length && wMoved.idx.length < s.index.length, 'within: both reduce');
+ok(dM <= lim * 1.25, `within: the moved run keeps to about the distance asked for (${dM.toFixed(3)} of ${lim})`);
 
 console.log(fails ? `\n${fails} failed` : '\nall passed');
 process.exit(fails ? 1 : 0);

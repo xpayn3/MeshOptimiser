@@ -4,6 +4,47 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.36.1
+
+Released 23 Oct 2026.
+
+v0.36.0 moved the viewer to three.js r186. v0.36.1 builds on it: one Boolean card with five styles, a Photo mode that looks like a studio render (contact shadow, a glossy floor, studio lights, a backdrop), a reducer that keeps closer to the shape (meshoptimizer 1.3), new scene tabs that open at once, and a section editor in Profile and Round that picks and moves several points. 9 fixes.
+
+**Booleans**
+
+- ![new][new] **One Boolean card, with five styles and their options, as Cinema 4D's Boole has them.** *Boolean…* in the command search (Ctrl+K) opens it; *Union parts*, *Subtract parts* and *Intersect parts* open it on their style. A is the first part picked, the others are B, and *Swap* makes the next one A. The styles: Union, Subtract, Intersect, *Without* (A with the part inside B cut away, the cut left open) and *Split* (A cut in two where B meets it, the inside a new part). Options: keep the original A, B afterwards Keep, Hide or Delete, Shared with every B, and under Advanced *Optimise points within* and *Smooth up to*. One Apply is one undo step. Claude's `boolean_parts` takes the same options.
+- ![fix][fix] **Intersect parts with three parts or more kept what the first shared with any of the others, not with all of them.** It now keeps what A shares with every B, as the help says; *Shared with every B* off gives the old result on purpose.
+
+**Photo mode**
+
+- ![new][new] **A studio render: contact shadow, a glossy floor, studio lights and a backdrop.** *Contact shadow* darkens the floor where the model stands; *Reflection* makes the floor softly glossy; *Backdrop* is Dark, Studio grey (a soft sweep the floor fades into) or White; *Lights* is Studio, Product, Dramatic or Soft, the last three with a rim light behind the model and a fill beside the camera that follow the view.
+- ![polish][polish] **A more compact list.** Its sliders and lists are the small control height and its switches the smaller switch, so more of it fits without scrolling.
+- ![fix][fix] **The model floated above the floor.** The floor is now under the model's lowest point, measured from the parts that are shown, and follows it when the model moves.
+
+**Reducing triangles**
+
+- ![new][new] **Decimate keeps closer to the shape, and faster.** On a part with one material the points that stay are moved to where they best stand in for the ones removed, with their normals, UVs and colours. On the Gearbox Assy's heaviest parts the largest distance from the original surface is 30 to 35 % smaller at −50 to −90 %, the mean distance half as large at −90 %, in a third of the time. Decimate, Quick remesh and Fit to budget use it.
+- ![refactor][refactor] **meshoptimizer 1.3 (from 0.22) and Lucide 1.61 (from 1.52).** The library behind every reduction and the Meshopt export, and the icon set. three.js, three-mesh-bvh, manifold and assimpjs were already the latest.
+- ![fix][fix] **Decimate *Within* left large curved parts as they were, at any useful distance.** The simplifier's estimate put a few collapses on curved faces at nothing while they moved the surface about 0.9 mm, so the card's measurement never let them through; with the moved points the two agree, and the Gearbox's heaviest parts reduce at 1 mm on the first try.
+
+**Profile and Round**
+
+- ![new][new] **Several points picked and moved at once.** Click, Shift-click, Ctrl-click, a box drag and Ctrl+A pick points in the section view; dragging one moves them all, Esc puts them back, Delete takes them out.
+- ![new][new] **Round part, Make solid: the axis can be chosen.** Auto (as before), X, Y or Z; a part that is not round round any axis is no longer left out.
+- ![polish][polish] **Shift lines a point up with the others, as in Illustrator,** a faint grid in the section view, no instructions or readout under it, no grab hand and no blue ring round it.
+- ![perf][perf] **Editing the section and moving the scrubbers keep up on a big part:** the slow look at the part is done once while the card is open, not at every move.
+- ![fix][fix] **The section editor could lose a drag, or show points the card no longer used.** A drag now ends cleanly whatever changes under it, Esc puts a point back, and edges that cross are drawn red and not built.
+
+**Around the app**
+
+- ![fix][fix] **A new scene tab took seconds to open.** The spare copy of the app a new tab is made from now starts as soon as the app has started, not only once a model is open and the page has been still; a new tab opens in about 0.13 s, where it took 6.6 s.
+- ![polish][polish] **The rows of the tool cards have room between them** (8 px instead of 2).
+- ![new][new] **Opening a model frees the last one's memory at once,** instead of holding both while the next one loads; workarounds three r172 needed are gone.
+- ![fix][fix] **Turning the HDRI in a Z-up scene turned the light and the reflections but not the background.** All three turn together now, and the built-in studio is the same room whichever way up the scene is.
+- ![fix][fix] **A glTF with KTX2 textures fetched an old decoder from the internet.** three r186's own decoder ships with the app.
+- ![fix][fix] **An FBX whose textures were missing opened to a viewport that never drew.** The missing maps are left out and the model draws.
+- ![fix][fix] **The blue focus ring came back round a view after Shift and a click.**
+
 ## v0.36.0
 
 Released 22 Oct 2026 · Triglav.

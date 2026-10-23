@@ -13,7 +13,7 @@ const ok = (cond, msg) => { if (!cond) { failed++; console.error('FAIL  ' + msg)
 const count = (re) => (src.match(re) || []).length;
 
 ok(/function _smartPayload\(geom, threeUrl\)/.test(src) && /function _shapeOf\(g\)/.test(src) && /const _keepsShape = \(before, after\) =>/.test(src), 'the shared helpers exist');
-ok(count(/op: 'simplify', positions, index, groups, keep, tol: (?:0|tolFor\(p, FIRST_PASS\)), url: [^,]+, attrs, sharp: \(_sharpOpts\(\) \|\| \{\}\)\.sharp \|\| 0, \.\.\.sp \}/g) === 2, 'Decimate and Quick remesh send the same simplify message, with the smart payload spread in');
+ok(count(/op: 'simplify', positions, index, groups, keep, tol: (?:0|tolFor\(p, FIRST_PASS\)), url: [^,]+, attrs, sharp: \(_sharpOpts\(\) \|\| \{\}\)\.sharp \|\| 0, update: true, \.\.\.sp \}/g) === 2, 'Decimate and Quick remesh send the same simplify message (the moved run asked for), with the smart payload spread in');
 ok(count(/const sp = _smartPayload\((geom|src), /g) === 2, 'both take the payload from _smartPayload');
 ok(count(/_keepsShape\(/g) >= 3, 'both hold the result against _keepsShape (Decimate twice: the loop and the final test; Quick remesh once)');
 ok(!/function shapeOf\(g\)/.test(src), "Quick remesh's own shapeOf is gone");

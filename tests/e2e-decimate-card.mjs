@@ -113,10 +113,13 @@ try {
   check('a target above the count changes nothing', (await hist()) === h0 && (await selTris()) === t0);
 
   // ── a distance ──
-  await setVal('#decimate-strength', 'tol'); await setVal('#decimate-tol', '0.05'); await sleep(300);
+  // (1 mm: the Gearbox Assy comes in as metres, so its heaviest parts are about 2.4 m across in the scene's millimetres, and on their
+  // curved faces no reduction keeps to 0.05 mm: the card measured that and rightly left them alone. Measured outside the app, 1 mm fits
+  // these parts at the first try with the moved run, see simplify-core.js reduceWithin.)
+  await setVal('#decimate-strength', 'tol'); await setVal('#decimate-tol', '1'); await sleep(300);
   await evalJS("document.getElementById('btn-decimate-sel').click()"); await settle(h0);
   const tW = await selTris();
-  check('Within 0.05 mm reduces the selection as one step', tW < t0 && (await hist()) === h0 + 1, { t0, tW });
+  check('Within 1 mm reduces the selection as one step', tW < t0 && (await hist()) === h0 + 1, { t0, tW });
   check('and undo puts it back', await undoAll(t0));
   await setVal('#decimate-strength', '0.5');
 
@@ -124,7 +127,7 @@ try {
   const r = await call('decimate', { ids, reduce_percent: 50 });
   check('the Claude tool at 50 % gives the same count as the button', r.ok && (await selTris()) === tHalf, r.ok ? { now: await selTris(), tHalf } : r);
   check('and undo puts it back', await undoAll(t0));
-  await evalJS('window.__moDecimateWithin(0.05)'); await settle(h0);
+  await evalJS('window.__moDecimateWithin(1)'); await settle(h0);
   check("Smart optimise's entry point reduces within a distance", (await selTris()) === tW, { now: await selTris(), tW });
   check('and undo puts it back', await undoAll(t0));
 

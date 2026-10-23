@@ -1,10 +1,13 @@
 // node tests/e2e-env-up.mjs
 //
 // The environment (the plain backgrounds' studio reflections, an HDRI) lights the model from above in the scene's own up axis.
-// three's environments have their sky at +Y and the app's world is Z-up, so they are baked turned (_envFromRoom, _envFromEquirect).
+// three's environments have their sky at +Y and the app's world is Z-up, so they are turned by scene.environmentRotation and
+// backgroundRotation (_applyEnvTurn).
 // A white matte cube is lit by the environment alone (the app's lights at 0), and the brightness and colour of its top and of a side
 // face are read from render_image: in the studio the top must be the bright one (the room's ceiling lights), under the Sunset HDRI the
 // side must be the orange one (the horizon) and the top the blue one (the sky). Then the same in a Y-up scene, where "top" is +Y.
+// Last, the HDRI turned: a mirror ball seen from a direction reflects what the background shows when looked at in that direction,
+// in both up axes (in a Z-up scene the background used to stay put, or turn against the lighting, while the lighting turned).
 // Needs the app on http://localhost:4242, Chrome, Node 22+. CAPTURE_GPU=1 uses the machine's own GPU (WebGPU) instead of SwiftShader.
 import { spawn } from 'child_process';
 import fs from 'fs';
@@ -100,6 +103,47 @@ try {
     check(`${up.toUpperCase()}-up, Sunset HDRI: the side is warmer (horizon) than the top (sky)`, warm(hs[side]) > warm(hs[top]) * 1.2, { top: hs[top], side: hs[side] });
   }
   check('the top is lit the same in a Z-up and a Y-up scene', Math.abs(lum(seen.z) - lum(seen.y)) < 0.08 * lum(seen.z), seen);
+  // the HDRI turned: the reflection in direction d and the background in direction d are the same colour
+  const agree = () => evalJS(`(async () => {
+    const A = window._appFns, T = A.THREE, r = A.renderer, scene = A.camera.parent;
+    const was = [];
+    for (const o of scene.children) if (o.visible && !o.isCamera) { was.push(o); o.visible = false; }
+    const ball = new T.Mesh(new T.SphereGeometry(1, 128, 64), new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0, metalness: 1 }));
+    scene.add(ball); scene.traverse(o => { if (o.isLight) o.intensity = 0; });
+    const N = 64, rt = new T.RenderTarget(N, N, { type: T.UnsignedByteType });
+    const cam = new T.PerspectiveCamera(10, 1, 0.01, 1000);
+    const mid = async () => { r.setRenderTarget(rt); r.render(scene, cam); const px = await r.readRenderTargetPixelsAsync(rt, 0, 0, N, N); r.setRenderTarget(null); const k = (N / 2 * N + N / 2) * 4; return [px[k], px[k + 1], px[k + 2]]; };
+    let worst = 0;
+    for (const d of [[1, 0, 0.2], [0, 1, 0.2], [-1, 0.3, 0.1], [0.4, -1, 0.5], [0.6, 0.5, -0.4]]) {
+      const v = new T.Vector3(...d).normalize();
+      ball.visible = true; cam.position.copy(v).multiplyScalar(8); cam.up.set(0, 0, 1); cam.lookAt(0, 0, 0); cam.updateMatrixWorld();
+      const refl = await mid();
+      ball.visible = false; cam.position.set(0, 0, 0); cam.lookAt(v); cam.updateMatrixWorld();
+      const bg = await mid();
+      worst = Math.max(worst, ...refl.map((q, i) => Math.abs(q - bg[i])));
+    }
+    scene.remove(ball); ball.geometry.dispose(); ball.material.dispose(); rt.dispose();
+    for (const o of was) o.visible = true;
+    return worst;
+  })()`);
+  for (const up of ['z', 'y']) {
+    await setUp(up); await setBg('hdri'); await sleep(800);
+    await evalJS("document.querySelector('.hdri-preset[data-hdri-preset=\"outdoor\"]').click()"); await sleep(1500);
+    for (const rot of [0, 1.1, 2.6]) {
+      await evalJS(`window.__moAgent.sceneState.apply({ app: 'step-optimizer', view: { hdriRotation: ${rot} } })`); await sleep(300);
+      const w = await agree();
+      check(`${up.toUpperCase()}-up, Outdoor HDRI turned ${rot}: the background shows what the reflections show`, w <= 14, { worst: w });
+    }
+  }
+  // the HDRI's strength reaches a plain MeshStandardMaterial through the scene alone (no material is touched for it)
+  const setInt = (k) => evalJS(`window.__moAgent.sceneState.apply({ app: 'step-optimizer', view: { hdriIntensity: ${k} } })`);
+  await setUp('z'); await sleep(800);
+  await setInt(0.4); await sleep(400);
+  const dim = await evalJS('window.__envT.faces(1)');
+  await setInt(1.6); await sleep(400);
+  const bright = await evalJS('window.__envT.faces(1)');
+  await setInt(1); await sleep(300);
+  check('the HDRI strength lights the cube (top at 1.6 brighter than at 0.4)', lum(bright.pz) > lum(dim.pz) * 1.5, { dim: dim.pz, bright: bright.pz, envMapIntensity: await evalJS('window.__envT.cube.material.envMapIntensity') });
   check('no uncaught errors', errors.length === 0, errors.slice(0, 5));
 } catch (e) {
   fail++; console.log('FAIL', e.message);

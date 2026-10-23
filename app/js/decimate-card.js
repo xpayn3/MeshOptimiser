@@ -98,12 +98,12 @@ export function installDecimateCard(app) {
             ? src.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
             : [{ start: 0, count: index.length, materialIndex: src.groups && src.groups[0] ? src.groups[0].materialIndex | 0 : 0 }];
           const ap = packAttributes(src);
-          const attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights } : null;
+          const attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights, layout: ap.layout } : null;
           const sp = _smartPayload(src, _threeCoreUrl());
           const transfer = attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer];
           if (sp.normals) transfer.push(sp.normals.buffer);
-          return { msg: { op: 'simplify', positions, index, groups, keep, tol: tolFor(p, FIRST_PASS), url: simplifierUrl, attrs, sharp: (_sharpOpts() || {}).sharp || 0, ...sp }, transfer };
-        }).then(reply => (reply && reply.ok && weld) ? { parts: reply.parts, err: reply.err || 0, src: weld.src, flat: weld.flat } : null));
+          return { msg: { op: 'simplify', positions, index, groups, keep, tol: tolFor(p, FIRST_PASS), url: simplifierUrl, attrs, sharp: (_sharpOpts() || {}).sharp || 0, update: true, ...sp }, transfer };
+        }).then(reply => (reply && reply.ok && weld) ? { parts: reply.parts, err: reply.err || 0, src: weld.src, flat: weld.flat, upd: reply.upd || null } : null));
       }
     }
 
@@ -121,7 +121,7 @@ export function installDecimateCard(app) {
         if (queued.has(p.partId)) {
           const job = await queued.get(p.partId);
           if (p.deleted || !p.mesh) { skipped.push(p.name + ' (deleted while it was being worked out)'); continue; }      // (deleted during the wait: not reduced behind the user's back)
-          if (job && p.mesh.geometry === geom) { reduced = _creaseAfter(_geomFromIndexParts(job.src, job.parts), job.flat); if (reduced) _simpErr.set(reduced, job.err); }
+          if (job && p.mesh.geometry === geom) { reduced = _creaseAfter(_geomFromIndexParts(job.src, job.parts, job.upd), job.flat); if (reduced) _simpErr.set(reduced, job.err); }
         }
         if (!reduced && meshopt) reduced = _simplifyKeepingAttributes(meshopt, geom, keep, tolFor(p, FIRST_PASS));
         if (!reduced && tolMm) { skipped.push(p.name + ' (needs the simplifier, which did not load)'); continue; }

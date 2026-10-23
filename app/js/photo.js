@@ -14,8 +14,10 @@
 // real size). Anything that moves or changes starts the average again. The film grain is put on after the average.
 // The look is the tone curve the picture is finished with: Neutral (colours as they are, for products), AgX (soft, film-like highlights)
 // or ACES (contrasty, the look photo mode had before).
-// They were written here in three's shader language (TSL) when the app was on three r172, whose bundle had none of them as ready
-// nodes. Nothing here touches the scene: app.js decides when to call render() instead of renderer.render(), and sets the lighting.
+// They are written here in three's shader language (TSL). They were first written when the app was on three r172, whose bundle had
+// none of them as ready nodes; three's own (GTAO, bloom, depth of field in its add-ons) are still not used on r186, as they do not turn
+// their samples from frame to frame for the average, nor keep the occlusion and the blur to each pixel's own surface. Nothing here
+// touches the scene: app.js decides when to call render() instead of renderer.render(), and sets the lighting.
 //
 // Each effect can be switched off (it is then not in the chain at all, so it costs nothing) and has a strength; the quality preset
 // sets the multisampling and how many samples the occlusion and the glow take. Strengths are uniforms (moving a slider never rebuilds the

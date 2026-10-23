@@ -10,7 +10,7 @@
 // cross-section, so they suit a small seal and a big frame alike. The Shading angle is the part's own (the one in Properties): the
 // card starts from it, and the parts it builds are shaded at it and keep it.
 import { cleanProfile } from './profile.js?v=6';
-import { runMeshOp } from './meshops.js?v=18';
+import { runMeshOp } from './meshops.js?v=19';
 import { sectionView } from './section-view.js?v=7';
 
 // app: the objects and functions of app.js this card uses (see the call in app.js)

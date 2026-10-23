@@ -979,6 +979,12 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .cmd-seg:has(>button:nth-child(4).active){--seg-i:3}
 .cmd-seg:has(>button:nth-child(5).active){--seg-i:4}
 @media (prefers-reduced-motion:reduce){.cmd-seg::before{transition:none}}
+/* Boolean card: the styles as icons over their names; A and B on a line each, Swap beside them */
+#bo-kind>button{display:flex;flex-direction:column;align-items:center;gap:var(--space-2xs);padding:var(--space-sm) 0}
+#bo-kind>button svg{width:var(--icon-sm);height:var(--icon-sm)}
+.bo-ab{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:var(--space-md);row-gap:var(--space-2xs);font-size:var(--fs-11);color:var(--tx2)}
+.bo-ab .bo-name{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bo-ab .lc-icon-btn{grid-row:1 / span 2;grid-column:3}
 .toggle{display:flex;justify-content:space-between;align-items:center;gap:var(--space-xl);padding:var(--space-md) 0;font-size:var(--fs-lg);border-top:1px solid var(--hairline);min-width:0}
 .toggle > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .toggle:first-child{border-top:none}
@@ -1002,7 +1008,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .section-cmd .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
 .section-cmd .toggle input:checked+.switch::after{transform:translateX(var(--switch-travel))}
 /* the number rows of the Remesh / Untriangulate card sit close: the card's own 6px gap is all there is between two fields */
-.section-cmd{--cmd-row-gap:2px;--cmd-row-h:28px}   /* the space between two rows of a command card (switch or number), in every card, and the height of a row (28 and 2: a row every 30px; they were 32 and 4) */
+.section-cmd{--cmd-row-gap:var(--space-md);--cmd-row-h:28px}   /* the space between two rows of a command card (switch or number), in every card, and the height of a row (28 and 8: a row every 36px; they were 28 and 2, which left the fields of two rows almost touching) */
 .section-cmd[data-cmd="remesh"] .remesh-pane{gap:var(--cmd-row-gap)!important}
 :is(.section-cmd[data-cmd="remesh"] .remesh-pane>:is(.toggle,.cmd-num),#_a#_b#_c){box-sizing:border-box;height:var(--cmd-row-h);min-height:0;padding:0;margin-top:0;--fld-h:var(--cmd-row-h)}
 /* and the rows of a card's main section (Dynamic place, Lettering, Pivot, Fasteners, ...): the same 32px, and --cmd-row-gap between two of them (the section's own gap is 6px) */
@@ -2191,6 +2197,10 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* Photo mode: its two lists are the ordinary medium dropdown (the pill they had came from the .prim-select class of a shape's row) */
 #photo-section .prim-row{--dd-h:var(--scrub-h);--dd-fs:var(--btn-fs-md);--dd-r:var(--btn-r-md);--dd-px:var(--btn-px-md)}
 #photo-section .prim-row .cs-wrap{width:var(--scrub-w)}      /* (as wide as the number fields above it) */
+/* Photo mode is a long list: its sliders and lists are the small control height, its switches the smaller switch (the travel is
+   worked out again here, as the one in :root was worked out from the larger switch) */
+#photo-section{--scrub-h:var(--ctl-h-sm);--switch-w:var(--switch-w-xs);--switch-h:var(--switch-h-xs);--switch-knob:var(--switch-knob-xs);
+  --switch-travel:calc(var(--switch-w) - var(--switch-knob) - var(--switch-pad) * 2)}
 /* the rows of the right sidebar's command cards (Smart optimise and the like): the number fields and the dropdown are as wide and as tall as the sliders' fields everywhere else */
 #sidebar-right .cmd-num{--dd-h:var(--scrub-h)}
 #sidebar-right .cmd-num .size-field,#sidebar-right .cmd-num .cs-wrap{box-sizing:border-box;width:var(--scrub-w);height:var(--scrub-h);margin-right:0}
@@ -2454,7 +2464,8 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
   --switch-off:rgba(120,128,140,.35);                 /* the track of a switch that is off */
   --tree-group-fg:#c4c4c6;                            /* the name of a group in the parts list: a soft grey, not white */
   --dock-h:330px;
-  --switch-w:30px; --switch-h:16px; --switch-knob:12px; --switch-pad:2px;      /* the small switch (Photo mode, and every switch of the right sidebar) */
+  --switch-w:30px; --switch-h:16px; --switch-knob:12px; --switch-pad:2px;      /* the small switch (every switch of the right sidebar) */
+  --switch-w-xs:24px; --switch-h-xs:14px; --switch-knob-xs:10px;                /* the smaller one, in dense lists (Photo mode) */
   --switch-travel:calc(var(--switch-w) - var(--switch-knob) - var(--switch-pad) * 2);
   --scrub-w:104px; --scrub-h:var(--num-h); --scrub-px:var(--num-px); --scrub-fill:var(--s5);      /* the number field that is dragged sideways and shows its value as a fill (Shape parameters, Photo mode, HDRI) */
 }
@@ -6360,16 +6371,16 @@ window.moSplash = function (msg, pct) {
           <div class="brand-menu-titles">
             <div class="brand-menu-title">MeshOptimiser</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.36.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.36.1</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>three.js r186 under the view</li>
-            <li>Opens USD and Collada</li>
-            <li>Profile: clean outline</li>
-            <li>Photo mode refines a still view</li>
-            <li>Focal length in mm, textures on the balls</li>
+            <li>One Boolean card, five styles</li>
+            <li>Photo mode: a studio render</li>
+            <li>Decimate keeps closer to the shape</li>
+            <li>Profile: move several points at once</li>
+            <li>New scene tabs open at once</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -7060,6 +7071,44 @@ window.moSplash = function (msg, pct) {
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
+    <!-- Boolean (_BooleanCard in app.js): the booleans in one card. The selection in the order it was picked: A (the first, or the one Swap
+         moves to) changes, the others are B. One undo step takes the whole of it back. -->
+    <div class="section section-cmd" data-cmd="boolean" hidden>
+      <div class="section-h"><span>Boolean</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b small-card">
+        <div class="cmd-seg" id="bo-kind" role="group" aria-label="Style">
+          <button type="button" data-kind="union" title="Union: A and B become one solid"><i data-lucide="squares-unite"></i>Union</button>
+          <button type="button" data-kind="subtract" title="Subtract: A less everything B takes up"><i data-lucide="squares-subtract"></i>Subtract</button>
+          <button type="button" data-kind="intersect" title="Intersect: only what A and B share"><i data-lucide="squares-intersect"></i>Intersect</button>
+          <button type="button" data-kind="without" title="A without B: the part of A inside B cut away, the cut left open"><i data-lucide="square-dashed"></i>Without</button>
+          <button type="button" data-kind="split" title="Split: A cut in two where B meets it, the part outside B and the part inside"><i data-lucide="scissors"></i>Split</button>
+        </div>
+        <div class="bo-ab">
+          <span>A</span><span class="bo-name" id="bo-a"></span>
+          <button type="button" class="lc-icon-btn" id="bo-swap" title="Swap: make the next part you picked A"><i data-lucide="arrow-left-right"></i></button>
+          <span>B</span><span class="bo-name" id="bo-b"></span>
+        </div>
+        <div class="toggle" id="bo-all-row" hidden title="Keep only what A shares with every B. Off: what A shares with any of them"><span id="bo-all-lbl">Shared with every B</span><label><input type="checkbox" id="bo-all" aria-labelledby="bo-all-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="The result goes on a copy of A, and A itself is hidden"><span id="bo-keep-lbl">Keep the original A</span><label><input type="checkbox" id="bo-keep" aria-labelledby="bo-keep-lbl"><span class="switch"></span></label></div>
+        <div class="cmd-num" title="What becomes of B afterwards"><span>B afterwards</span><div class="cmd-seg" id="bo-after" role="group" aria-label="B afterwards">
+          <button type="button" data-after="keep" title="B stays as it is">Keep</button>
+          <button type="button" data-after="hide" title="B is hidden">Hide</button>
+          <button type="button" data-after="delete" title="B is deleted">Delete</button>
+        </div></div>
+        <button class="btn primary" id="bo-run" data-cmd-primary title="Run the boolean. One undo step takes it back."><i data-lucide="check"></i>Apply</button>
+        <div class="field-help" id="bo-info"></div>
+        <details class="cmd-adv" id="bo-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="cmd-num" title="Afterwards, points closer than this are merged and the faces they leave flat simplified (Optimize points). Empty: off"><span>Optimise points within</span><label class="size-field"><input type="text" inputmode="decimal" id="bo-tol" placeholder="off" spellcheck="false" autocomplete="off"><span>units</span></label></div>
+            <div class="cmd-num" title="Faces meeting at a shallower angle than this are shaded smooth, steeper ones stay sharp"><span>Smooth up to</span><label class="size-field"><input type="text" inputmode="decimal" id="bo-angle" value="30" spellcheck="false" autocomplete="off"><span>°</span></label></div>
+            <button type="button" class="cmd-link" id="bo-reset">Reset to defaults</button>
+          </div>
+        </details>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Apply</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
     <!-- Mesh tools (Close cracks, Remove slivers, Patch holes, Remesh evenly, Smooth surface, Convex hull, Convex pieces): the tool's settings,
          built by _MeshOps when it opens; a change runs the tool again; one undo step. -->
     <div class="section section-cmd" data-cmd="meshop" hidden>
@@ -7863,6 +7912,24 @@ window.moSplash = function (msg, pct) {
           <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
           <label class="prim-toggle"><input type="checkbox" id="photo-stage" checked><span></span></label>
         </div>
+        <div class="prim-row photo-fx-row" id="photo-row-contact" title="The floor darkens where the model stands on it and under it" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off"><input type="checkbox" id="photo-fx-contact" aria-label="Contact shadow on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-contact" style="grid-column:2">Contact shadow</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-contact" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-refl" title="The floor is glossy and shows the model mirrored in it, softly" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: the model is not drawn a second time for it)"><input type="checkbox" id="photo-fx-refl" aria-label="Floor reflection on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-refl" style="grid-column:2">Reflection</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-refl" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row" title="What is behind the model: the dark of the viewport, a soft grey studio sweep, or white">
+          <label class="prim-label" for="photo-backdrop">Backdrop</label>
+          <select id="photo-backdrop" class="mac-sel"><option value="dark">Dark</option><option value="studio" selected>Studio grey</option><option value="white">White</option></select>
+        </div>
+        <div class="prim-row" title="Studio: the HDRI and the sun as they are. Product, Dramatic and Soft add a rim light behind the model and a fill beside the camera, which follow the view">
+          <label class="prim-label" for="photo-lights">Lights</label>
+          <select id="photo-lights" class="mac-sel"><option value="studio">Studio</option><option value="product" selected>Product</option><option value="dramatic">Dramatic</option><option value="soft">Soft</option></select>
+        </div>
         <div class="prim-row" title="Edge smoothness, samples for occlusion and glow, and how many frames a still view is refined over">
           <label class="prim-label" for="photo-quality">Quality</label>
           <select id="photo-quality" class="mac-sel"><option value="draft">Draft (fastest)</option><option value="good">Good</option><option value="best" selected>Best</option><option value="max">Maximum</option></select>
@@ -7911,7 +7978,7 @@ window.moSplash = function (msg, pct) {
           <select id="photo-scale" class="mac-sel"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select>
         </div>
         <button id="photo-save" type="button" class="btn-sm" style="margin-top:var(--space-md)" title="Save the picture as a PNG">Save photo…</button>
-        <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:16px;padding:var(--space-md) 0 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows. With Depth of field on, Alt+click a point of the model to focus there.</div>
+        <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:16px;padding:var(--space-md) 0 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows; Lights adds a rim and a fill that follow the view. With Depth of field on, Alt+click a point of the model to focus there.</div>
         </div>
       </div>
     </div>
@@ -9017,7 +9084,7 @@ window.moSplash = function (msg, pct) {
 })();
 </script>
 
-<script src="vendor/lucide/lucide.min.js"></script>
+<script src="vendor/lucide/lucide.min.js?v=1.61.0"></script>
 <script>
 /* The app's own icons, drawn in Lucide's 24-unit grid so they sit with the library.
    Added to lucide's icon set before anything renders, so <i data-lucide="…"> and _ico() find them. */
@@ -9053,7 +9120,7 @@ window.moSplash = function (msg, pct) {
 })();
 </script>
 
-<!-- The libraries the app needs are bundled in vendor/ (three.js r172 with
+<!-- The libraries the app needs are bundled in vendor/ (three.js r186 with
      the add-ons in use, three-mesh-bvh, meshoptimizer, lucide, and the Draco
      and Assimp converters, and the KTX2 transcoder), so startup does not wait
      on a CDN and the app works offline. Still fetched on demand from the
@@ -9063,7 +9130,7 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=115"></script>
-<script type="module" src="js/app.js?v=20261166-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1-campop1-campop2-campop3-campop4-campop5-campop6-lensmm1-texball1-texfmt1-texthumb1-matheld1-texsets1-mateditreopen1-clnbox1-texask1-texdrop1-estnode1-isoundo1-isoundo2-matundo1-texthumb2-texsmall1-texsmall2-alignsel1-texsmall3-copyshadow1-copyshadow2-links1-valrows1-three186-photoacc1-sun1-orthokey2-bvhv1-pfalign1-pffast1-pfcur1-pfpan1-pfgrab1-modring1-pfgrid1-pfsel1-rcstats1-rcaxis1-ktx186"></script>
+<script type="module" src="js/app.js?v=20261172-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1-campop1-campop2-campop3-campop4-campop5-campop6-lensmm1-texball1-texfmt1-texthumb1-matheld1-texsets1-mateditreopen1-clnbox1-texask1-texdrop1-estnode1-isoundo1-isoundo2-matundo1-texthumb2-texsmall1-texsmall2-alignsel1-texsmall3-copyshadow1-copyshadow2-links1-valrows1-three186-photoacc1-sun1-orthokey2-bvhv1-pfalign1-pffast1-pfcur1-pfpan1-pfgrab1-modring1-pfgrid1-pfsel1-rcstats1-rcaxis1-ktx186-bool1-spare1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
