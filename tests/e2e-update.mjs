@@ -28,7 +28,7 @@ const copy = (from, to) => { fs.mkdirSync(to, { recursive: true }); for (const e
 copy(path.join(SRC, 'app'), A);
 fs.mkdirSync(path.join(A, 'inbox'), { recursive: true }); fs.writeFileSync(path.join(A, 'inbox', 'keep-me.glb'), 'MY MODEL');
 fs.writeFileSync(path.join(A, 'version.json'), JSON.stringify({ version: '0.21.0', launcher: 1 }));
-copy(A, path.join(B, 'app')); fs.mkdirSync(path.join(B, 'tools'), { recursive: true }); fs.copyFileSync(path.join(SRC, 'tools', 'build-update.py'), path.join(B, 'tools', 'build-update.py'));
+copy(A, path.join(B, 'app')); fs.mkdirSync(path.join(B, 'tools', 'app'), { recursive: true }); fs.copyFileSync(path.join(SRC, 'tools', 'app', 'build-update.py'), path.join(B, 'tools', 'app', 'build-update.py'));
 fs.copyFileSync(path.join(SRC, '.gitignore'), path.join(B, '.gitignore'));
 // the new version: a marker file, a visible version, a changelog with notes
 fs.writeFileSync(path.join(B, 'app', 'e2e-marker.txt'), 'new version');

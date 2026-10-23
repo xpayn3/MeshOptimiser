@@ -7,7 +7,7 @@
 //   3. dropRec puts a deleted part's hidden mesh back to rest too, so the undo of the delete finds it there.
 import fs from 'fs';
 
-const src = fs.readFileSync(new URL('../app/js/app.js', import.meta.url), 'utf8');
+const src = ['app.js', 'anim.js'].map(f => fs.readFileSync(new URL('../app/js/' + f, import.meta.url), 'utf8')).join('\n');      // (Animate is in anim.js since 2026-10-23)
 let failed = 0;
 const ok = (cond, msg) => { if (!cond) { failed++; console.error('FAIL  ' + msg); } };
 const body = (re, name) => { const m = src.match(re); ok(m, 'could not find ' + name); return m ? m[0] : ''; };

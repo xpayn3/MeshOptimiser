@@ -1,6 +1,6 @@
 import * as THREE from '../app/vendor/three/build/three.core.js';
 import fs from 'node:fs';
-const src = fs.readFileSync(new URL('../app/js/app.js', import.meta.url), 'utf8');
+const src = fs.readFileSync(new URL('../app/js/anim.js', import.meta.url), 'utf8');      // (Animate moved out of app.js, 2026-10-23)
 const a = src.indexOf('const _RM = {'), b = src.indexOf('  function parentDelta(rec, depth)');
 const code = src.slice(a, b);
 const rigidPartMotion = new Function('THREE', code + '; return rigidPartMotion;')(THREE);

@@ -91,6 +91,22 @@ try {
   await until(`(() => { const l = ${LINES}; return l.spool > 0 && l.block > 0; })()`, 40, 250);
   const after = await evalJS(LINES);
   check('Wireframe by hand afterwards draws every part', after.spool > 0 && after.block > 0, after);
+  // the card follows the selection: applied on the spool, then the block selected, it moves to the block at Apply again
+  await evalJS("window._appFns._Actions.list.find(a => a.id === 'solid').run(); true"); await until("window.state.viewMode === 'solid'", 20);
+  check('back in Solid before the second Apply', await evalJS('window.state.viewMode') === 'solid', await evalJS('window.state.viewMode'));
+  await call('select_parts', { name_contains: 'spool' });
+  await evalJS("window.__moAgent.roundCard({ mode: 'outline' })"); await sleep(300);
+  await evalJS("document.getElementById('rc-run').click(); true");
+  check('applied on the spool again', await until("window.__moAgent.roundCardState()?.applied === true && window.state.viewMode === 'wire'", 60, 250));
+  const spoolTris = await evalJS("window.state.parts.find(p => p.name.includes('spool')).triCount");
+  await call('select_parts', { name_contains: 'block' });
+  check('another part selected: the card moves to it, at Apply again', await until("(() => { const s = window.__moAgent.roundCardState(); return !!s && s.summary && /block/.test(s.summary.name) && !s.applied && s.mode === 'outline'; })()", 20, 150)
+    && await evalJS("document.getElementById('rc-run-lbl').textContent") === 'Apply', await evalJS('window.__moAgent.roundCardState()'));
+  check('the view goes back to Solid', await evalJS('window.state.viewMode') === 'solid', await evalJS('window.state.viewMode'));
+  check('the spool keeps what Apply made', await evalJS("window.state.parts.find(p => p.name.includes('spool')).triCount") === spoolTris, [spoolTris, await evalJS("window.state.parts.find(p => p.name.includes('spool')).triCount")]);
+  await evalJS('window.state.selected.clear()'); await sleep(400);
+  check('nothing selected: the card stays on the block', /block/.test((await evalJS('window.__moAgent.roundCardState()'))?.summary?.name || ''));
+  await evalJS("document.querySelector('.section-cmd[data-cmd=\"round\"] .cmd-close')?.click(); true");
   check('no page errors', errors.length === 0, errors);
 } catch (e) {
   fail++; console.log('FAIL', e.message || e);

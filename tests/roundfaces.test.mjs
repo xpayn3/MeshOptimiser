@@ -60,11 +60,16 @@ function cylinder(N = 72, R = 10, H = 20) {
   const v0 = volume(g.positions, g.index);
   // a deviation of 0.3 on r 10: the mesh's own sag is 0.038 a facet, so plenty of points may go
   const r = simplifyRoundFaces(g.positions, g.index, { cad: g.cad, tolerance: 0.3, segments: 12, triangulate });
-  ok(r.ok && r.collapsed > 0, 'points were collapsed (' + JSON.stringify({ ok: r.ok, why: r.why, collapsed: r.collapsed, left: r.left, before: r.before, after: r.after }) + ')');
+  // (a clean grid: whole lines go (pipegrid.js), as many as the deviation allows, not points one by one)
+  ok(r.ok && r.lines > 0 && r.collapsed === 0, 'whole lines were taken out of the wall, no point on its own (' + JSON.stringify({ ok: r.ok, why: r.why, lines: r.lines, collapsed: r.collapsed, before: r.before, after: r.after }) + ')');
   const wallTris = r.ok && r.cad.faces[1][2];
   ok(r.ok && wallTris <= 2 * 50 && wallTris >= 2 * 12, 'the wall has far fewer facets round (' + wallTris / 2 + ' triangles-worth, from 72)');
   ok(r.ok && openEdges(r.positions, r.index) === 0, 'the result is closed: the caps followed the rims (' + (r.ok && openEdges(r.positions, r.index)) + ' open edges)');
-  ok(r.ok && Math.abs(volume(r.positions, r.index) - v0) < v0 * 0.03, 'the volume is within 3 % (' + (r.ok && ((volume(r.positions, r.index) / v0 - 1) * 100).toFixed(2)) + ' %)');
+  // the wall is an even prism of the lines that are left: its volume is that prism's (a 13-gon: 3.8 % under the 72-gon), and the sag of
+  // its facets is within the deviation
+  const m = rimPts(r, 0), prism = (k) => k / 2 * Math.sin(2 * Math.PI / k);
+  ok(r.ok && Math.abs(volume(r.positions, r.index) / v0 - prism(m) / prism(72)) < 0.002, 'the volume is that of an even ' + m + '-sided prism (' + (r.ok && ((volume(r.positions, r.index) / v0 - 1) * 100).toFixed(2)) + ' %)');
+  ok(r.ok && 10 * (1 - Math.cos(Math.PI / m)) <= 0.3 + 1e-9, 'the facets are within the deviation of the true cylinder (sag ' + (10 * (1 - Math.cos(Math.PI / m))).toFixed(3) + ')');
   ok(r.ok && recordSound(r), 'the CAD record is sound: faces in contiguous ranges that cover the mesh');
   // (a rim is a ring: its polyline ends where it starts, so it has one point more than the rim has places)
   ok(r.ok && r.cad.rows.length === 2 && r.cad.rows[0][1] === rimPts(r, 0) + 1 && r.cad.rows[1][1] === rimPts(r, 20) + 1, 'the rim polylines lost the points that went and match the rims (' + (r.ok && r.cad.rows.map(x => x[1]).join('/')) + ' for ' + (r.ok && rimPts(r, 0) + '/' + rimPts(r, 20)) + ' places)');

@@ -20,16 +20,21 @@ import { smoothSurface } from './smooth.js?v=3';
 import { convexHull, convexPieces } from './convex.js?v=2';
 import { removeBlends } from './defeature.js?v=4';
 import { simplifyRoundFaces } from './roundfaces.js?v=1';
-import { cleanProfile } from './profile.js?v=5';
+import { removeThickness } from './thickness.js?v=1';
+import { cleanProfile, keepHoles } from './profile.js?v=8';
 import { manifoldReady, mergeBodies, booleanOf } from './booleans.js?v=3';
 import { creasedNormals } from './voxel.js?v=2';
 import { carryUvs } from './uvcarry.js?v=2';
 
-const TOOLS = { closeCracks, removeSlivers, patchHoles, remeshEvenly, smoothSurface, convexHull, convexPieces, removeBlends, roundFaces: simplifyRoundFaces, removeCadFaces, remeshCadFaces, cleanProfile };
+const TOOLS = { closeCracks, removeSlivers, patchHoles, remeshEvenly, smoothSurface, convexHull, convexPieces, removeBlends, roundFaces: simplifyRoundFaces, removeThickness, removeCadFaces, remeshCadFaces, cleanProfile };
 
-function shade(r, deg) {
+function shade(r, deg, srcN) {
   if (!r || r.ok === false) return r || { ok: false, why: 'nothing came back' };
   if (!r.index || !r.index.length) return { ...r, ok: false, why: r.why || 'nothing is left of it' };
+  // A tool that only takes triangles away (or slides points along their own normal) keeps the part's own normals: a CAD part's are
+  // exact, and worked out again from the triangles (creased at 30°) a flat face next to a fillet took on the fillet's curve at its
+  // edge, which showed as a shading gradient on flat metal.
+  if (r.keepNormals && srcN && srcN.length === r.positions.length) return { ...r, ok: true, normals: Float32Array.from(srcN) };
   const g = creasedNormals(r.positions, r.index, deg ?? 30);
   return { ...r, ok: true, positions: g.positions, normals: g.normals, index: g.index };
 }
@@ -46,7 +51,11 @@ export async function runMeshOp(name, positions, index, opts = {}) {
   if (name === 'mergeBodies') return withUvs(shade(mergeBodies(await manifoldReady(), positions, index), opts.smoothDeg), srcP, srcI, uv);
   const fn = TOOLS[name];
   if (!fn) return { ok: false, why: 'no tool called ' + name };
-  return withUvs(shade(fn(positions, index, opts), opts.smoothDeg), srcP, srcI, uv);
+  let r = fn(positions, index, opts);
+  const srcN = opts.normals || null;
+  if (name === 'cleanProfile' && r && r.holeJob) { try { r = keepHoles(await manifoldReady(), positions, index, r, opts.offsetAbs); } catch (e) { r = { ...r, holesKept: 0, holesWhy: e.message || String(e) }; } }     // (the holes to keep: cut in with Manifold)
+  if (r && r.holeJob) r = { ...r, holeJob: null };
+  return withUvs(shade(r, opts.smoothDeg, srcN), srcP, srcI, uv);
 }
 
 export async function runBoolean(kind, a, b, opts = {}) {

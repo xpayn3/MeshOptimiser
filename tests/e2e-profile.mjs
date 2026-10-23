@@ -97,8 +97,8 @@ try {
   for (let i = 0; i < 20 && (await sum()).triangles === s0.triangles; i++) await sleep(250);
   const s1 = await sum();
   check('Apply: fewer triangles, still one part', s1.triangles < s0.triangles && s1.parts === s0.parts, { s0: s0.triangles, s1: s1.triangles });
-  await until(`(() => { const f = document.querySelector('#prop-shade input'); return !f || f.value === '45'; })()`);
-  const sh = await evalJS(`(() => { const p = window.state.parts.find(q => q.partId === ${pid}); const f = document.querySelector('#prop-shade input'); return { a: p.shadeAngle, field: f ? f.value : null }; })()`);
+  await until(`(() => { const f = document.querySelector('#prop-shade .scrub-value'); return !f || f.textContent === '45'; })()`);
+  const sh = await evalJS(`(() => { const p = window.state.parts.find(q => q.partId === ${pid}); const f = document.querySelector('#prop-shade .scrub-value'); return { a: p.shadeAngle, field: f ? f.textContent : null }; })()`);
   check('the part keeps its Shading angle, and Properties shows it', sh.a === 45 && (sh.field === null || sh.field === '45'), sh);
   // at 2° every face is lit flat: each corner's normal is its face's own
   await evalJS("window.__moAgent.profileSet('smooth', 2)");

@@ -147,6 +147,23 @@ try {
   await evalJS("document.getElementById('pf-run').click()"); await sleep(300);
   await call('undo'); await sleep(500);
   check('one undo puts both parts back', (await tris('profile_L')) === L0 && (await tris('bar_B')) === B0 && (await sum()).triangles === s0.triangles);
+
+  // ── the card follows the selection ──
+  await call('select_parts', { name_contains: 'profile_L' }); await sleep(200);
+  await evalJS('window.__moAgent.cleanProfile({})'); await sleep(300);
+  await evalJS("document.getElementById('pf-run').click()");
+  for (let i = 0; i < 40 && !(await evalJS('window.__moAgent.profileState()'))?.applied; i++) await sleep(250);
+  check('opened on the L and applied', (await evalJS('window.__moAgent.profileState()'))?.applied === true);
+  const L2 = await tris('profile_L'), B2 = await tris('bar_B');
+  await call('select_parts', { name_contains: 'bar_B' }); await sleep(700);
+  let fs1 = await evalJS('window.__moAgent.profileState()');
+  check('another part selected after Apply: the card moves to it, at Apply again', fs1 && fs1.summary.name === 'bar_B' && !fs1.applied && fs1.summary.profiles === 1
+    && (await evalJS("document.getElementById('pf-run-lbl').textContent")) === 'Apply' && (await evalJS("document.getElementById('pf-name').textContent")) === 'bar_B', fs1);
+  check('the L keeps what Apply made', (await tris('profile_L')) === L2 && (await tris('bar_B')) === B2);
+  await call('select_parts', { name_contains: 'pyramid_C' }); await sleep(700);
+  fs1 = await evalJS('window.__moAgent.profileState()');
+  check('a part that is no profile selected: the card stays on the bar', fs1 && fs1.summary.name === 'bar_B', fs1);
+  await evalJS('window.state.selected.clear()'); await evalJS("document.querySelector('.section-cmd[data-cmd=\"profile\"] .cmd-close')?.click()");
 } catch (e) { fail++; console.log('HARNESS ERROR:', e.message); }
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('page exceptions:', errors.length); errors.slice(0, 12).forEach(e => console.log('  ' + e));

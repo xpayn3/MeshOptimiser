@@ -9,11 +9,13 @@
 // points out and Alt-click takes one out at once. Edges that cross another are drawn red. The view knows
 // nothing of parts: the card shows it a section and hears of each edit (fast while a handle is being dragged, at most once a frame).
 //
-// sectionView(svg, { onEdit(shapes, fast, crossed), clampY }) → { show({ before, after, shapes }), setEdit(on), editing, fit(), reset() }
+// sectionView(svg, { onEdit(shapes, fast, crossed), clampY, mirrorY }) → { show({ before, after, shapes }), setEdit(on), editing, fit(), reset() }
 //   before, after: loops of [x, y] (y up; outlines counter-clockwise); shapes: the new section as [{ outer, holes }], the one the
 //   editor works on (a copy of it is made at the first edit and handed to onEdit from then on; null when an edit is taken back with
 //   Esc before there was one); crossed: an edge of it crosses another (told when a drag ends); clampY: no point below this y (a
-//   round part's profile: nothing past the axis).
+//   round part's profile: nothing past the axis); mirrorY: a number, or a function that gives one or null: the section is drawn a
+//   second time mirrored across the line y = mirrorY, lighter and with no points (it is not edited: it follows the half that is), so a
+//   turned part's profile shows the part's whole outline and not one half of it.
 
 const area = (L) => { let s = 0; for (let i = 0; i < L.length; i++) { const p = L[i], q = L[(i + 1) % L.length]; s += p[0] * q[1] - q[0] * p[1]; } return s / 2; };
 const pathOf = (loops) => loops.map(L => 'M' + L.map(p => p[0].toFixed(5) + ' ' + (-p[1]).toFixed(5)).join('L') + 'Z').join('');
@@ -50,6 +52,8 @@ export function sectionView(svg, hooks = {}) {
   const key = (s, l, p) => s + ':' + l + ':' + p;
   const pick = (s, l, p) => sel.set(key(s, l, p), { s, l, p });
   const clampY = Number.isFinite(hooks.clampY) ? hooks.clampY : -Infinity;
+  const mirrorY = () => { const m = typeof hooks.mirrorY === 'function' ? hooks.mirrorY() : hooks.mirrorY; return Number.isFinite(m) ? m : null; };
+  const mirrored = (loops, m) => loops.map(L => L.map(p => [p[0], 2 * m - p[1]]));
   const shapesNow = () => work || (data && data.shapes) || [];
   const loopOf = (sh, s, l) => { const S = sh[s]; return S ? (l === 0 ? S.outer : S.holes[l - 1]) : null; };
   const eachPoint = (fn) => shapesNow().forEach((S, s) => [S.outer, ...S.holes].forEach((L, l) => L.forEach((p, i) => fn(p, s, l, i))));
@@ -65,6 +69,7 @@ export function sectionView(svg, hooks = {}) {
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     for (const L of (data.before || []).concat(data.after || [])) for (const p of L) { if (!fin(p)) continue; x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
     if (!(x1 >= x0)) { x0 = y0 = 0; x1 = y1 = 1; }
+    { const m = mirrorY(); if (m !== null) { const a = 2 * m - y1, b = 2 * m - y0; y0 = Math.min(y0, a); y1 = Math.max(y1, b); } }      // (the mirrored half too)
     const w = x1 - x0 || 1, h = y1 - y0 || 1, pad = Math.max(w, h) * 0.02;
     return { x: x0 - pad, y: y0 - pad, w: w + 2 * pad, h: h + 2 * pad };
   }
@@ -85,7 +90,18 @@ export function sectionView(svg, hooks = {}) {
     }
     // (while the section is being edited the blue is drawn from the points themselves: the card hears of them a frame later at most)
     const after = work && edit ? work.flatMap(S => [S.outer, ...S.holes]) : (data.after || []);
-    let html = (grid ? '<path class="pf-grid" d="' + grid + '"/>' : '') + '<path class="pf-now" fill-rule="evenodd" d="' + pathOf(after) + '"/>'
+    let html = grid ? '<path class="pf-grid" d="' + grid + '"/>' : '';
+    {
+      const m = mirrorY();
+      if (m !== null) {
+        const ax0 = view.x - view.w, ax1 = view.x + 2 * view.w;
+        html += '<path class="pf-axis" d="M' + ax0.toFixed(5) + ' ' + (-m).toFixed(5) + 'H' + ax1.toFixed(5) + '"/>'
+          + '<path class="pf-now pf-mirror" fill-rule="evenodd" d="' + pathOf(mirrored(after, m)) + '"/>'
+          + '<path class="pf-was pf-mirror" d="' + pathOf(mirrored(before.filter(L => area(L) > 0), m)) + '"/>'
+          + '<path class="pf-was pf-hole pf-mirror" d="' + pathOf(mirrored(before.filter(L => area(L) < 0), m)) + '"/>';
+      }
+    }
+    html += '<path class="pf-now" fill-rule="evenodd" d="' + pathOf(after) + '"/>'
       + '<path class="pf-was" d="' + pathOf(before.filter(L => area(L) > 0)) + '"/>'
       + '<path class="pf-was pf-hole" d="' + pathOf(before.filter(L => area(L) < 0)) + '"/>';
     if (bad && bad.length) html += '<path class="pf-bad" d="' + bad.map(([a, b]) => 'M' + a[0].toFixed(5) + ' ' + (-a[1]).toFixed(5) + 'L' + b[0].toFixed(5) + ' ' + (-b[1]).toFixed(5)).join('') + '"/>';

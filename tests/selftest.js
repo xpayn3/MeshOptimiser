@@ -1350,7 +1350,7 @@
     const txt = () => document.getElementById('prop-body').innerText.replace(/\s+/g, ' ');
     const tris = () => T.live().reduce((a, p) => a + p.triCount, 0);
     await T.sleep(200);
-    T.assert(/Parts 2\b/.test(txt()) && txt().includes(tris().toLocaleString() + ' tris'), 'no scene totals with nothing selected: ' + txt());
+    T.assert(/\b2 parts\b/.test(txt()) && txt().includes(tris().toLocaleString() + ' tris'), 'no scene totals with nothing selected: ' + txt());
     T.assert(!/No selection/.test(txt()), 'the card still says "No selection"');
     T.eq(document.getElementById('vp-tris').textContent, tris().toLocaleString(), 'viewport triangle count for a scene made of shapes');
     T.eq(document.getElementById('sb-tris').textContent, tris().toLocaleString(), 'status-bar triangle count for a scene made of shapes');
@@ -1361,9 +1361,24 @@
     await T.pick(['Sphere']); T.act('delete'); await T.sleep(500);
     const d = document.getElementById('vp-tris-delta');
     T.assert(d.classList.contains('show') && d.textContent.startsWith('\u2212') && d.textContent.includes((before - tris()).toLocaleString()), 'no triangle delta after a delete: "' + d.textContent + '"');
-    T.assert(/Parts 1\b/.test(txt()) && /% of original/.test(txt()) && document.querySelector('#prop-body .prop-hero-badge'), 'the scene card did not follow the delete: ' + txt());
+    T.assert(/\b1 part\b/.test(txt()) && /% of original/.test(txt()) && document.querySelector('#prop-body .prop-hero-badge'), 'the scene card did not follow the delete: ' + txt());
     await T.undo(); await T.sleep(200);
     T.assert(d.classList.contains('show') && d.textContent.startsWith('+'), 'undo did not show the triangles coming back: "' + d.textContent + '"');
+  });
+
+  test('properties: the card is as high for the scene, a part and two parts, and its figures do not clip', async () => {
+    await T.fresh(['cube', 'sphere']);
+    // from the name to the foot of the Shading angle (the shape parameters of a primitive come under the card and are not part of it)
+    const h = () => { const b = document.getElementById('prop-body'); return Math.round(b.querySelector('#prop-shade').getBoundingClientRect().bottom - b.querySelector('.prop-head').getBoundingClientRect().top); };
+    await T.sleep(200);
+    const scene = h();
+    await T.pick(['Cube']); await T.sleep(100);
+    T.eq(h(), scene, 'the card is not as high for one part as for the scene');
+    const size = document.querySelector('#prop-body .prop-stat.wide .prop-value');
+    T.assert(size && size.scrollWidth <= size.clientWidth, 'the size is clipped in the card');
+    await T.pick(['Cube', 'Sphere']); await T.sleep(100);
+    T.eq(h(), scene, 'the card is not as high for two parts as for the scene');
+    T.assert(/Whole scene/.test(document.getElementById('prop-body').innerText), 'selecting every part does not say it is the whole scene');
   });
 
   test('shape parameters: one line each, dragging the number changes the shape in one undo step', async () => {

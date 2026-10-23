@@ -1,9 +1,9 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=34';
-import { installHoleFillCard } from './holefill-card.js?v=1';
-import { installProfileCard } from './profile-card.js?v=14';
-import { installRoundCard } from './round-card.js?v=12';
+import { installHoleFillCard } from './holefill-card.js?v=2';
+import { installProfileCard } from './profile-card.js?v=21';
+import { installRoundCard } from './round-card.js?v=18';
 import { installDecimateCard } from './decimate-card.js?v=3';
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
@@ -11,7 +11,7 @@ import { fillRoundGrooves, outlineRevolve, sweepBelt } from './revolve.js?v=8';
 import { voxelRemesh } from './voxel.js?v=4';
 import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=19';
 import { carryUvs } from './uvcarry.js?v=2';
-import { createPhoto } from './photo.js?v=10';
+import { createPhoto } from './photo.js?v=14';
 import { createStage } from './photo-stage.js?v=4';
 import * as MEDIT from './meshedit.js?v=6';
 import { dissolvePoints } from './dissolve.js?v=3';
@@ -25,6 +25,9 @@ import { findRepeats } from './repeats.js?v=1';
 import { checkMesh } from './meshcheck.js?v=3';
 import * as FM from './facemat.js?v=2';
 import { setExportTextureFormats } from './texformat.js?v=1';
+import { installExportWriters } from './export-writers.js?v=1';
+import { installAnim } from './anim.js?v=1';
+import { installSectionPlane } from './section-plane.js?v=1';
 import * as TS from './texsets.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -676,7 +679,9 @@ document.addEventListener('pointerdown', (e) => {
 const _sliderFill = (() => {
   const set = (el) => {
     const mn = parseFloat(el.min) || 0, mx = el.max === '' ? 100 : parseFloat(el.max), v = parseFloat(el.value);
-    el.style.setProperty('--sl-pct', (mx > mn && v === v ? Math.max(0, Math.min(1, (v - mn) / (mx - mn))) * 100 : 0) + '%');
+    const f = mx > mn && v === v ? Math.max(0, Math.min(1, (v - mn) / (mx - mn))) : 0;
+    el.style.setProperty('--sl-pct', f * 100 + '%');
+    if (el.classList.contains('range-bar') && !el.dataset.barZero) _barFill(el, 0, f);      // (a bar that goes both ways fills from its middle: initScrubber does that one)
   };
   const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
   if (d && d.set && d.get) Object.defineProperty(HTMLInputElement.prototype, 'value', { configurable: true, enumerable: d.enumerable, get: d.get, set(v) { d.set.call(this, v); if (this.type === 'range') set(this); } });
@@ -797,9 +802,11 @@ function _fillField(id, { min, max, step, dec = 0 }) {
 const _SCRUB_TIP = 'Drag to change, click to type';
 
 // A plain number field that can also be dragged sideways. `step` is what one
-// notch is worth; the field keeps `decimals` places.
-function _scrubField(input, { min = 0, max = 1e6, step = 1, decimals = 0 } = {}) {
+// notch is worth; the field keeps `decimals` places. bar: [lo, hi] puts the app's fill-bar slider in its row (a .cmd-num), the
+// row's name inside it, covering lo … hi (a number typed outside that stays; the bar shows it at its end).
+function _scrubField(input, { min = 0, max = 1e6, step = 1, decimals = 0, bar = null } = {}) {
   if (!input) return;
+  if (bar && input.closest('.cmd-num')) _barOnField(input, bar[0], bar[1], step, decimals);
   const fmt = (n) => String(parseFloat((n * step).toFixed(decimals)));
   const read = () => { const v = parseFloat(String(input.value).replace(',', '.')); return Number.isFinite(v) ? v : min; };
   const opts = {
@@ -811,6 +818,59 @@ function _scrubField(input, { min = 0, max = 1e6, step = 1, decimals = 0 } = {})
   _scrubDrag(input, opts);
   const wrap = input.closest('.size-field');
   if (wrap) { for (const lab of wrap.querySelectorAll('span')) _scrubDrag(lab, opts); wrap.title = wrap.title ? wrap.title + ' · ' + _SCRUB_TIP.toLowerCase() : _SCRUB_TIP; }
+}
+
+// While a fill-bar slider is pressed, its row carries .is-held (the name inside it fades). A class on the one row, not a :has(:active)
+// rule: that one made every press anywhere in the app re-check the whole page.
+function _barHeld(rng, row) {
+  if (!rng || !row) return;
+  const off = () => row.classList.remove('is-held');
+  rng.addEventListener('pointerdown', () => row.classList.add('is-held'));
+  rng.addEventListener('pointerup', off); rng.addEventListener('pointercancel', off); rng.addEventListener('lostpointercapture', off); rng.addEventListener('blur', off);
+}
+
+// The fill of a fill-bar slider (.range-bar), from lo to hi (shares of its range, 0 … 1): the CSS puts each end where the handle's
+// middle would be at that value; an end at 0 or 1 is the bar's own edge, so a bar at 0 shows no fill and a full one fills to the end.
+function _barFill(rng, lo, hi) {
+  if (!rng) return;
+  lo = Math.max(0, Math.min(1, lo || 0)); hi = Math.max(0, Math.min(1, hi || 0));
+  rng.style.setProperty('--bf-lo', String(lo)); rng.style.setProperty('--bf-lo-k', lo > 0 ? '1' : '0');
+  rng.style.setProperty('--bf-hi', String(hi)); rng.style.setProperty('--bf-hi-k', hi > 0 ? '1' : '0'); rng.style.setProperty('--bf-hi-full', hi >= 1 ? '1' : '0');
+}
+
+// The fill-bar slider for a number field in a .cmd-num row: the bar goes in beside the field with the row's name inside it, and the
+// two follow each other (the field's value set by code too). Shift while dragging snaps to twentieths of lo … hi.
+function _barOnField(input, lo, hi, step, decimals) {
+  const row = input.closest('.cmd-num'); if (!row || row.classList.contains('has-bar')) return;
+  const name = row.querySelector(':scope>span');
+  const rng = document.createElement('input');
+  rng.type = 'range'; rng.className = 'range-bar field-bar'; rng.min = String(lo); rng.max = String(hi); rng.step = String(step);
+  rng.setAttribute('aria-label', name ? name.textContent.trim() : '');
+  if (name) name.after(rng); else row.prepend(rng);
+  row.classList.add('has-bar'); _barHeld(rng, row);
+  const sync = () => {
+    const v = parseFloat(String(input.value).replace(',', '.')), c = Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo;
+    rng.value = String(c); rng.style.setProperty('--sl-pct', ((c - lo) / (hi - lo || 1) * 100) + '%'); _barFill(rng, 0, (c - lo) / (hi - lo || 1));
+  };
+  const own = Object.getOwnPropertyDescriptor(input, 'value'), d = own || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  if (d && d.set) Object.defineProperty(input, 'value', { configurable: true, get() { return d.get.call(this); }, set(v) { d.set.call(this, v); sync(); } });
+  input.addEventListener('input', sync); input.addEventListener('change', sync);
+  let shift = false;
+  const track = (e) => { shift = !!e.shiftKey; };
+  rng.addEventListener('pointerdown', track, true); rng.addEventListener('pointermove', track, true); rng.addEventListener('pointerup', () => { shift = false; }, true);
+  rng.addEventListener('input', () => {
+    let v = +rng.value;
+    if (shift) { const u = (hi - lo) / 20; v = Math.max(lo, Math.min(hi, lo + Math.round((v - lo) / u) * u)); }
+    input.value = String(parseFloat(v.toFixed(decimals)));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  rng.addEventListener('change', () => input.dispatchEvent(new Event('change', { bubbles: true })));
+  sync();
+}
+
+// The number fields that show the fill bar without a panel of their own setting them up: [id, lo, hi, step, decimals]
+for (const [id, lo, hi, step, dec] of [['fit-circ', 0.5, 1, 0.01, 2], ['fit-waste', 1, 3, 0.01, 2], ['fit-aspect', 0, 10, 0.1, 1], ['sh-max', 0, 100, 1, 0]]) {
+  const el = document.getElementById(id); if (el) _barOnField(el, lo, hi, step, dec);
 }
 
 // Every number field in the app can be dragged sideways, not only the ones a
@@ -862,12 +922,16 @@ if (typeof document !== 'undefined') {
   document.addEventListener('pointerdown', wire, true);          // touch and pen never hover first
 }
 
+// The fill-bar look (the name above; under it one row, a thick bar that fills and the number at its end) is every slider's, the
+// right sidebar's too; bar: false keeps the old thin one, and a slider in a material row (its own compact layout) keeps it too.
+// zero: the step the fill starts from (the middle of a slider that goes both ways); the fill runs from there to the value.
 function _initScrubberImpl({
   el, label = '', maxSteps, stepToVal, valToStep, format, onChange,
-  initialValue = 0,
+  initialValue = 0, bar = true, zero = null,
 }) {
   const cont = (typeof el === 'string') ? document.getElementById(el) : el;
   if (!cont) { console.warn(`[scrub] container not found: ${el}`); return null; }
+  if (bar && cont.closest('.mat-row-val')) bar = false;
   cont.classList.add('scrub');
   cont.innerHTML = `
     <div class="scrub-head">
@@ -883,6 +947,14 @@ function _initScrubberImpl({
   const unitEl  = cont.querySelector('.scrub-unit');
   const range   = cont.querySelector('.scrub-range');
   labelEl.textContent = label;
+  if (bar) {
+    const row = document.createElement('div'); row.className = 'scrub-row';
+    range.before(row); row.append(range, cont.querySelector('.scrub-rhs'));
+    cont.classList.add('scrub-bar'); range.classList.add('range-bar'); if (zero != null) range.dataset.barZero = '1';
+    if (cont.parentElement && cont.parentElement.classList.contains('field')) cont.parentElement.classList.add('has-scrub-bar');
+    _barHeld(range, cont);
+    if (zero != null && maxSteps > 0) { cont.classList.add('has-zero'); range.style.setProperty('--sl-z', (zero / maxSteps * 100) + '%'); }
+  }
 
   const initStep = Math.max(0, Math.min(maxSteps, Math.round(valToStep(initialValue))));
   range.value = String(initStep);
@@ -895,6 +967,11 @@ function _initScrubberImpl({
     unitEl.textContent = f.unit || '';
     const pct = maxSteps > 0 ? (s / maxSteps * 100) : 0;
     cont.style.setProperty('--scrub-pct', pct + '%');
+    if (bar) {
+      const z = zero != null && maxSteps > 0 ? zero / maxSteps * 100 : 0;
+      _barFill(range, Math.min(z, pct) / 100, Math.max(z, pct) / 100);
+      cont.classList.toggle('is-zero', s === (zero != null ? zero : 0));
+    }
   }
   _syncDisplay();
 
@@ -913,7 +990,19 @@ function _initScrubberImpl({
   // input listener below reads range.value the snap already happened.
   _attachWheelStepBehavior(range);
 
+  // With bar, Shift held while dragging (or pressing) on the bar snaps the value to twentieths of the range, counted from 0 (the
+  // middle, on a slider that goes both ways), so 0 is easy to land on.
+  let _shiftHeld = false;
+  if (bar) {
+    const track = (e) => { _shiftHeld = !!e.shiftKey; };
+    range.addEventListener('pointerdown', track, true); range.addEventListener('pointermove', track, true);
+    range.addEventListener('pointerup', () => { _shiftHeld = false; }, true);
+  }
   range.addEventListener('input', () => {
+    if (bar && _shiftHeld) {
+      const z = zero != null ? zero : 0, unit = Math.max(1, Math.round(maxSteps / 20)), s = parseInt(range.value, 10) || 0;
+      range.value = String(Math.max(0, Math.min(maxSteps, z + Math.round((s - z) / unit) * unit)));
+    }
     _syncDisplay();
     _pendingVal = stepToVal(parseInt(range.value, 10) || 0);
     if (!_rafId) _rafId = requestAnimationFrame(_flush);
@@ -3762,6 +3851,29 @@ const _Settings = (() => {
       _toggleRow('set-dyn-res', 'Lower the resolution if it stutters', (() => { try { return _MotionPerf.dynRes(); } catch (_) { return false; } })(), 'On a scene too heavy to move smoothly, the picture is drawn a little coarser while it moves and sharp again when it stops. A scene that moves freely is left alone.'));
     $s('set-cull-small')?.addEventListener('change', e => { try { _MotionPerf.setCullSmall(e.target.checked); } catch (_) {} });
     $s('set-dyn-res')?.addEventListener('change', e => { try { _MotionPerf.setDynRes(e.target.checked); } catch (_) {} });
+    // the view's edges and resolution: multisampling (made with the renderer) and the Quality of the view's settings (#perf-mode)
+    {
+      const running = (() => { try { return (renderer?.samples || 0) > 0; } catch (_) { return _gfxMsaa(); } })();
+      const RES = [['auto', 'Auto'], ['high', 'Full'], ['low', 'Low']];
+      $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('Edges and resolution') +
+        _toggleRow('set-msaa', 'Smooth edges', _gfxMsaa(), 'Every edge is drawn with four samples a pixel (multisampling), so it is smooth instead of stepped. Off: a little faster on a weak graphics card. Takes effect when the app is loaded again.') +
+        `<div class="set-row set-action" id="set-msaa-reload-row" hidden><span>Reload to apply<span class="set-help">The view is drawn ${running ? 'with' : 'without'} smooth edges until the app is loaded again. Unsaved work is asked about first.</span></span><button class="btn" id="set-msaa-reload">Reload</button></div>` +
+        `<div class="set-row set-stack"><span>Resolution<span class="set-help">Auto: the screen's own pixels on a light scene, fewer on a heavy one (down to three quarters), so it stays smooth. Full: always the screen's pixels, up to twice on a sharp screen. Low: six tenths, for scenes of millions of triangles. The same as Quality in the view's settings.</span></span>` +
+        `<div class="cmd-seg" id="set-res" role="radiogroup" aria-label="Resolution">${RES.map(([v, l]) => `<button type="button" role="radio" data-v="${v}">${l}</button>`).join('')}</div></div>`);
+      const showRes = () => { const cur = $('perf-mode')?.value || state.perfMode || 'auto'; for (const b of $s('set-res')?.children || []) { const on = b.dataset.v === cur; b.classList.toggle('active', on); b.setAttribute('aria-checked', String(on)); } };
+      showRes();
+      $s('set-res')?.addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-v]'); const sel = $('perf-mode'); if (!b || !sel) return;
+        if (sel.value !== b.dataset.v) { sel.value = b.dataset.v; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+        showRes();
+      });
+      $('perf-mode')?.addEventListener('change', showRes);      // (set in the view's settings, or by a scene that is opened)
+      $s('set-msaa')?.addEventListener('change', e => {
+        try { if (e.target.checked) localStorage.removeItem('stepopt-gfx-msaa'); else localStorage.setItem('stepopt-gfx-msaa', '0'); } catch (_) {}
+        const row = $s('set-msaa-reload-row'); if (row) row.hidden = e.target.checked === running;
+      });
+      $s('set-msaa-reload')?.addEventListener('click', () => location.reload());
+    }
     // what the still picture is drawn with (_sharpTex, _shadowMapSize)
     $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('Picture quality') +
       _toggleRow('set-sharp-tex', 'Sharp textures at an angle', _gfxSharpTex(), 'Textures on a surface seen at a slant, like a table top going away from you, stay sharp instead of blurring. Costs very little on any recent graphics card.') +
@@ -3814,8 +3926,8 @@ const _Settings = (() => {
     });
     $s('set-clear-layout')?.addEventListener('click', () => {
       const root = document.documentElement;
-      for (const k of ['stepopt-dock-h', 'stepopt-mat-dock-h', 'stepopt-mat-insp-w', 'stepopt-lib-dock-h', 'stepopt-lib-insp-w', 'stepopt-anim-dock-h', 'stepopt-console-h']) { try { localStorage.removeItem(k); } catch (_) {} }
-      for (const p of ['--dock-h', '--mat-insp-w', '--lib-insp-w']) root.style.removeProperty(p);
+      for (const k of ['stepopt-dock-h', 'stepopt-mat-dock-h', 'stepopt-mat-insp-w', 'stepopt-lib-dock-h', 'stepopt-lib-insp-w', 'stepopt-anim-insp-w', 'stepopt-anim-dock-h', 'stepopt-console-h']) { try { localStorage.removeItem(k); } catch (_) {} }
+      for (const p of ['--dock-h', '--mat-insp-w', '--lib-insp-w', '--adk-iw']) root.style.removeProperty(p);
       document.getElementById('resize-l')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       document.getElementById('resize-r')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       toast('Panel sizes reset', '', 'success');
@@ -4126,6 +4238,8 @@ const _Settings = (() => {
       _toggleRow('set-welcome', 'Start screen', p.welcomeOnBoot, 'Show the start screen when the app opens.') +
       _toggleRow('set-restore', 'Offer the last file', p.autoRestoreSession, 'A Resume button for the file you had open last.') +
       `<div id="set-console-row" hidden>${_toggleRow('set-console', 'Show a terminal window', false, 'The window with the app’s log, kept open behind it. Off: MeshOptimiser opens with no window of its own. It applies from the next time you start it from its shortcut.')}</div>` +
+      _group('Sound') +
+      _toggleRow('set-sounds', 'Interface sounds', p.uiSounds !== false, 'Soft clicks from the gizmos and quick wheels of the viewport: the lens rings of Photo mode as they turn and catch on a mark, the command wheel (Q), the colour wheel and the quick remesh pill (B) as they open and go from one choice to the next. Made by the app itself, quiet and short.') +
       _group('Opening files') +
       _toggleRow('set-autofit', 'Fit the view after loading', p.autoFitOnLoad, 'Frame the whole model as soon as it opens.') +
       _group('Tabs') +
@@ -4216,7 +4330,7 @@ const _Settings = (() => {
     $s('set-sel-glow')?.addEventListener('change', (e) => { _Prefs.set('selGlow', e.target.checked); state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} });
     $s('set-hilite')?.addEventListener('change', (e) => { const t = $s('toggle-highlight'); if (t) { t.checked = e.target.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } });
     [
-      ['set-splash', 'splashOnStart'], ['set-welcome', 'welcomeOnBoot'], ['set-restore', 'autoRestoreSession'], ['set-autofit', 'autoFitOnLoad'],
+      ['set-splash', 'splashOnStart'], ['set-sounds', 'uiSounds'], ['set-welcome', 'welcomeOnBoot'], ['set-restore', 'autoRestoreSession'], ['set-autofit', 'autoFitOnLoad'],
       ['set-confirm', 'confirmDestructive'], ['set-share-dock-h', 'shareDockHeight'], ['set-warn-unsaved', 'warnUnsaved'], ['set-auto-empty', 'autoDeleteEmptyGroups'], ['set-zoom-cursor', 'zoomToCursor'], ['set-hover-link', 'hoverLink'], ['set-orbit-invert', 'orbitInvert'], ['set-orbit-limit', 'orbitLimit'], ['set-offscreen', 'offscreenArrow'],
     ].forEach(([id, key]) => {
       $s(id)?.addEventListener('change', e => {
@@ -5175,7 +5289,7 @@ const _LastTool = (() => {
 const _Actions = (() => {
   const _click = id => { const f = () => document.getElementById(id)?.click(); f.btnId = id; return f; };      // (btnId: the button a command presses, so the last-tool button can show that button's icon)
   const list = [
-    { id:'claudemode',   group:'File',       label:'Claude mode (alpha)', words:'claude mode (alpha): follow claude as a feed', run: async () => { if (!(await _askClaudeMode())) return; try { window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} } },
+    { id:'claudemode',   group:'File',       label:'Claude mode', words:'claude mode (alpha): follow claude as a feed', run: async () => { if (!(await _askClaudeMode())) return; try { window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} } },
     { id:'newscene',     group:'File',       label:'New scene',                  kbd:'Alt+N', alt:'Ctrl+N', run: () => { try { newScene(); } catch (_) {} } },
     { id:'open',         group:'File',       label:'Open file…',                 kbd:'Ctrl+O', run: () => _openWithPicker() },
     { id:'import',       group:'File',       label:'Import…',                    kbd:'Ctrl+Shift+O', run: () => _importWithPicker() },
@@ -5190,16 +5304,16 @@ const _Actions = (() => {
     { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: () => { try { if ((state.selected.size > 0 || state.selectedSpline != null) && typeof frameSelected === 'function') frameSelected(); else fitToView(); } catch (_) {} } },
     { id:'revert',       group:'File',       label:'Revert to source file…',     run: () => { try { _revertToSourceFile(); } catch (_) {} } },
     { id:'frameSel',     group:'View',       label:'Frame selection',            kbd:'F', run: () => { try { frameSelected(); } catch (_) {} } },
-    { id:'camPersp',     group:'View',       label:'Camera view (Perspective)',  kbd:'Ctrl+1', run: () => { try { _setPerspectiveView(); } catch (_) {} } },
+    { id:'camPersp',     group:'View',       label:'Perspective view', words:'camera view perspective', kbd:'Ctrl+1', run: () => { try { _setPerspectiveView(); } catch (_) {} } },
     { id:'camTop',       group:'View',       label:'Top view',                   kbd:'Ctrl+2', run: () => { try { _setStandardView('top'); } catch (_) {} } },
     { id:'camFront',     group:'View',       label:'Front view',                 kbd:'Ctrl+3', run: () => { try { _setStandardView('front'); } catch (_) {} } },
     { id:'camSide',      group:'View',       label:'Side view',                  kbd:'Ctrl+4', run: () => { try { _setStandardView('side'); } catch (_) {} } },
     { id:'solid',        group:'View',       label:'Solid view',                 kbd:'Alt+1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
     { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'Alt+2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
     { id:'xray',         group:'View',       label:'X-ray view',                 kbd:'Alt+3', run: () => { try { setViewMode('xray'); } catch (_) {} } },
-    { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'E', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
-    { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'R', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
-    { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
+    { id:'gzMove',       group:'View',       label:'Translate gizmo', words:'move gizmo translate shift snap 10', kbd:'E', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
+    { id:'gzRotate',     group:'View',       label:'Rotate gizmo', words:'rotate gizmo turn shift snap 15', kbd:'R', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
+    { id:'gzScale',      group:'View',       label:'Scale gizmo', words:'scale gizmo size shift snap', kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
     { id:'gzPlace',      group:'View',       icon:'dynamic-place', label:'Dynamic place on surfaces', words:'dynamic place: drag the selection over surfaces', kbd:'D', run: () => { try { _DynPlace.toggle(); } catch (_) {} } },
     { id:'gzAxes',       group:'View',       label:'Gizmo axes: World / Local',            kbd:'W', words:'coordinate system world local toggle axes gizmo', run: () => { try { _toggleGizmoAxes(); } catch (_) {} } },
     { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
@@ -5254,6 +5368,7 @@ const _Actions = (() => {
     { id:'fillGrooves',   group:'Edit',       label:'Round part: remove ridges', words:'round part remove ridges fill grooves threads defeature smooth turned lathe revolve spool bushing pulley rebuild profile section edit points', run: () => { try { window.__moAgent && window.__moAgent.roundCard && window.__moAgent.roundCard({ mode: 'exact' }); } catch (_) {} } },
     { id:'closeCracks', group:'Edit', label:'Close cracks', words:'close cracks gaps stitch seams t-junctions weld open edges watertight repair cad', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('closeCracks'); } catch (_) {} } },
     { id:'removeSlivers', group:'Edit', label:'Remove slivers', words:'remove slivers needles thin triangles caps clean degenerate repair cad', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('removeSlivers'); } catch (_) {} } },
+    { id:'removeThickness', group:'Edit', label:'Remove thickness', words:'remove thickness wall thin sheet shell surface pipe tube hollow one side mid surface middle plane single layer', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('removeThickness'); } catch (_) {} } },
     { id:'roundFaces', group:'Edit', label:'Simplify round faces', words:'simplify round faces fewer segments facets cylinders fillets bores coarser cad step decimate', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('roundFaces'); } catch (_) {} } },
     { id:'removeBlends', group:'Edit', label:'Remove fillets and chamfers', words:'remove fillets chamfers blends rounds defeature sharp edges simplify cad step faces', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('removeBlends'); } catch (_) {} } },
     { id:'patchHoles', group:'Edit', label:'Patch holes', words:'patch holes fill holes curved openings fair close repair', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('patchHoles'); } catch (_) {} } },
@@ -5276,7 +5391,7 @@ const _Actions = (() => {
     { id:'diagnostics',  group:'App',        label:'Copy diagnostics for a bug report', run: () => _copyDiagnostics() },
     { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { _CmdCards.open('reduce'); const el = document.getElementById('budget-target'); if (el) { el.focus(); el.select(); } } },
     { id:'stackedCopies', group:'Selection', label:'Find stacked copies…',       run: () => _CmdCards.open('stacked') },
-    { id:'lettering',     group:'Edit',      label:'Remove lettering and logos&', run: () => _CmdCards.open('lettering') },
+    { id:'lettering',     group:'Edit',      label:'Remove lettering and logos…', run: () => _CmdCards.open('lettering') },
     { id:'selHidden',    group:'Selection',  label:'Select hidden parts…',       run: () => _CmdCards.open('selhidden') },
     { id:'selRule',      group:'Selection',  label:'Select by rule…',            run: () => _CmdCards.open('selrule') },
     { id:'repairMesh',   group:'Edit',       label:'Repair mesh…',               run: () => _CmdCards.open('repair') },
@@ -5289,6 +5404,7 @@ const _Actions = (() => {
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
     { id:'library',      group:'App',        label:'Library',                    kbd:'Shift+L', run: _click('tg-library') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
+    { id:'section',      group:'View',       label:'Section view', words:'section clip plane cut cross slice', icon:'scissors-line-dashed', run: () => window.__moSectionPlane?.toggle() },
     { id:'noteAdd',      group:'View',       label:'Add a note', words:'note comment pin review leave', icon:'sticky-note-plus', kbd:'N', run: () => { try { window.MONotesUI.togglePlace(); } catch (_) {} } },
     { id:'noteSel',      group:'View',       label:'Add a note to the selected part', words:'note comment pin review', icon:'sticky-note-plus', run: () => { try { window.MONotesUI.addForSelection(); } catch (_) {} } },
     { id:'noteScene',    group:'View',       label:'Add a note about the whole scene', words:'note comment review', icon:'sticky-note-plus', run: () => { try { window.MONotesUI.addForScene(); } catch (_) {} } },
@@ -5318,8 +5434,8 @@ const _Actions = (() => {
     { id:'selOriginal',  group:'Selection',  label:'Select the original of an instance', words: 'master source parent first copy', run: () => selectInstanceOriginal() },
     { id:'makeUnique',   group:'Edit',       label:'Make unique',                words: 'instance shared geometry own copy detach', run: () => makeUnique() },
     { id:'selColour',    group:'Selection',  label:'Select by colour',           run: _click('btn-select-color') },
-    { id:'selName',      group:'Selection',  label:'Select by name (regex)',     run: _click('btn-select-regex') },
-    { id:'selLayer',     group:'Selection',  label:'Select by layer&', words:'select by cad step layer layers', run: () => { try { _selectByLayerMenu(); } catch (_) {} } },
+    { id:'selName',      group:'Selection',  label:'Select by name', words:'select by name regex pattern', run: _click('btn-select-regex') },
+    { id:'selLayer',     group:'Selection',  label:'Select by layer…', words:'select by cad step layer layers', run: () => { try { _selectByLayerMenu(); } catch (_) {} } },
     { id:'splitAll',     group:'Edit',       label:'Split every mesh',           run: _click('btn-split-all') },
     { id:'measureClear', group:'View',       label:'Delete every measurement',   run: _click('msr-clear') },
     { id:'explodeReset', group:'View',       label:'Put exploded parts back',    run: _click('btn-explode-reset') },
@@ -5603,7 +5719,7 @@ const _CmdK = (() => {
   const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'booleanCard', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
   const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
-    'flagSliver', 'isolateSmall', 'deleteSmall', 'smallParts', 'splitAll', 'split', 'fillHoles', 'removeBlends', 'roundFaces', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
+    'flagSliver', 'isolateSmall', 'deleteSmall', 'smallParts', 'splitAll', 'split', 'fillHoles', 'removeBlends', 'roundFaces', 'removeThickness', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
   function _cmdOff(a) {
     const id = a && a.id; if (!id || typeof id !== 'string') return null;
     try {
@@ -5939,28 +6055,28 @@ const _Shortcuts = (() => {
   const EXTRA = [
     { group:'Mouse',  label:'Orbit',                                  kbd:'Left-drag' },
     { group:'Mouse',  label:'Pan',                                    kbd:'Middle-drag', alt:'Right-drag' },
-    { group:'Mouse',  label:'Zoom (toward the cursor)',               kbd:'Scroll' },
+    { group:'Mouse',  label:'Zoom',               kbd:'Scroll' },
     { group:'Mouse',  label:'Select a part',                          kbd:'Click' },
     { group:'Mouse',  label:'Add to the selection',                   kbd:'Shift+Click' },
     { group:'Mouse',  label:'Toggle in the selection',                kbd:'Ctrl+Click' },
     { group:'Mouse',  label:'Box select',                             kbd:'Ctrl+Drag' },
     { group:'Mouse',  label:'Box select, adding to the selection',    kbd:'Ctrl+Shift+Drag' },
     { group:'Mouse',  label:'Context menu',                           kbd:'Right-click' },
-    { group:'Mouse',  label:'Photo mode: focus the depth of field there', kbd:'Alt+Click' },
+    { group:'Mouse',  label:'Photo: focus here', kbd:'Alt+Click' },
     { group:'Tree',   label:'Select a row',                           kbd:'Click' },
     { group:'Tree',   label:'Select a range of rows',                 kbd:'Shift+Click' },
     { group:'Tree',   label:'Toggle a row in the selection',          kbd:'Ctrl+Click' },
     { group:'Tree',   label:'Rename a part or group',                 kbd:'Double-click' },
     { group:'Tree',   label:'Move rows into a group',                 kbd:'Drag' },
-    { group:'Tree',   label:'The row above, the row below (after a click in the tree)', kbd:'↑', alt:'↓', short:'Row' },
+    { group:'Tree',   label:'The row above, the row below', kbd:'↑', alt:'↓', short:'Row' },
     { group:'Tree',   label:'Extend the selection a row',             kbd:'Shift+↑', alt:'Shift+↓', short:'Extend' },
-    { group:'Tree',   label:'Open a group, close it (or go to its group)', kbd:'→', alt:'←', short:'Group' },
+    { group:'Tree',   label:'Open a group, close it', kbd:'→', alt:'←', short:'Group' },
     { group:'Tree',   label:'The first row, the last row',            kbd:'Home', alt:'End', short:'Row' },
     { group:'Fields', label:'Change a number by dragging it',         kbd:'Drag' },
     { group:'Fields', label:'…ten times faster',                      kbd:'Shift+Drag' },
     { group:'Fields', label:'…ten times finer',                       kbd:'Alt+Drag' },
     { group:'Fields', label:'Type a number',                          kbd:'Click' },
-    { group:'Panels', label:'Run the open command (Split, Remove holes…)', kbd:'Enter', short:'Run' },
+    { group:'Panels', label:'Run the open command', kbd:'Enter', short:'Run' },
     { group:'Panels', label:'Close the open command',                 kbd:'Esc', short:'Close' },
     { group:'Panels', label:'Apply a batch rename',                   kbd:'Ctrl+Enter', short:'Apply' },
   ];
@@ -6171,8 +6287,15 @@ const _Shortcuts = (() => {
       if (q && !`${en.label} ${en.group} ${en.binds.map(pretty).join(' ')}`.toLowerCase().includes(q)) return false;
       return true;
     });
-    const chip = $('sc-keyfilter');
-    if (chip) { chip.hidden = !keyFilter; chip.innerHTML = keyFilter ? `Key <kbd class="kbd-chip">${_esc(keyFilter)}</kbd><i data-lucide="x" aria-hidden="true"></i>` : ''; }
+    // the key picked on the keyboard: its card under the search (the cap, and how many commands are on it)
+    const card = $('sc-keycard');
+    if (card) {
+      card.hidden = !keyFilter;
+      if (keyFilter) {
+        const cap = $('sc-keycap'); if (cap) cap.textContent = keyFilter;
+        const n = $('sc-keycard-n'); if (n) n.textContent = rows.length ? rows.length + (rows.length === 1 ? ' command' : ' commands') + ' on it' : 'Nothing on it yet';
+      }
+    }
     $('sc-all')?.classList.toggle('active', showAll);
     if (!rows.length) {
       body.innerHTML = `<div class="sc-empty">${keyFilter && !q ? 'Nothing is on ' + _esc(keyFilter) + ' yet.' : 'No shortcuts match.'}</div>`;
@@ -6293,9 +6416,27 @@ const _Shortcuts = (() => {
   }
 
   // ── Profiles ─────────────────────────────────────────────────────────────
+  // The profile button, whole pixels wide (its left edge on a whole pixel). Measured unscaled (offsetWidth plus the fraction the
+  // layout has): the window opens with a little zoom, and a width read from the screen then was too small and cut the name.
+  function snapProfBtn() {
+    const b = $('sc-prof-btn'); if (!b) return;
+    b.style.width = '';
+    const w = parseFloat(getComputedStyle(b).width); if (w > 0) b.style.width = Math.ceil(w) + 'px';
+  }
+  // The keyboard side is centred top to bottom; when the room left over is an odd number of pixels, a pixel more at the top puts
+  // what is centred on whole pixels (else every key is drawn half a pixel off).
+  function _scCentre() {
+    const L = document.querySelector('.sc-modal .sc-left'); if (!L || !L.firstElementChild) return;
+    L.style.paddingTop = '';
+    const top = L.firstElementChild.getBoundingClientRect().top;
+    if (Math.abs(top - Math.round(top)) > 0.01) L.style.paddingTop = (parseFloat(getComputedStyle(L).paddingTop) + 1) + 'px';
+  }
+  window.addEventListener('resize', () => { if (isOpen()) requestAnimationFrame(_scCentre); });
   function renderProfile() {
     const btn = $('sc-prof-btn'), menu = $('sc-prof-menu'); if (!btn || !menu) return;
-    btn.querySelector('span').textContent = store.active || 'Default';
+    btn.querySelector('.sc-prof-name').textContent = store.active || 'Default';
+    const av = $('sc-prof-av'); if (av) { av.classList.toggle('has-initial', !!store.active); av.querySelector('b').textContent = store.active ? [...store.active.trim()][0].toUpperCase() : ''; }
+    snapProfBtn();
     $('sc-prof').classList.toggle('open', menuOpen);
     if (!menuOpen) { menu.innerHTML = ''; return; }
     if (naming) {
@@ -6438,6 +6579,7 @@ const _Shortcuts = (() => {
     const search = $('shortcuts-search'); if (search) search.value = '';
     _render();
     $('shortcuts-modal')?.classList.add('show');
+    requestAnimationFrame(() => { snapProfBtn(); _scCentre(); });
     if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   }
   function hide() { const m = $('shortcuts-modal'); m?.classList.remove('show'); rec = null; if (m && m.contains(document.activeElement)) document.activeElement.blur(); }
@@ -6457,6 +6599,20 @@ document.addEventListener('click', (e) => {
   if (boxes.length !== 1 || boxes[0].disabled) return;           // (a row with no switch, or with two, is not ours to guess)
   boxes[0].click();
 });
+
+// A segmented control's highlight stretches the way it moves (the leading edge first, see .cmd-seg::before in the stylesheet). CSS cannot
+// tell which way that is from three or more options, so a click marks it before the button's own handler moves .active. The mark goes
+// once the slide is over (a running transition keeps its timing), so a later move made by code, the other way, does not lead with the
+// wrong edge.
+document.addEventListener('click', (e) => {
+  const b = e.target?.closest?.(':is(.cmd-seg, #el-tool, #el-space, .vp-seg-col) > button');
+  if (!b) return;
+  const seg = b.parentElement, bs = [...seg.children], from = bs.findIndex(x => x.classList.contains('active')), to = bs.indexOf(b);
+  if (from < 0 || from === to) return;
+  const dir = seg.dataset.segDir = to > from ? 'fwd' : 'back';
+  clearTimeout(seg._segDirT);
+  seg._segDirT = setTimeout(() => { if (seg.dataset.segDir === dir) delete seg.dataset.segDir; }, 700);
+}, true);
 
 // The number fields (the object's properties, the command cards, the settings) have a right-click menu of their own, in the style of
 // the one in the parts tree's rename box, in place of the browser's: Cut / Copy / Paste / Select all, and a few quick edits of the
@@ -6849,7 +7005,7 @@ const _RendererOwner = (() => {
   // the user gets SOMETHING rather than a black canvas. Caller is
   // responsible for stashing the instance into the module-scoped `renderer`.
   async function create({ canvas, forceWebGL }) {
-    const opts = { canvas, antialias: true, alpha: false };
+    const opts = { canvas, antialias: _gfxMsaa(), alpha: false };      // (Settings › Performance › Smooth edges: read when the renderer is made)
     try {
       const r = new THREE.WebGPURenderer({ ...opts, forceWebGL });
       await r.init();
@@ -7315,7 +7471,7 @@ function initScene() {
   })();
   gridHelper = _makeInfiniteGrid();
   scene.add(gridHelper);
-  state.partsRoot = new THREE.Group(); state.partsRoot.name = '_partsRoot'; scene.add(state.partsRoot);
+  state.partsRoot = new THREE.ClippingGroup(); state.partsRoot.enabled = false; state.partsRoot.name = '_partsRoot'; scene.add(state.partsRoot);      // (a ClippingGroup that clips nothing until Section view is on: section-plane.js)
   // Mass scenes: partsRoot's local matrix doesn't change unless we rotate or
   // recenter, so opting out of per-frame auto-update saves a Mat4 propagation
   // through thousands of children. We call updateMatrixWorld() manually after
@@ -9382,7 +9538,7 @@ function tick() {
       // (a canvas of no pixels, the view of a scene tab that is hidden, is not drawn: three r186 gave that frame a depth buffer 0 wide,
       // which WebGPU refuses with a validation error; onResize asks for a frame when the tab shows again)
       const _cv = renderer.domElement;
-      try { if (_cv && (_cv.width < 1 || _cv.height < 1)) {} else if (!_Photo.render()) renderer.render(scene, camera); }
+      try { if (_cv && (_cv.width < 1 || _cv.height < 1)) {} else if (!_Photo.render()) { if (window.__moSectionPlane) window.__moSectionPlane.render(scene, camera); else renderer.render(scene, camera); } }
       catch (e) { renderErr = e; }
       if (renderErr) {
         // Throttled diagnostics. Previously this catch was a silent no-op
@@ -9992,6 +10148,11 @@ const _hasTexture = (m) => !!m && m.isMaterial && _TEX_SLOTS.some(k => m[k] && m
 // Both are switches under Settings › Performance › Picture quality: sharp textures (on unless switched off, key '0') and finer shadows
 // (off unless switched on, key '1'). Read from storage each time (functions, not constants: the lights are made before this point of
 // the file runs), and every tab hears when another changes them.
+// Smooth edges: the view drawn with multisampling (4 samples a pixel; WebGPU has no 2). The renderer is made with it, so a change takes
+// effect when the app is loaded again (Settings offers the reload). On unless switched off.
+function _gfxMsaa() { try { return localStorage.getItem('stepopt-gfx-msaa') !== '0'; } catch (_) { return true; } }
+window.__moSamples = () => (renderer ? renderer.samples : null);      // (tests/e2e-aa-settings.mjs: the samples and the pixel ratio the view is drawn with)
+window.__moRendererDpr = () => (renderer?.getPixelRatio ? renderer.getPixelRatio() : null);
 function _gfxSharpTex() { try { return localStorage.getItem('stepopt-gfx-sharp-tex') !== '0'; } catch (_) { return true; } }
 function _gfxFineShadows() { try { return localStorage.getItem('stepopt-gfx-fine-shadows') === '1'; } catch (_) { return false; } }
 function _sharpTex(tex) {
@@ -11235,6 +11396,7 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
       renderer.setPixelRatio?.(1);
       renderer.setSize(outW, outH, false);
       if (opts.photo && _Photo.still()) { /* Photo mode drew the picture: occlusion, glow, vignette, averaged */ }
+      else if (window.__moSectionPlane) window.__moSectionPlane.render(scene, camera);
       else renderer.render(scene, camera);
       ctx.drawImage(cv, 0, 0, outW, outH);
     } finally {
@@ -12960,6 +13122,19 @@ const _ClaudeBridge = (() => {
       const b = snap(); const r = await hook('roundFaces', { ids, quiet: true, params }); await sleep(200);
       return text({ scope, ...diff(b, snap()), parts: (r && r.results) || [], note: 'Only a part that still has its CAD faces (a STEP opened with them) can be simplified this way; the part keeps its CAD faces afterwards, so the other CAD tools still work on it.' });
     },
+    async remove_thickness(a) {
+      const hook = window.__moAgent && window.__moAgent.meshOp;
+      if (!hook) throw new Error('Remove thickness is not available here.');
+      let ids = resolveIds(a);
+      if (!ids.length) throw new Error('Name the parts (ids or name_contains) or select them: Remove thickness works on chosen parts only.');
+      ids = ids.filter(id => !(getPart(id) || {}).locked);      // (a locked part is not to change: lock_parts)
+      if (!ids.length) throw new Error('The parts are locked (lock_parts): nothing was changed.');
+      const params = {};
+      if (Number.isFinite(a.max_thickness_mm) && a.max_thickness_mm > 0) params.maxThickness = a.max_thickness_mm;
+      if (Number.isFinite(a.inset_percent)) params.inset = Math.max(0, Math.min(100, a.inset_percent));
+      const b = snap(); const r = await hook('removeThickness', { ids, quiet: true, params }); await sleep(200);
+      return text({ ...diff(b, snap()), parts: (r && r.results) || [], note: 'Each part keeps one side of its thin walls (the larger: a pipe its outside), and loses the other side and the edges between them; the surface left is open. One undo step takes it back.' });
+    },
     async remove_fillets(a) {
       const hook = window.__moAgent && window.__moAgent.meshOp;
       if (!hook) throw new Error('Remove fillets and chamfers is not available here.');
@@ -13655,7 +13830,7 @@ const _ClaudeBridge = (() => {
     merge_parts: 'geometry', merge_by_colour: 'geometry', decimate: 'geometry', fit_to_budget: 'geometry', fill_holes: 'geometry', clean_up: 'delete', repair_mesh: 'geometry', remove_hidden_faces: 'geometry', split_parts: 'geometry', duplicate_parts: 'geometry', smart_optimise: 'geometry', smart_fit: 'geometry', untriangulate: 'geometry', simplify_round_part: 'geometry', voxel_remesh: 'geometry', fix_mesh: 'geometry', reshape_mesh: 'geometry', boolean_parts: 'geometry',
     group_parts: 'layout', ungroup: 'layout', rename_parts: 'layout', transform_parts: 'layout', recenter_model: 'layout', align_to_floor: 'layout',
     export_model: 'files', open_file: 'files', turntable_video: 'files', render_image: 'files', save_scene: 'files', run_recipe: 'geometry', add_library_part: 'layout',
-    optimise_to_target: 'geometry', batch_optimise: 'geometry', compare_images: 'files', list_folder: 'files',
+    optimise_to_target: 'geometry', batch_optimise: 'geometry', remove_thickness: 'geometry', compare_images: 'files', list_folder: 'files',
     remove_floating_pieces: 'geometry', make_unique: 'geometry', remove_fillets: 'geometry', simplify_round_faces: 'geometry', lock_parts: 'layout', add_note: 'layout', reply_to_note: 'layout', update_note: 'layout', export_notes: 'files' };
   // Steps that can be tried and taken back (dry_run), and jobs that take a while (progress, and Stop for the ones that can be interrupted)
   const DRY = new Set(['delete_parts', 'remove_small_parts', 'merge_parts', 'merge_by_colour', 'decimate', 'fit_to_budget', 'fill_holes', 'remove_hidden_faces', 'repair_mesh', 'clean_up', 'duplicate_parts', 'smart_optimise', 'smart_fit', 'untriangulate', 'simplify_round_part', 'voxel_remesh', 'fix_mesh', 'reshape_mesh', 'boolean_parts', 'run_recipe', 'optimise_to_target', 'remove_fillets', 'simplify_round_faces']);
@@ -16814,8 +16989,84 @@ function _guardNormalMapUvs() {
 // or the settings: it starts off.
 // While nothing changes, photo.js averages frames (smooth edges, quiet occlusion, a soft-edged sun shadow); the frames after the first
 // are asked for here, and anything else that asks for a frame (requestRender, counted in state._renderAsks) starts the average again.
+// ── Interface sounds ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Small sounds made on the spot with Web Audio (no files; each a little different, ticks softer the faster a ring is spun, all through one
+// gentle filter and limiter), for the gizmos and quick wheels of the viewport only (the panels, switches
+// and pickers stay silent): a soft tick as a lens ring's ridges go by or as the pointer goes from one slice of a quick wheel to the
+// next, a crisper click when a lens ring catches a mark or a wheel's command runs, a light pop as a quick wheel opens. Quiet and a few
+// milliseconds long; one of a kind at a time, however fast they come; nothing before the page has been clicked (a browser asks for
+// that), and none with Settings › General › Interface sounds off.
+const _UiSound = (() => {
+  let ctx = null, noise = null, out = null;
+  const last = {}, count = { tick: 0, click: 0, pop: 0 };
+  // every sound goes out through one chain: a high shelf 5 dB down above 7 kHz (the edge without the hiss) and a limiter
+  const bus = (c) => {
+    if (out) return out;
+    const shelf = c.createBiquadFilter(), lim = c.createDynamicsCompressor();
+    shelf.type = 'highshelf'; shelf.frequency.value = 7000; shelf.gain.value = -5;
+    lim.threshold.value = -14; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.002; lim.release.value = 0.08;
+    shelf.connect(lim).connect(c.destination);
+    return (out = shelf);
+  };
+  // 1. a hair of difference each time (about ±3 % in pitch), so a run of ticks does not sound like one sound repeated
+  const vary = () => 1 + (Math.random() - 0.5) * 0.06;
+  const on = () => { try { return _Prefs.get('uiSounds') !== false; } catch (_) { return true; } };
+  const ac = () => {
+    if (!ctx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; try { ctx = new C(); } catch (_) { return null; } }
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    return ctx;
+  };
+  const due = (kind, ms) => { const t = performance.now(); if (t - (last[kind] || 0) < ms) return false; last[kind] = t; return true; };
+  // one short tone: its pitch gliding from f0 to f1, a quick rise and a fall to silence over dur seconds
+  function tone(c, t, f0, f1, dur, gain, type = 'sine') {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(bus(c)); o.start(t); o.stop(t + dur + 0.01);
+  }
+  // a breath of noise through a band: the dry edge of a click
+  function grit(c, t, freq, dur, gain) {
+    if (!noise) { noise = c.createBuffer(1, Math.ceil(c.sampleRate * 0.03), c.sampleRate); const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    const src = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = noise; bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 1.2;
+    g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp).connect(g).connect(bus(c)); src.start(t); src.stop(t + dur + 0.01);
+  }
+  // The audio is put to sleep a moment after the last sound, and while the app is in the background: an audio context left running
+  // keeps the sound card streaming silence, and many drivers tick now and then while it does (heard as clicks with nothing going on).
+  // The next sound wakes it, a few milliseconds late at most.
+  let idleT = 0;
+  const sleep = () => { clearTimeout(idleT); idleT = 0; if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) sleep(); });
+  const play = (kind, ms, fn) => {
+    if (!on() || !due(kind, ms)) return; const c = ac(); if (!c) return; count[kind]++;
+    try { fn(c, c.currentTime); } catch (_) {}
+    clearTimeout(idleT); idleT = setTimeout(sleep, 1500);
+  };
+  return {
+    tick: (speed = 0) => play('tick', 22, (c, t) => {
+      const v = vary(), sp = Math.min(1, Math.max(0, speed) / 30), loud = 1.15 - 0.6 * sp, hi = 1 + 0.22 * sp;
+      grit(c, t, 4200 * v * hi, 0.006, 0.05 * loud); tone(c, t, 3200 * v * hi, 2600 * v * hi, 0.006, 0.012 * loud);
+    }),
+    // (the snap: the ridges' own tick, so the ring sounds of one piece, but stronger, a touch lower and longer, to tell it apart)
+    click: () => play('click', 45, (c, t) => { const v = vary(); grit(c, t, 3800 * v, 0.008, 0.09); tone(c, t, 2800 * v, 2200 * v, 0.008, 0.028); }),
+    pop: (up = true) => play('pop', 45, (c, t) => { const v = vary(); tone(c, t, (up ? 420 : 760) * v, (up ? 760 : 420) * v, 0.05, 0.09); tone(c, t, (up ? 840 : 1520) * v, (up ? 1520 : 840) * v, 0.03, 0.02); }),
+    get count() { return { ...count }; },
+    get state() { return ctx ? ctx.state : 'none'; },      // (tests: 'suspended' once it has gone quiet)
+  };
+})();
+window.__moUiSound = _UiSound;      // (tests/e2e-ui-sound.mjs: how many of each were played)
+
+// The left sidebar shown or folded away for a moment (Photo mode): as its button does, but not remembered as the user's choice, so a
+// reload meanwhile opens the app as it was left.
+function _leftSidebarShow(open) {
+  document.body.classList.toggle('left-collapsed', !open);
+  const b = document.getElementById('btn-toggle-left');
+  if (b) { b.classList.toggle('active', open); b.setAttribute('aria-pressed', String(open)); }
+  setTimeout(() => { try { onResize?.(); } catch (_) {} }, 360);      // (the renderer, once the sidebar has slid)
+}
 const _Photo = (() => {
-  // The focus of the depth of field: a point picked in the view (Alt+click, or the Pick button), else the point the camera turns round.
+  // The focus of the depth of field: a point picked in the view (Ctrl+click, or the Pick button), else the point the camera turns round.
   let focusPoint = null, focusName = '', focusArmed = false;
   const lib = createPhoto({ THREE, getRenderer: () => renderer, getScene: () => scene, getCamera: () => camera, getFocus: () => focusPoint || controls?.target || null,
     onSample: (i) => { const a = sunSample(i), b = stage.sample(i); return () => { try { a?.(); } finally { b?.(); } }; } });
@@ -17047,6 +17298,10 @@ const _Photo = (() => {
       try { if (_Elements.isActive()) _CmdCards.close('elements'); } catch (_) {}      // (out of Edit mesh first: Photo mode is for looking)
       on = true;
       document.body.classList.add('photo-mode');
+      // the left sidebar steps aside for the picture; it comes back on leaving if it was open
+      kept.leftOpen = !document.body.classList.contains('left-collapsed');
+      if (kept.leftOpen) _leftSidebarShow(false);
+      try { _PhotoBar.sync(); } catch (_) {}
       _CAD_EDGE_MAT.visible = false;      // (no CAD edge lines in a photo: they are a drawing aid, and read as ink on a rendered surface)
       // Light: always the loft studio, which is bright, soft and neutral, lights the model and is not shown behind it (a photographed room
       // behind a model is a distraction: the stage and the vignette are the backdrop). What was chosen before is put back on leaving.
@@ -17072,6 +17327,9 @@ const _Photo = (() => {
       requestRender();
     } catch (e) {
       on = false; lib.disable();
+      document.body.classList.remove('photo-mode');      // (it was left on when switching on failed)
+      try { _PhotoBar.sync(); } catch (_) {}
+      if (kept && kept.leftOpen && document.body.classList.contains('left-collapsed')) _leftSidebarShow(true);
       { const sh = $('toggle-shadows'); if (sh) { sh.disabled = false; sh.removeAttribute('title'); } }
       const t = $('toggle-photo'); if (t) t.checked = false;
       toast('Photo mode', e?.message || String(e), 'error', 5000);
@@ -17082,6 +17340,7 @@ const _Photo = (() => {
     on = false; lib.disable();
     focusArm(false);
     document.body.classList.remove('photo-mode');
+    try { _PhotoBar.sync(); } catch (_) {}
     _CAD_EDGE_MAT.visible = true;
     if (floor) { scene.remove(floor); try { floor.geometry.dispose(); floor.material.dispose(); } catch (_) {} floor = null; }
     rigRemove();
@@ -17091,6 +17350,8 @@ const _Photo = (() => {
       softEnv = null;
     }
     const k = kept; kept = null;
+    // (the left sidebar back if it was open before, and was not opened again meanwhile)
+    if (k && k.leftOpen && document.body.classList.contains('left-collapsed')) _leftSidebarShow(true);
     if (scene) scene.backgroundNode = k ? k.bgNode : null;
     { const sh = $('toggle-shadows'); if (sh) { sh.disabled = false; sh.removeAttribute('title'); } }
     if (k) {
@@ -17168,7 +17429,21 @@ const _Photo = (() => {
       // a number box in the layout of the Shape parameters rows: a percentage, dragged sideways (the fill follows the pointer) or typed
       const el = $('photo-' + k); if (!el) continue;
       const wrap = el.closest('.prim-val-wrap');
-      const fill = () => { if (wrap) wrap.style.setProperty('--scrub-pct', Math.round(fx.get() * 100) + '%'); };
+      // the fill-bar slider of the app, the effect's name inside it at its left; the number box beside it stays (typed, dragged)
+      const row = el.closest('.prim-row'), lbl = row && row.querySelector('.prim-label');
+      let rng = null, shiftHeld = false;
+      if (row && lbl) {
+        rng = document.createElement('input'); rng.type = 'range'; rng.min = '0'; rng.max = '100'; rng.step = '1'; rng.className = 'range-bar photo-bar';
+        rng.setAttribute('aria-label', lbl.textContent.trim()); lbl.before(rng); row.classList.add('has-bar'); _barHeld(rng, row);
+        const track = (e) => { shiftHeld = !!e.shiftKey; };
+        rng.addEventListener('pointerdown', track, true); rng.addEventListener('pointermove', track, true); rng.addEventListener('pointerup', () => { shiftHeld = false; }, true);
+        rng.addEventListener('input', () => { let v = +rng.value; if (shiftHeld) v = Math.round(v / 5) * 5; apply(v); });      // (Shift: steps of 5, as the other bars snap to twentieths)
+      }
+      const fill = () => {
+        const p = Math.round(fx.get() * 100);
+        if (wrap) wrap.style.setProperty('--scrub-pct', p + '%');
+        if (rng) { rng.value = String(p); rng.style.setProperty('--sl-pct', p + '%'); _barFill(rng, 0, p / 100); }
+      };
       const apply = (v) => { v = Math.max(0, Math.min(100, Math.round(v))); fx.set(v / 100); if (document.activeElement !== el) el.value = v; fill(); requestRender(); };
       el.value = Math.round(fx.get() * 100); fill();
       el.addEventListener('input', () => { const v = parseFloat(el.value); if (Number.isFinite(v)) apply(v); });
@@ -17247,7 +17522,7 @@ const _Photo = (() => {
     focusShow(); requestRender();
     return true;
   }
-  // Alt+click (a press and let go without moving: Alt+drag still turns the camera) sets the focus while Photo mode's depth of field is on;
+  // Ctrl+click sets the focus while Photo mode's depth of field is on, and holding V shows the lens rings (below);
   // with Pick armed, a plain click does, and that click selects nothing.
   function wireFocus() {
     const cv = $('canvas'); if (!cv || cv._focusWired) return;
@@ -17256,7 +17531,7 @@ const _Photo = (() => {
     const live = () => on && lib.isOn('dof');
     // The camera listens to pointer events, the selection to the mouse events that follow them. An armed click is taken at the pointer
     // events and kept from the camera (cancelling the press also stops the browser sending its mouse events, so nothing is selected); an
-    // Alt+click is taken at the mouse events, after the camera has seen its press, and its let-go is kept from the selection.
+    // Ctrl+press is taken at the pointer events too (before the camera and Ctrl+drag's box select), and its let-go is kept from the selection.
     window.addEventListener('pointerdown', (e) => {
       if (!focusArmed || e.button !== 0 || e.target !== cv || !live()) return;
       e.stopImmediatePropagation(); e.preventDefault();
@@ -17267,20 +17542,191 @@ const _Photo = (() => {
       down = null; e.stopImmediatePropagation(); e.preventDefault();
       if (live() && focusAt(e)) focusArm(false);
     }, true);
-    window.addEventListener('mousedown', (e) => {
-      if (focusArmed) return;
-      down = (e.button === 0 && e.altKey && e.target === cv && live()) ? { x: e.clientX, y: e.clientY, armed: false } : null;
+    // Ctrl held (depth of field on): the pointer is the focus reticle. Ctrl+press sets the focus on the point under it, and keeping the button
+    // down while moving up or down pushes the focus further from the camera or pulls it nearer, finely (a third of a percent of its distance
+    // for each pixel; Shift for a tenth of that). The camera does not turn meanwhile, nor does Ctrl+drag box-select (in Photo mode with
+    // depth of field on, over the model: everywhere else it does as ever).
+    let drag = null, swallow = 0;
+    const altShow = (v) => { cv.classList.toggle('focus-alt', !!v && !drag); };
+    // The lens rings: while V is held over the view, a lens's three rings stand where the pointer was when V went down, hollow as on a
+    // camera lens, and moving the pointer up or down turns one of them, smoothly (Ctrl+click only sets the focus): the outer is the focus (round distances, 1, 2 and 5 times a power of ten, on a log scale as a lens has them), the middle the aperture
+    // (f/1.4 to f/16: the depth of field's strength), the inner the zoom (the lens in millimetres; the camera stays where it is, so the
+    // model comes nearer in the picture). The wheel, while V is held, goes from one ring to the next; the one being turned is solid with white
+    // figures and a red mark across its band at the top, where its setting is read; the others faint; its name and setting over it.
+    // Light to draw: each ring's figures and ridges are made once, at fixed angles, and turned as one (a rotation of its group); only the
+    // focus ring's figures are made again when a new decade comes round. The turning is done once a frame, however many moves arrive.
+    const RINGS = { focus: { r: 88, w: 21, name: 'Focus' }, aperture: { r: 64, w: 18, name: 'Aperture' }, zoom: { r: 42, w: 16, name: 'Zoom' } };
+    const ORDER = ['focus', 'aperture', 'zoom'];
+    let ringNow = 'focus';                                    // (the one turned last: the next drag starts on it)
+    const STOPS = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16];
+    const LENSES = [14, 18, 24, 35, 50, 85, 135, 200];
+    const K = { focus: 90, aperture: 62, zoom: 95 };          // degrees each ring turns for each e-fold of its value
+    const SIGN = { focus: -1, aperture: 1, zoom: 1 };          // (the focus figures run the other way round, as on a lens)
+    const fmtD = (v) => (v >= 100 ? String(Math.round(v)) : v >= 10 ? v.toFixed(1).replace(/\.0$/, '') : String(+v.toPrecision(2)));
+    const ptAt = (deg, r) => { const a = deg * Math.PI / 180; return [r * Math.sin(a), -r * Math.cos(a)]; };
+    const angOf = (key, v) => SIGN[key] * Math.log(v) * K[key];
+    const fNow = () => { let k = 0.5; try { k = lib.get('dof'); } catch (_) {} return 16 * Math.pow(1.4 / 16, Math.max(0, Math.min(1, k))); };
+    const mmNow = () => 12 / Math.tan((camera.fov || 29) * Math.PI / 360);      // (full frame: 24 mm tall)
+    const nearStop = (f) => STOPS.reduce((b, s) => (Math.abs(Math.log(s / f)) < Math.abs(Math.log(b / f)) ? s : b), STOPS[0]);
+    // Detents, as a lens's rings have: the drag turns a ring smoothly, and where it comes within a few degrees of a marked value (a round
+    // distance, a stop, a classic lens) the ring holds on it until it is turned past; Shift turns finely and does not catch.
+    // raw: where the drag has turned it to; the value set is the mark when one is that near, else raw.
+    const SNAP_DEG = 2.5;      // (how near a mark the ring has to come to catch on it: 5 held too hard)
+    const marksFor = (key, v) => key === 'aperture' ? STOPS : key === 'zoom' ? LENSES : (() => { const e0 = Math.floor(Math.log10(v)), out = []; for (let e = e0 - 1; e <= e0 + 1; e++) for (const m of [1, 2, 5]) out.push(m * Math.pow(10, e)); return out; })();
+    const snapped = (key, raw, fine) => {
+      if (fine) return { v: raw, on: false };
+      let best = null, bd = Infinity;
+      for (const m of marksFor(key, raw)) { const d = Math.abs(Math.log(m / raw)) * K[key]; if (d < bd) { bd = d; best = m; } }
+      return bd <= SNAP_DEG ? { v: best, on: true } : { v: raw, on: false };
+    };
+    function turnFocus(dy, fine) {
+      if (!focusPoint) return;
+      const c = camera.getWorldPosition(new THREE.Vector3()), d = focusPoint.clone().sub(c), len = d.length();
+      if (len <= 1e-9) return;
+      if (drag.dRaw == null) drag.dRaw = len;
+      drag.dRaw *= Math.exp(-dy * (fine ? 0.0003 : 0.003));
+      const sn = snapped('focus', drag.dRaw, fine); drag.snap = sn.on;
+      if (Math.abs(sn.v - len) < len * 1e-9) return;
+      focusPoint.copy(c).addScaledVector(d.multiplyScalar(1 / len), sn.v); focusName = ''; drag.focusMoved = true; lib.restart(); requestRender();
+    }
+    // the aperture, smoothly (the depth of field's strength, through its own box so the Effects panel shows it; the box holds whole
+    // percent, so the aperture the drag has got to is kept here and the box follows it)
+    function turnAperture(dy, fine) {
+      if (drag.fRaw == null) drag.fRaw = fNow();
+      drag.fRaw = Math.max(1.4, Math.min(16, drag.fRaw * Math.exp(dy * (fine ? 0.0008 : 0.008))));
+      const sn = snapped('aperture', drag.fRaw, fine); drag.snap = sn.on; drag.fT = sn.v;
+      const k = Math.log(drag.fT / 16) / Math.log(1.4 / 16), el = $('photo-dof'), v = String(Math.round(k * 100));
+      if (el && el.value !== v) { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    // the zoom, smoothly: the lens set straight on the camera (the Camera settings' box shows it in whole millimetres); the camera stays
+    // where it is, so the model comes nearer or goes further in the picture, as when a zoom lens is turned (no dolly zoom)
+    function turnZoom(dy, fine) {
+      if (!camera.isPerspectiveCamera || !controls) return;
+      if (drag.mmRaw == null) drag.mmRaw = mmNow();
+      drag.mmRaw = Math.max(10, Math.min(200, drag.mmRaw * Math.exp(-dy * (fine ? 0.0006 : 0.006))));
+      const sn = snapped('zoom', drag.mmRaw, fine); drag.snap = sn.on;
+      const mm = sn.v, was = camera.fov;
+      if (Math.abs(mm - mmNow()) < 1e-6) return;
+      state.cameraFov = 2 * Math.atan(12 / mm) * 180 / Math.PI; camera.fov = state.cameraFov; camera.updateProjectionMatrix();
+      const el = $('cam-fov'); if (el) el.value = String(Math.round(mm));
+      void was; lib.restart(); requestRender();
+    }
+    let ring = null;
+    const figure = (key, v, label) => { const deg = angOf(key, v), p = ptAt(deg, RINGS[key].r); return '<text class="fr-num" data-v="' + v + '" x="' + p[0].toFixed(1) + '" y="' + (p[1] + 3).toFixed(1) + '" transform="rotate(' + deg.toFixed(1) + ' ' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ')">' + label + '</text>'; };
+    const ridges = (r, step) => { let d = ''; for (let deg = 0; deg < 360; deg += step) { const a = ptAt(deg, r - 3), b = ptAt(deg, r); d += 'M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) + 'L' + b[0].toFixed(1) + ' ' + b[1].toFixed(1); } return '<path class="fr-ticks" d="' + d + '"/>'; };
+    const ringMake = () => {
+      if (ring) return ring;
+      ring = document.createElement('div'); ring.className = 'photo-focus-ring'; ring.setAttribute('aria-hidden', 'true');
+      const turnOf = (k) => ridges(RINGS[k].r + RINGS[k].w / 2, k === 'focus' ? 4 : 5)
+        + (k === 'aperture' ? STOPS.map(f => figure(k, f, String(f))).join('') : k === 'zoom' ? LENSES.map(m => figure(k, m, String(m))).join('') : '<g class="fr-figs"></g>');
+      const mark = (k) => { const g = RINGS[k]; return '<path class="fr-mark" d="M0 ' + (-(g.r - g.w / 2 + 3)).toFixed(1) + 'V' + (-(g.r + g.w / 2 - 3)).toFixed(1) + '"/>'; };
+      ring.innerHTML = '<svg viewBox="-122 -122 244 244">' + ORDER.map(k => '<g class="fr-ring" data-ring="' + k + '"><circle class="fr-band" r="' + RINGS[k].r + '" stroke-width="' + RINGS[k].w + '"/><g class="fr-turn">' + turnOf(k) + '</g>' + mark(k) + '</g>').join('')
+        + '<text class="fr-name" y="' + (-(RINGS.focus.r + 22)) + '"></text></svg>';
+      document.body.appendChild(ring);
+      ring._g = Object.fromEntries(ORDER.map(k => [k, ring.querySelector('[data-ring="' + k + '"]')]));
+      ring._t = Object.fromEntries(ORDER.map(k => [k, ring._g[k].querySelector('.fr-turn')]));
+      ring._figs = ring.querySelector('[data-ring="focus"] .fr-figs'); ring._name = ring.querySelector('.fr-name').appendChild(document.createTextNode('')); ring._key = ''; ring._now = ''; ring._rot = {};      // (_name: its text node, changed in place)
+      return ring;
+    };
+    const ringDraw = () => {
+      const R = ringMake(), dist = focusPoint ? focusDist() : 1, f = drag && drag.fT != null ? drag.fT : fNow(), mm = mmNow();
+      const cur = { focus: dist, aperture: f, zoom: mm };
+      // the focus ring's figures: the round distances within reach of the top (made again only when that set changes)
+      const e0 = Math.floor(Math.log10(dist)), want = [];
+      for (let e = e0 - 2; e <= e0 + 2; e++) for (const m of [1, 2, 5]) { const v = m * Math.pow(10, e); if (Math.abs(angOf('focus', v) - angOf('focus', dist)) <= 165) want.push(v); }
+      const key = want.join(',');
+      if (key !== R._key) { R._key = key; R._figs.innerHTML = want.map(v => figure('focus', v, fmtD(v))).join(''); }
+      for (const k of ORDER) {
+        const rot = -angOf(k, cur[k]);
+        if (R._rot[k] !== rot) { R._rot[k] = rot; R._t[k].setAttribute('transform', 'rotate(' + rot.toFixed(2) + ')'); }
+      }
+      if (R._now !== ringNow) { R._now = ringNow; for (const k of ORDER) R._g[k].classList.toggle('is-active', k === ringNow); }
+      const snapNow = !!(drag && drag.snap); if (R._snap !== snapNow) { R._snap = snapNow; R.classList.toggle('is-snap', snapNow); }
+      const fs = nearStop(f);
+      const nm = ringNow === 'focus' ? 'Focus ' + fmtD(dist) : ringNow === 'aperture' ? 'f/' + (Math.round(f * 10) / 10) : Math.round(mm) + ' mm';
+      if (R._name.data !== nm) R._name.data = nm;
+      R._st = { dist, fs, f, mm };      // (for the test hook only: kept in a plain object, not written to the page each frame)
+    };
+    const ringShow = (x, y) => { const R = ringMake(); R.style.left = Math.round(x) + 'px'; R.style.top = Math.round(y) + 'px'; ringDraw(); R.classList.add('show'); };
+    const ringHide = () => { ring && ring.classList.remove('show'); };
+    // the moves of a drag are added up and done once a frame (a mouse can send several moves a frame: each turned the lens and drew)
+    const turnSoon = (dy, fine) => {
+      drag.pdy = (drag.pdy || 0) + dy; drag.fine = fine;
+      if (drag.raf) return;
+      drag.raf = requestAnimationFrame(() => {
+        if (!drag) return;
+        drag.raf = 0; const d = drag.pdy; drag.pdy = 0;
+        const wasSnap = !!drag.snap;
+        if (d && drag.ring) { if (ringNow === 'focus') turnFocus(d, drag.fine); else if (ringNow === 'aperture') turnAperture(d, drag.fine); else turnZoom(d, drag.fine); }
+        if (drag.ring) ringDraw();
+        // (the sounds of it: a click when it catches a mark, else a tick for each ridge of the ring that has gone past the top)
+        if (drag.ring && ring) {
+          const step = ringNow === 'focus' ? 4 : 5, r = ring._rot[ringNow], at = Number.isFinite(r) ? Math.floor(r / step) : null;
+          if (drag.snap && !wasSnap) _UiSound.click();
+          else if (at !== null && drag.ridge != null && at !== drag.ridge) _UiSound.tick(Math.abs(d));      // (by how fast it turns)
+          drag.ridge = at;
+        }
+      });
+    };
+    // (tests: what one frame of the ring costs, its script and the browser's restyle of it, in milliseconds; turned a little each time)
+    window.__moFocusRingBench = (n = 200) => { if (!ring || !drag) return null; const t0 = performance.now(); for (let i = 0; i < n; i++) { ring._rot = {}; ringDraw(); ring.getBoundingClientRect(); } return (performance.now() - t0) / n; };
+    window.__moFocusRing = () => (ring ? { shown: ring.classList.contains('show'), ring: ringNow, dist: ring._st ? fmtD(ring._st.dist) : null, f: ring._st ? ring._st.fs : null, fraw: ring._st ? ring._st.f : null,
+      mm: ring._st ? Math.round(ring._st.mm) : null, rot: { ...ring._rot }, stop: ring._st ? String(ring._st.fs) : null, snap: ring.classList.contains('is-snap'), fset: drag && drag.fT != null ? drag.fT : null } : null);      // (tests/e2e-focus-ring.mjs)
+    const focusDist = () => { camera.updateMatrixWorld(); return focusPoint.distanceTo(camera.getWorldPosition(new THREE.Vector3())); };
+    window.addEventListener('keydown', (e) => { if (e.key === 'Control') altShow(live()); }, true);
+    window.addEventListener('keyup', (e) => { if (e.key === 'Control') altShow(false); }, true);
+    window.addEventListener('blur', () => altShow(false));
+    let px = 0, py = 0;
+    window.addEventListener('pointermove', (e) => {
+      px = e.clientX; py = e.clientY;
+      if (drag) {
+        const dy = e.clientY - drag.y; drag.y = e.clientY;
+        if (!drag.ring && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 3) { drag.ring = true; ringShow(drag.x0, drag.y0); }
+        if (dy && drag.ring) turnSoon(dy, e.shiftKey);
+      } else if (e.ctrlKey && e.target === cv && live()) altShow(true);
     }, true);
-    window.addEventListener('mouseup', (e) => {
-      const d = down;
-      if (!d || d.armed) return;
-      down = null;
-      if (e.button !== 0 || !live()) return;
-      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) return;      // (a drag: the camera turned)
-      e.stopImmediatePropagation();
+    window.addEventListener('pointerdown', (e) => {
+      if (focusArmed || e.button !== 0 || !e.ctrlKey || e.target !== cv || !live()) return;
+      e.stopImmediatePropagation(); e.preventDefault();
       focusAt(e);
+      swallow = 2; setTimeout(() => { swallow = 0; }, 400);      // (its let-go and click are kept from the selection)
     }, true);
-    window.addEventListener('click', (e) => { if (focusArmed && e.target === cv) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+    // V held over the view: the lens rings stand where the pointer is, and moving the pointer up or down turns the one that is on (no
+    // button to hold); the wheel goes from ring to ring; letting V go puts them away, as they were set.
+    const overView = () => { const el = document.elementFromPoint(px, py); return !!(el && el.closest && el.closest('#viewport')); };
+    window.addEventListener('keydown', (e) => {
+      if ((e.key !== 'v' && e.key !== 'V') || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (drag && drag.key) { e.preventDefault(); e.stopImmediatePropagation(); return; }      // (held: its repeats)
+      if (e.repeat || drag || !live() || _typingTarget(e) || _modalOpen() || !overView()) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (!focusPoint) { const t = controls && controls.target; if (t) { focusPoint = t.clone(); focusName = ''; focusShow(); } }
+      if (!focusPoint) return;
+      drag = { y: py, x0: px, y0: py, ring: true, key: true };
+      ringShow(px, py);
+    }, true);
+    window.addEventListener('keyup', (e) => { if ((e.key === 'v' || e.key === 'V') && drag && drag.key) { e.preventDefault(); e.stopImmediatePropagation(); dragEnd(); } }, true);
+    const dragEnd = () => {
+      if (!drag) return;
+      if (drag.id != null) { try { cv.releasePointerCapture(drag.id); } catch (_) {} }
+      if (drag.raf) cancelAnimationFrame(drag.raf);
+      if (drag.focusMoved) focusShow();      // (the focus readout, once)
+      drag = null; cv.classList.remove('focus-drag'); ringHide(); swallow = 2; setTimeout(() => { swallow = 0; }, 0);
+    };
+    window.addEventListener('pointerup', (e) => { if (drag && !drag.key && e.button === 0) { e.stopImmediatePropagation(); dragEnd(); } }, true);
+    window.addEventListener('wheel', (e) => {
+      if (!drag) return;
+      e.preventDefault(); e.stopImmediatePropagation();      // (the wheel does not zoom the camera meanwhile)
+      const now = performance.now(); if (now - (drag.wheelAt || 0) < 140 || !e.deltaY) return;
+      drag.wheelAt = now;
+      // (it stops at the outer ring and at the inner one: the wheel does not go round from one to the other)
+      const i = Math.max(0, Math.min(ORDER.length - 1, ORDER.indexOf(ringNow) + (e.deltaY > 0 ? 1 : -1)));
+      if (ORDER[i] === ringNow) return;
+      ringNow = ORDER[i]; drag.fT = drag.fRaw = drag.dRaw = drag.mmRaw = null; drag.snap = false; drag.ridge = null;
+      _UiSound.click();
+      if (!drag.ring) { drag.ring = true; ringShow(drag.x0, drag.y0); } else ringDraw();
+    }, { capture: true, passive: false });
+    window.addEventListener('pointercancel', dragEnd, true);
+    window.addEventListener('click', (e) => { if ((focusArmed && e.target === cv) || (swallow && e.target === cv)) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
     window.addEventListener('keydown', (e) => { if (focusArmed && e.key === 'Escape') { e.stopImmediatePropagation(); focusArm(false); } }, true);
   }
   return {
@@ -17310,6 +17756,98 @@ const _Photo = (() => {
   };
 })();
 window.__moPhoto = _Photo;      // (for tests/e2e-photo-average.mjs: how far the average of a still view has got)
+
+// ── Photo mode's toolbar ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// In Photo mode a floating pill takes the bottom toolbar's place (#vp-photo-bar; the bottom toolbar steps aside, see the stylesheet) with
+// everything Photo mode has: leave, the Lights, Backdrop, Look and Quality lists, the effects, the size of the saved picture and Save.
+// It holds no settings of its own. The lists set the Photo mode card's own <select>s (and send their change, so _Photo does the work);
+// the effects are the card's own rows (their switches, bars and number boxes, already wired by _Photo), moved into the Effects panel while
+// Photo mode is on and put back where they were when it ends, so the card, the MCP tools and the bar can never disagree. The camera
+// button at the foot of the tool pill on the left switches Photo mode, as the card's switch does.
+const _PhotoBar = (() => {
+  const $p = (id) => document.getElementById(id);
+  const LISTS = [['photo-lights', 'spotlight', 'Lights'], ['photo-backdrop', 'square', 'Backdrop'], ['photo-look', 'aperture', 'Look'], ['photo-quality', 'gauge', 'Quality']];
+  // the card's rows that go into the Effects panel, in this order (each found by the control inside it)
+  const ROWS = ['photo-stage', 'photo-softbox', 'photo-fx-contact', 'photo-fx-refl', 'photo-fx-ao', 'photo-fx-glow', 'photo-fx-fringe', 'photo-fx-vignette', 'photo-fx-grain', 'photo-fx-dof', 'photo-focus-pick'];
+  let bar = null, pop = null, fxPanel = null, moved = [], openFor = null;
+  const short = (sel) => { const o = sel && sel.selectedOptions[0]; return o ? o.textContent.replace(/\s*\(.*\)\s*$/, '') : ''; };      // ("Draft (fastest)" reads "Draft" on the bar)
+  const tog = () => { const t = $p('toggle-photo'); if (t) t.click(); };
+  function close() { if (pop) pop.style.display = 'none'; if (fxPanel) fxPanel.style.display = 'none'; bar?.querySelectorAll('.vpb.is-open').forEach(b => b.classList.remove('is-open')); openFor = null; }
+  // a list or the Effects panel opens above its button, its left edge at the button's
+  function place(el, btn) { const r = btn.getBoundingClientRect(), b = bar.getBoundingClientRect(); el.style.left = Math.round(r.left - b.left) + 'px'; }
+  function openList(btn, id) {
+    if (openFor === btn) { close(); return; }
+    close();
+    const sel = $p(id); if (!sel) return;
+    pop.innerHTML = '';
+    for (const o of sel.options) {
+      const row = document.createElement('button'); const on = o.value === sel.value;
+      row.type = 'button'; row.className = 'vp-prim-pop-item em-pop-item' + (on ? ' is-on' : '');
+      row.setAttribute('role', 'menuitemradio'); row.setAttribute('aria-checked', String(on));
+      row.innerHTML = '<span class="em-pop-l"></span>'; row.firstChild.textContent = o.textContent;
+      row.addEventListener('click', () => { close(); if (sel.value !== o.value) { sel.value = o.value; sel.dispatchEvent(new Event('change', { bubbles: true })); } labels(); });
+      pop.appendChild(row);
+    }
+    place(pop, btn); pop.style.display = 'block'; btn.classList.add('is-open'); openFor = btn;
+  }
+  function openFx(btn) {
+    if (openFor === btn) { close(); return; }
+    close();
+    place(fxPanel, btn); fxPanel.style.display = 'block'; btn.classList.add('is-open'); openFor = btn;
+  }
+  function labels() {
+    if (!bar) return;
+    for (const [id] of [...LISTS, ['photo-scale']]) { const b = bar.querySelector('[data-list="' + id + '"] .vpb-l'); if (b) b.textContent = short($p(id)); }
+  }
+  function build() {
+    if (bar) return bar;
+    bar = $p('vp-photo-bar'); if (!bar) return null;
+    const B = (attrs, cls, icon, title, text) => `<button type="button" ${attrs} class="vpb${cls ? ' ' + cls : ''}" title="${title}" aria-label="${title}">${icon ? `<i data-lucide="${icon}"></i>` : ''}${text != null ? `<span class="vpb-l">${text}</span>` : ''}</button>`;
+    bar.innerHTML =
+      `<div class="vp-bar">${B('data-leave', '', 'x', 'Leave Photo mode')}</div>` +
+      `<div class="vp-bar">${LISTS.map(([id, icon, name]) => B(`data-list="${id}"`, 'vpb-text', icon, name, '')).join('')}` +
+      `<div class="vpb-sep"></div>${B('data-fx', 'vpb-text', 'sliders-horizontal', 'Effects: floor, softboxes, shadow, reflection, AO, glow, fringe, vignette, grain, depth of field, focus', 'Effects')}</div>` +
+      `<div class="vp-bar">${B('data-list="photo-scale"', 'vpb-text', 'scaling', 'Size of the saved picture (times the view)', '')}` +
+      `${B('data-save', 'vpb-text vp-photo-save', 'download', 'Save the picture as a PNG', 'Save photo')}</div>` +
+      `<div class="vp-prim-pop vp-photo-list" role="menu" style="display:none"></div><div class="vp-prim-pop vp-photo-fx" role="dialog" aria-label="Effects" style="display:none"></div>`;
+    pop = bar.querySelector('.vp-photo-list'); fxPanel = bar.querySelector('.vp-photo-fx');
+    bar.querySelector('[data-leave]').addEventListener('click', () => { close(); tog(); });
+    for (const b of bar.querySelectorAll('[data-list]')) b.addEventListener('click', () => openList(b, b.dataset.list));
+    bar.querySelector('[data-fx]').addEventListener('click', (e) => openFx(e.currentTarget));
+    bar.querySelector('[data-save]').addEventListener('click', () => { close(); $p('photo-save')?.click(); });
+    document.addEventListener('mousedown', (e) => { if (openFor && !bar.contains(e.target)) close(); }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openFor) { close(); e.stopPropagation(); } }, true);
+    try { _lucide(); } catch (_) {}
+    return bar;
+  }
+  // the card's rows into the panel (each leaves a mark where it was), or back to their marks
+  function moveRows(intoBar) {
+    if (intoBar) {
+      if (moved.length) return;
+      for (const id of ROWS) {
+        const row = $p(id)?.closest('.prim-row'); if (!row) continue;
+        const mark = document.createComment('photo bar: ' + id); row.before(mark); fxPanel.appendChild(row); moved.push([row, mark]);
+      }
+    } else {
+      for (const [row, mark] of moved) { if (mark.parentNode) mark.replaceWith(row); }
+      moved = [];
+    }
+  }
+  function sync() {
+    const on = document.body.classList.contains('photo-mode');
+    $p('tg-photo-mode')?.classList.toggle('active', on);
+    $p('tg-photo-mode')?.setAttribute('aria-pressed', String(on));
+    if (on) { if (!build()) return; moveRows(true); labels(); }
+    else if (bar) { close(); moveRows(false); }
+  }
+  function wire() {
+    const b = $p('tg-photo-mode');
+    if (b && !b._wired) { b._wired = true; b.addEventListener('click', () => { b.blur(); tog(); }); }
+    for (const [id] of [...LISTS, ['photo-scale']]) $p(id)?.addEventListener('change', labels);      // (set from the card or by Claude: the bar shows it)
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
+  return { sync, close, get el() { return bar; } };
+})();
 
 function _applyGridCell() {
   if (!gridHelper || !scene) return;
@@ -18981,9 +19519,11 @@ function rebuildTreeSelectionOnly() {
 // same frame's render already shows the highlight. Several calls from one
 // handler still collapse into a single rebuild.
 let _selColorsQueued = false;
+const _selFollowers = [];      // (cards that move to the new selection while they are open: Profile, Round part; each has follow())
 function applySelectionColors() {
   try { const m = document.getElementById('em-mode'); if (m) { const idle = !(state.selected && state.selected.size); m.classList.toggle('is-idle', idle); m.setAttribute('aria-disabled', idle ? 'true' : 'false'); } } catch (_) {}      // (the Model mode button is grey while nothing is selected)
   try { const i = _flatSelInfo(); _FlattenDialog.syncSelection({ selectedGroupCount: i.selectedIds.length, selectedNames: i.selectedNames }); } catch (_) {}      // (Advanced flatten, when it is open, follows the selection)
+  for (const c of _selFollowers) { try { c.follow(); } catch (_) {} }      // (Profile: clean outline, Round part, ...: when open, they move to the new selection)
   if (_selColorsQueued) return;
   _selColorsQueued = true;
   queueMicrotask(() => {
@@ -20861,32 +21401,49 @@ function _applyShadeOp(op, dir) {
 // (the undo step of the Shading angle is registered further down, after _UndoOps exists: see _UndoOps.register('shading'))
 function _wireShadeAngle(rootEl, ids) {
   const host = rootEl.querySelector('#prop-shade');
-  if (!host) return;
+  const box = host && host.querySelector('#prop-shade-scrub');
+  if (!box) return;
   const parts = _shadePartList(ids);
   // The row stands in the Shading section of the panel for good. It acts on the selected parts, so with none (or only lines) it is dimmed.
   host.classList.toggle('is-off', !parts.length);
   if (!parts.length) {
-    host.innerHTML = '<span>Shading angle</span><label class="size-field"><input type="text" value="—" disabled spellcheck="false" aria-label="Shading angle in degrees"><span>°</span></label>';
+    initScrubber({ el: box, label: 'Shading angle', maxSteps: 180, stepToVal: (st) => st, valToStep: (v) => v, format: () => ({ value: '—', unit: '°' }), initialValue: 30, onChange: () => {} });
     host.title = 'Select a part to set its shading angle';
     return;
   }
   const idList = parts.map(p => p.partId);
-  // A thin row: the name, and a number. The number is typed, or dragged sideways (the app's own number fields do that: Shift for tens, Alt for
-  // fine steps). Nothing is worked out while it is dragged; the angle is applied when the drag ends or the typed number is accepted.
+  // The fill-bar scrubber, like every value of the app. Nothing is worked out while it is dragged (reshading refreshes the stats, which
+  // builds this panel again: the row would be swapped under the pointer); letting go applies the angle and keeps it as one undo step. A
+  // typed number or the arrow keys do the same after a short pause. The steps run one after another, so a late one never lands on a newer one.
   // what was last set on these parts (when they agree), else the default
   const known = parts.map(p => p.shadeAngle);
-  const shown = known.every(a => Number.isFinite(a) && a === known[0]) ? Math.round(known[0] * 10) / 10 : 30;
-  host.innerHTML = '<span>Shading angle</span><label class="size-field"><input type="text" inputmode="decimal" min="0" max="180" step="1" value="' + shown + '" spellcheck="false" autocomplete="off" aria-label="Shading angle in degrees"><span>°</span></label>';
-  host.title = 'Edges sharper than this angle stay sharp';
-  const input = host.querySelector('input');
-  input.addEventListener('change', async () => {
-    const raw = parseFloat(String(input.value).replace(',', '.'));
-    const v = Number.isFinite(raw) ? Math.max(0, Math.min(180, raw)) : 30;
-    input.value = String(Math.round(v * 10) / 10);
-    await _shadeApply(idList, v, { live: false });
-    _shadeCommit(idList);
+  const shown = known.every(a => Number.isFinite(a) && a === known[0]) ? Math.round(known[0]) : 30;
+  let last = shown, held = false, timer = 0, queue = Promise.resolve();
+  const run = (f) => (queue = queue.then(f, f));
+  const commit = () => { clearTimeout(timer); timer = 0; const v = last; run(async () => { await _shadeApply(idList, v, { live: false }); _shadeCommit(idList); refreshPropertiesPanel(); }); };      // (the panel again: the new angle and triangle counts, even if it was built anew meanwhile)
+  initScrubber({
+    el: box, label: 'Shading angle', maxSteps: 180, stepToVal: (st) => st, valToStep: (v) => v, format: (v) => ({ value: String(v), unit: '°' }), initialValue: shown,
+    onChange: (v) => { last = v; clearTimeout(timer); if (!held) timer = setTimeout(commit, 400); },
   });
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+  const range = box.querySelector('.scrub-range');
+  box.addEventListener('pointerdown', () => { held = true; clearTimeout(timer); window.addEventListener('pointerup', () => { held = false; }, { once: true }); }, true);
+  range?.addEventListener('change', commit);       // (the end of a drag of the bar, the number or the name)
+  host.title = 'Edges sharper than this angle stay sharp';
+}
+// The tag row of the Properties card is one line that slides sideways when its tags do not fit; the ends fade where there is more.
+function _wireTagSlider(box) {
+  if (!box) return;
+  const upd = () => {
+    const max = box.scrollWidth - box.clientWidth;
+    box.style.setProperty('--tf-l', box.scrollLeft > 2 ? '24px' : '0px');
+    box.style.setProperty('--tf-r', max > 2 && box.scrollLeft < max - 2 ? '24px' : '0px');
+  };
+  box.addEventListener('scroll', upd, { passive: true });
+  box.addEventListener('wheel', (e) => {
+    if (box.scrollWidth <= box.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    box.scrollLeft += e.deltaY; e.preventDefault();
+  }, { passive: false });
+  upd();
 }
 function refreshPropertiesPanel() {
   const el = $('prop-body');
@@ -20903,6 +21460,7 @@ function refreshPropertiesPanel() {
   let materialHtml = '';
   let matNote = '';          // "3 materials", on the title line, when more than one is in play
   let tagsHtml = '';
+  let subHtml = '';          // the line under the name: what the selection is
   let tris = '—', verts = '—', bbox = '—', diag = '—', pct = '—', vol = '—';
   let triShare = 0;
   let triShareLabel = '—';
@@ -20987,8 +21545,8 @@ function refreshPropertiesPanel() {
     const tIcon  = p.locked ? 'lock' : p.isSpline ? 'spline' : isInst ? 'copy' : 'box';
     const _safeName = escapeHtml(p.name);
     const _lockBadge = p.locked
-      ? `<span class="prop-lock-badge is-locked" data-lock-toggle="${p.partId}" title="Locked: click to unlock"><i data-lucide="lock"></i>Locked</span>`
-      : `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Lock this part"><i data-lucide="lock-open"></i>Lock</span>`;
+      ? `<span class="prop-lock-badge is-locked" data-lock-toggle="${p.partId}" title="Locked: click to unlock"><i data-lucide="lock"></i></span>`
+      : `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Lock this part"><i data-lucide="lock-open"></i></span>`;
     nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instance (×' + _shareN + ')' : _shareN > 1 ? 'Original of ' + _shareN + ' instances' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
                `<span class="prop-name" title="${_safeName}">${_safeName}</span>${_lockBadge}`;
     const mat = _matOfPart(p);
@@ -21012,6 +21570,7 @@ function refreshPropertiesPanel() {
     if (!p.visible) tags.push(`<span class="tree-badge muted">hidden</span>`);
     if (p.deleted)  tags.push(`<span class="tree-badge danger">deleted</span>`);
     tagsHtml = tags.join('');
+    subHtml = (p.isSpline ? 'Line' : isInst ? 'Instance · ×' + _shareN : _shareN > 1 ? 'Original of ' + _shareN + ' instances' : 'Single part') + (matNote ? ' · ' + matNote : '');
     tris  = fmtNum(p.triCount);
     verts = fmtNum(p.vertCount);
     bbox  = _fmtDims(sz);
@@ -21031,15 +21590,15 @@ function refreshPropertiesPanel() {
     let tt = 0, tv = 0, tvol = 0;
     const combined = new THREE.Box3();
     const colors = new Set();
-    let anyFlagged = false, anyHidden = false, anyInstanced = 0;
+    let anyFlagged = false, anyHidden = false, anyInstanced = 0, nFlagged = 0, nHidden = 0;
     for (const id of ids) {
       const p = getPart(id);
       if (!p) continue;
       tt += p.triCount; tv += p.vertCount; tvol += p.sizeMetrics.vol;
       if (p.bbox && !p.bbox.isEmpty()) combined.union(p.bbox);
       if (p.originalColor) colors.add(p.originalColor.getHexString());
-      if (p.flagged)  anyFlagged = true;
-      if (!p.visible) anyHidden  = true;
+      if (p.flagged)  { anyFlagged = true; nFlagged++; }
+      if (!p.visible) { anyHidden  = true; nHidden++; }
       if (p.group)    anyInstanced++;
     }
     const sharedColor = colors.size === 1 ? '#' + [...colors][0] : null;
@@ -21088,9 +21647,10 @@ function refreshPropertiesPanel() {
     }
     const tags = [];
     if (anyInstanced) tags.push(`<span class="tree-badge">${anyInstanced} instanced</span>`);
-    if (anyFlagged)   tags.push(`<span class="tree-badge warn">contains flagged</span>`);
-    if (anyHidden)    tags.push(`<span class="tree-badge muted">contains hidden</span>`);
+    if (anyFlagged)   tags.push(`<span class="tree-badge warn">${fmtNum(nFlagged)} flagged</span>`);
+    if (anyHidden)    tags.push(`<span class="tree-badge muted">${fmtNum(nHidden)} hidden</span>`);
     tagsHtml = tags.join('');
+    subHtml = fmtNum(ids.length) + ' parts' + (matNote ? ' · ' + matNote : '');
     tris  = fmtNum(tt);
     verts = fmtNum(tv);
     if (!combined.isEmpty()) {
@@ -21100,7 +21660,7 @@ function refreshPropertiesPanel() {
       diag = _fmtLen(d, 3);
       pct  = (d / _liveSceneDiag() * 100).toFixed(2) + '%';
     }
-    vol = _fmtVol(tvol);
+    { const cs = combined.isEmpty() ? null : combined.getSize(new THREE.Vector3()); vol = cs ? _fmtVol(cs.x * cs.y * cs.z) : '—'; }      // (the box of the whole selection, as the Size beside it: the parts' boxes added up overlap and came to more than the box itself)
     triShare = sceneTris > 0 ? tt / sceneTris : 0;
     triShareLabel = (triShare * 100).toFixed(triShare < 0.001 ? 3 : triShare < 0.01 ? 2 : 1) + '% of scene';
     heroTris = tt; heroSub = triShareLabel; heroRight = '≈ ' + fmtNum(Math.round(tt / Math.max(1, ids.length))) + ' per part';
@@ -21118,17 +21678,17 @@ function refreshPropertiesPanel() {
     if (t.hidden)  tags.push(`<span class="tree-badge muted">${fmtNum(t.hidden)} hidden</span>`);
     // (no "N flagged" tag on the scene: the status bar already counts the flagged parts)
     tagsHtml = tags.join('');
+    subHtml = has ? 'Whole scene · ' + fmtNum(t.count) + ' part' + (t.count === 1 ? '' : 's') : 'Open a file or drop one here';
     const start = Math.max(state._initialTris || 0, t.tris);
     triShare = has && start > 0 ? t.tris / start : 0;
     triShareLabel = has ? (triShare >= 0.9995 ? '100' : (triShare * 100).toFixed(1)) + '% of original' : '—';
     barTitle = 'Triangles left, compared with the model as it was loaded';
     if (has) { heroTris = t.tris; heroWas = start; heroSub = triShareLabel; heroRight = '≈ ' + fmtNum(Math.round(t.tris / t.count)) + ' per part'; }
     sceneRows = [
-      ['boxes',      'Parts',     has ? fmtNum(t.count) : '—'],
-      ['vector-polygon', 'Vertices',  has ? fmtNum(t.verts) : '—'],
+      ['Vertices',  has ? fmtNum(t.verts) : '—'],
+      ['Mesh data', has ? fmtBytes(t.bytes) : '—'],
       // a big model: whole units, so the three numbers fit on the line
-      ['box',        'Size',      has && !t.box.isEmpty() ? (sz => _fmtDims(sz, Math.max(sz.x, sz.y, sz.z) >= 1000 ? 0 : 2))(t.box.getSize(new THREE.Vector3())) : '—'],
-      ['hard-drive', 'Mesh data', has ? fmtBytes(t.bytes) : '—'],
+      ['Size',      has && !t.box.isEmpty() ? (sz => _fmtDims(sz, Math.max(sz.x, sz.y, sz.z) >= 1000 ? 0 : 2))(t.box.getSize(new THREE.Vector3())) : '—'],
     ];
   }
 
@@ -21153,8 +21713,9 @@ function refreshPropertiesPanel() {
     // Lock / Locked, as on a part: it locks (or unlocks) every part in the selected group or groups
     const _gAllLocked = ids.length > 0 && ids.every(id => getPart(id)?.locked);
     const _gLockBadge = _gAllLocked
-      ? `<span class="prop-lock-badge is-locked" data-lock-group="1" title="Locked: click to unlock everything inside"><i data-lucide="lock"></i>Locked</span>`
-      : `<span class="prop-lock-badge" data-lock-group="1" title="Lock everything inside"><i data-lucide="lock-open"></i>Lock</span>`;
+      ? `<span class="prop-lock-badge is-locked" data-lock-group="1" title="Locked: click to unlock everything inside"><i data-lucide="lock"></i></span>`
+      : `<span class="prop-lock-badge" data-lock-group="1" title="Lock everything inside"><i data-lucide="lock-open"></i></span>`;
+    subHtml = (groupIds.length > 1 ? groupIds.length + ' groups · ' : '') + fmtNum(ids.length) + ' part' + (ids.length === 1 ? '' : 's') + (matNote ? ' · ' + matNote : '');
     if (groupIds.length === 1) {
       const g = findGroup(groupIds[0]);
       const gname = g ? g.name : ('Group ' + groupIds[0]);
@@ -21171,45 +21732,52 @@ function refreshPropertiesPanel() {
   // Bar tints: blue under 5%, yellow 5-20%, red over 20% — "this part is
   // dragging the framerate" intuition matches the existing threshold helpers.
   const sharePct = Math.min(100, triShare * 100);
-  const fillCls = sceneRows ? '' : triShare > 0.20 ? 'very-heavy' : triShare > 0.05 ? 'heavy' : '';
+  // (the whole scene is selected: the bar is full by definition, so it is plain, not an alarm)
+  const isWhole = !sceneRows && ids.length > 0 && triShare >= 0.9995;
+  const fillCls = sceneRows ? '' : isWhole ? 'whole' : triShare > 0.20 ? 'very-heavy' : triShare > 0.05 ? 'heavy' : '';
+  if (isWhole) heroSub = 'Whole scene';
   // a line has no triangles: its card says how many points, how long, how big
   const _splSel = ids.length === 1 ? getPart(ids[0]) : null, _splOn = !!(_splSel && _splSel.isSpline && !_splSel.deleted && _splineById(_splSel.splineId));
-  let _splRows = null;
+  let _splRows = null, _splPts = '0';
   if (_splOn) {
     const _sp0 = _splineById(_splSel.splineId); let _len0 = 0;
     try { const pl = _splinePolyline(_sp0); _len0 = SPL.polylineLength(pl.points, pl.closed); } catch (_) {}
-    _splRows = [['circle-dot', 'Points', fmtNum(_srcOf(_sp0).points.length)], ['box', 'Size', bbox], ['ruler', 'Length', _fmtLen(_len0, 3)], ['percent', '% of model', pct]];
+    _splPts = fmtNum(_srcOf(_sp0).points.length);
+    _splRows = [['Length', _fmtLen(_len0, 3)], ['% of model', pct], ['Size', bbox]];
   }
-  const gridRows = _splRows || sceneRows || [
-    ['vector-polygon', 'Vertices', verts], ['box', 'Size', bbox],
-    ['percent', '% of model', pct], ['package', 'Volume', vol],
-  ];
+  const gridRows = _splRows || sceneRows || [['Vertices', verts], ['Box volume', vol], ['Size', bbox]];
   // The triangle count leads the card. When the part (or the scene) has
   // fewer triangles than it arrived with, the saving is the headline: a
   // green badge, and the old count struck through.
   const saved = heroTris != null && heroWas > heroTris ? (heroWas - heroTris) / heroWas : 0;
-  const heroHtml = heroTris == null
+  // The card keeps every line of it for every selection (the count, the saving, the bar, its caption, the two figures, the size), a line
+  // with nothing to say is held empty: a part, a group, a line, the scene and an empty scene are all as high, and nothing below moves.
+  const _barHtml = (w, cls) => `<div class="prop-bar" title="${barTitle}"><div class="prop-bar-fill ${cls}" style="width:${w}%"></div></div>`;
+  const _wasHtml = saved
+    ? `<div class="prop-hero-sub"><span>was <s>${fmtNum(heroWas)}</s></span><span class="prop-hero-dot">·</span><span class="prop-hero-saved">saved ${fmtNum(heroWas - heroTris)}</span></div>`
+    : `<div class="prop-hero-sub is-none">&nbsp;</div>`;
+  const _badgeHtml = saved ? `<span class="prop-hero-badge" title="${fmtNum(heroWas - heroTris)} fewer triangles than it arrived with">−${saved * 100 < 10 ? (saved * 100).toFixed(1) : Math.round(saved * 100)}%</span>` : '';
+  const heroHtml = _splOn
+    ? `<div class="prop-hero"><div class="prop-hero-top"><span class="prop-hero-num" data-readout="Points">${_splPts}</span><span class="prop-hero-unit">points</span></div>
+         ${_wasHtml}${_barHtml(0, '')}<div class="prop-hero-cap"><span>No triangles on a line</span><span></span></div></div>`
+    : heroTris == null
     ? `<div class="prop-hero is-empty"><div class="prop-hero-top"><span class="prop-hero-num">—</span><span class="prop-hero-unit">tris</span></div>
-         <div class="prop-bar" title="${barTitle}"><div class="prop-bar-fill" style="width:0%"></div></div></div>`
+         ${_wasHtml}${_barHtml(0, '')}<div class="prop-hero-cap"><span></span><span></span></div></div>`
     : `<div class="prop-hero${saved ? ' is-reduced' : ''}">
-         <div class="prop-hero-top">
-           <span class="prop-hero-num">${fmtNum(heroTris)}</span><span class="prop-hero-unit">tris</span>
-           ${saved ? `<span class="prop-hero-badge" title="${fmtNum(heroWas - heroTris)} fewer triangles than it arrived with">\u2212${saved * 100 < 10 ? (saved * 100).toFixed(1) : Math.round(saved * 100)}%</span>` : ''}
-         </div>
-         ${saved ? `<div class="prop-hero-sub"><span>was <s>${fmtNum(heroWas)}</s></span><span class="prop-hero-dot">·</span><span class="prop-hero-saved">saved ${fmtNum(heroWas - heroTris)}</span></div>` : ''}
-         <div class="prop-bar" title="${barTitle}"><div class="prop-bar-fill ${fillCls}" style="width:${sharePct.toFixed(2)}%"></div></div>
+         <div class="prop-hero-top"><span class="prop-hero-num">${fmtNum(heroTris)}</span><span class="prop-hero-unit">tris</span>${_badgeHtml}</div>
+         ${_wasHtml}${_barHtml(sharePct > 0 ? Math.max(sharePct, 1.5).toFixed(2) : 0, fillCls)}
          <div class="prop-hero-cap"><span>${heroSub}</span><span>${heroRight}</span></div>
        </div>`;
+  const statsHtml = gridRows.map(([lb, val], i) => `<div class="prop-stat${i === 2 ? ' wide' : ''}"><span class="prop-label">${lb}</span><strong class="prop-value" data-readout="${lb}" title="${val}">${val}</strong></div>`).join('');
 
   el.innerHTML = `
-    <div class="prop-head">${nameHtml}${matNote ? `<span class="prop-head-note" title="Different materials in this selection">${matNote}</span>` : ''}</div>
-    ${_splOn ? '' : heroHtml}
-    <div class="prop-grid">
-      ${gridRows.map(([ic, lb, val]) => `<span class="prop-icon"><i data-lucide="${ic}"></i></span><span class="prop-label">${lb}</span><strong class="prop-value"${lb === 'Size' ? ` title="${val}"` : ''}>${val}</strong>`).join('\n      ')}
-    </div>
-    <div class="prop-tags">${tagsHtml}</div>
+    <div class="prop-head">${nameHtml}</div>
+    <div class="prop-sub" title="${escapeHtml(subHtml)}">${escapeHtml(subHtml) || '&nbsp;'}</div>
+    <div class="prop-card">${heroHtml}<div class="prop-grid">${statsHtml}</div></div>
+    <div class="prop-tags">${tagsHtml || '<span class="prop-tags-empty">Nothing flagged</span>'}</div>
     ${_splOn ? '' : `<div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>`}
-    <div class="prop-shade cmd-num is-off" id="prop-shade"></div>`;
+    <div class="field prop-shade is-off" id="prop-shade"><div id="prop-shade-scrub"></div></div>`;
+  try { _wireTagSlider(el.querySelector('.prop-tags')); } catch (_) {}
   // A line: the Shape (rectangle, circle, polygon) and Spline cards, C4D style
   if (_splOn) {
     const html = _renderSplineSections(_splSel);
@@ -22151,7 +22719,7 @@ const _Tabs = (() => {
       { label: 'Close others', off: others ? false : 'No other scene is open', fn: () => closeOthers(id) },
       { label: 'Show in Explorer', off: src ? false : 'This scene was not opened from a file', fn: () => revealSource(src) },
       '---',
-      { label: 'Open&', kbd: 'Ctrl+O', fn: () => _openWithPicker() },
+      { label: 'Open…', kbd: 'Ctrl+O', fn: () => _openWithPicker() },
       { label: 'Open recent', off: recent.length ? false : 'No recent files yet', sub: recent },
     ], x, y);
   }
@@ -25812,2301 +26380,7 @@ async function _convertGlbToFbx(inputBytes) {
   throw new Error('FBX export failed (tried fbx + fbxa). ' + errors.join(' | '));
 }
 
-// ── Binary FBX writer ─────────────────────────────────────────────────────
-// FBX 7.4 binary spec: 27-byte header + recursively-encoded nodes + 13-byte
-// null terminator + optional 168-byte footer. Each node records the absolute
-// file offset of its end byte so the parser can jump over it; we backfill
-// those during a single-pass write via patchUint32LE. Large array properties
-// (vertex positions, indices, normals) are zlib-compressed via the browser's
-// CompressionStream — that's where the bulk of the 3× shrink vs ASCII comes
-// from.
-//
-// Designed to mirror the ASCII writer's output exactly so DCC tools see an
-// identical scene; only the on-disk encoding changes.
-
-class _FbxBinWriter {
-  constructor() {
-    this.buf = new ArrayBuffer(64 * 1024);
-    this.view = new DataView(this.buf);
-    this.bytes = new Uint8Array(this.buf);
-    this.pos = 0;
-  }
-  _ensure(n) {
-    if (this.pos + n <= this.buf.byteLength) return;
-    let cap = this.buf.byteLength;
-    while (this.pos + n > cap) cap *= 2;
-    const nb = new ArrayBuffer(cap);
-    new Uint8Array(nb).set(this.bytes.subarray(0, this.pos));
-    this.buf = nb;
-    this.view = new DataView(nb);
-    this.bytes = new Uint8Array(nb);
-  }
-  u8(v)  { this._ensure(1); this.view.setUint8(this.pos, v); this.pos += 1; }
-  i16(v) { this._ensure(2); this.view.setInt16(this.pos, v, true); this.pos += 2; }
-  i32(v) { this._ensure(4); this.view.setInt32(this.pos, v, true); this.pos += 4; }
-  u32(v) { this._ensure(4); this.view.setUint32(this.pos, v >>> 0, true); this.pos += 4; }
-  f32(v) { this._ensure(4); this.view.setFloat32(this.pos, v, true); this.pos += 4; }
-  f64(v) { this._ensure(8); this.view.setFloat64(this.pos, v, true); this.pos += 8; }
-  i64(v) { this._ensure(8); this.view.setBigInt64(this.pos, BigInt(v), true); this.pos += 8; }
-  bytes_(b) { this._ensure(b.byteLength); this.bytes.set(b, this.pos); this.pos += b.byteLength; }
-  patchU32(at, v) { this.view.setUint32(at, v >>> 0, true); }
-  finalize() { return new Uint8Array(this.buf, 0, this.pos); }
-}
-
-async function _fbxDeflate(bytes) {
-  // FBX encoding=1 means RFC 1950 (zlib): 2-byte CMF/FLG header + raw
-  // DEFLATE stream + 4-byte Adler-32 checksum (big-endian).
-  //
-  // We MUST NOT use CompressionStream('deflate') directly: the W3C spec
-  // only clarified that 'deflate' = RFC 1950 in late 2022, and Chrome
-  // shipped raw DEFLATE for 'deflate' until ~Chrome 106. Using deflate-raw
-  // and adding the RFC 1950 framing ourselves guarantees the FBX SDK's
-  // zlib decompressor accepts it in Houdini, C4D, Maya, and 3ds Max.
-  //
-  // Step 1: Adler-32 of the uncompressed input (RFC 1950 requires it).
-  let adlerA = 1, adlerB = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    adlerA = (adlerA + bytes[i]) % 65521;
-    adlerB = (adlerB + adlerA) % 65521;
-  }
-
-  // Step 2: Raw DEFLATE (no zlib header, no checksum).
-  const cs = new CompressionStream('deflate-raw');
-  const writer = cs.writable.getWriter();
-  writer.write(bytes);
-  writer.close();
-  const reader = cs.readable.getReader();
-  const rawChunks = [];
-  let rawTotal = 0;
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    rawChunks.push(value); rawTotal += value.byteLength;
-  }
-
-  // Step 3: Assemble RFC 1950: [CMF=0x78, FLG=0x9C] + deflate + Adler-32.
-  // 0x78 = deflate + 32 KB window. 0x9C = check bits such that
-  // (0x78<<8 | 0x9C) % 31 == 0 — RFC 1950 header validity requirement.
-  const out = new Uint8Array(2 + rawTotal + 4);
-  out[0] = 0x78; out[1] = 0x9C;
-  let off = 2;
-  for (const c of rawChunks) { out.set(c, off); off += c.byteLength; }
-  // Adler-32 written big-endian in the last 4 bytes.
-  // Use >>> 0 to keep the shift unsigned — without it, adlerB > 0x7FFF
-  // would produce a negative signed value and corrupt the checksum.
-  new DataView(out.buffer).setUint32(2 + rawTotal, ((adlerB << 16) >>> 0) | adlerA, false);
-  return out;
-}
-
-const _FBX_TENC = new TextEncoder();
-
-function _fbxWriteScalarProp(w, type, value) {
-  w.u8(type.charCodeAt(0));
-  switch (type) {
-    case 'Y': w.i16(value); break;
-    case 'C':
-      // 'C' is a single byte — FBX SDK convention uses ASCII 'Y'/'N' (89/78)
-      // for boolean-ish flags rather than 0/1. Accept either: a JS boolean
-      // becomes 'Y'/'N', a number gets written verbatim (caller can pass
-      // 89 directly when matching the SDK style).
-      if (typeof value === 'boolean') w.u8(value ? 89 : 78);
-      else w.u8(value | 0);
-      break;
-    case 'I': w.i32(value); break;
-    case 'F': w.f32(value); break;
-    case 'D': w.f64(value); break;
-    case 'L': w.i64(value); break;
-    case 'S':
-    case 'R': {
-      const buf = typeof value === 'string' ? _FBX_TENC.encode(value) : value;
-      w.u32(buf.byteLength);
-      w.bytes_(buf);
-      break;
-    }
-  }
-}
-
-async function _fbxWriteArrayProp(w, type, array) {
-  // type ∈ {'f','d','l','i','b'} → element typed buffer
-  w.u8(type.charCodeAt(0));
-  let raw;
-  switch (type) {
-    case 'f': raw = new Uint8Array(new Float32Array(array).buffer); break;
-    case 'd': raw = new Uint8Array(new Float64Array(array).buffer); break;
-    case 'i': raw = new Uint8Array(new Int32Array(array).buffer); break;
-    case 'l': {
-      const big = new BigInt64Array(array.length);
-      for (let i = 0; i < array.length; i++) big[i] = BigInt(array[i]);
-      raw = new Uint8Array(big.buffer);
-      break;
-    }
-    case 'b': raw = new Uint8Array(array); break;
-  }
-  w.u32(array.length);
-  // Match Blender's encode_bin.py threshold exactly:
-  //   encoding = 0 (raw)  if len(data) <= 128
-  //   encoding = 1 (zlib) if len(data) >  128
-  // Small arrays (e.g. Materials:[0] = 4 bytes) stay uncompressed.
-  // Large arrays (vertex positions, indices) get zlib.
-  const encoding = raw.byteLength <= 128 ? 0 : 1;
-  const payload = encoding === 1 ? await _fbxDeflate(raw) : raw;
-  w.u32(encoding);
-  w.u32(payload.byteLength);
-  w.bytes_(payload);
-}
-
-// FBX node tree node:
-// { name: 'Foo', props: [{type:'I', value: 7}, ...], children: [...] }
-//
-// FBX 7.4 binary uses 32-bit fields for the node header. Matching Blender's
-// exporter exactly — Blender writes 7.4 (32-bit) and its files load
-// universally including C4D 2026. The 64-bit format only matters for
-// >4 GB single-file exports.
-async function _fbxWriteNode(w, n) {
-  const headerStart = w.pos;
-  w.u32(0);                 // end_offset (patched at end)
-  w.u32(n.props ? n.props.length : 0);
-  const propLenPos = w.pos;
-  w.u32(0);                 // property_list_len (patched after props)
-  const nameBuf = _FBX_TENC.encode(n.name || '');
-  w.u8(nameBuf.byteLength);
-  w.bytes_(nameBuf);
-
-  const propStart = w.pos;
-  if (n.props) {
-    for (const p of n.props) {
-      // Lowercase array types ('f','d','l','i','b') vs uppercase scalar types
-      // ('Y','C','I','F','D','L','S','R'). Single-char unambiguous routing.
-      if (p.type === 'f' || p.type === 'd' || p.type === 'l' || p.type === 'i' || p.type === 'b') {
-        await _fbxWriteArrayProp(w, p.type, p.value);
-      } else {
-        _fbxWriteScalarProp(w, p.type, p.value);
-      }
-    }
-  }
-  w.patchU32(propLenPos, w.pos - propStart);
-
-  // Write a null-record terminator whenever `children` is PRESENT — even an
-  // empty array. Strict FBX importers (Cinema 4D, Maya, FBX SDK validators)
-  // walk container nodes assuming there'll be a terminator, and freak out
-  // when a node like `References` (which is canonically empty but is a
-  // container by spec) has no terminator. Use `children: undefined` to mark
-  // a true leaf node with no terminator.
-  const hasKidsField = n.children !== undefined;
-  if (hasKidsField) {
-    for (const c of n.children) {
-      await _fbxWriteNode(w, c);
-    }
-    // Null record (13 bytes for FBX 7.4: three uint32 + one uint8).
-    w.u32(0); w.u32(0); w.u32(0); w.u8(0);
-  }
-  w.patchU32(headerStart, w.pos);
-}
-
-// ── FBX scene-tree builder shared by ASCII and binary writers ─────────────
-// Walks the export root, dedupes materials by RGB hex, bakes each mesh's
-// matrixWorld into a per-mesh world-space copy of the source positions/
-// normals (FBX has no shear support — bake-in-vertices avoids decompose
-// loss for deeply-nested transforms), and returns a flat list of nodes
-// with parent indices ready for either backend to emit.
-function _collectFbxScene(root) {
-  root.updateMatrixWorld(true);
-  const nodes = [];                 // { obj, parentIdx, type: 'Null' | 'Mesh' }
-  const objToIdx = new Map();
-  function visit(obj, parentIdx) {
-    if (obj === root) {
-      objToIdx.set(obj, -1);
-    } else {
-      const isMesh = !!obj.isMesh;
-      if (isMesh && obj.visible === false) return;
-      if (isMesh && !obj.geometry?.attributes?.position) return;
-      const idx = nodes.length;
-      nodes.push({ obj, parentIdx, type: isMesh ? 'Mesh' : 'Null' });
-      objToIdx.set(obj, idx);
-      parentIdx = idx;
-    }
-    if (obj.children) for (const c of obj.children) visit(c, parentIdx);
-  }
-  visit(root, -1);
-
-  // Prune empty Null nodes (those with no Mesh descendants).
-  {
-    const liveDescendantCount = new Array(nodes.length).fill(0);
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      const n = nodes[i];
-      const mine = n.type === 'Mesh' ? 1 : 0;
-      if (n.parentIdx >= 0) liveDescendantCount[n.parentIdx] += mine + liveDescendantCount[i];
-      liveDescendantCount[i] += mine;
-    }
-    const keep = nodes.map((n, i) => n.type === 'Mesh' || liveDescendantCount[i] > 0);
-    if (keep.some(k => !k)) {
-      const remap = new Array(nodes.length).fill(-1);
-      const filtered = [];
-      for (let i = 0; i < nodes.length; i++) {
-        if (!keep[i]) continue;
-        remap[i] = filtered.length;
-        const n = nodes[i];
-        let p = n.parentIdx;
-        while (p >= 0 && !keep[p]) p = nodes[p].parentIdx;
-        filtered.push({ obj: n.obj, parentIdx: p < 0 ? -1 : remap[p], type: n.type });
-      }
-      nodes.length = 0;
-      for (const n of filtered) nodes.push(n);
-    }
-  }
-
-  // (Materials are not collected here: the binary writer gives every mesh a
-  // material of its own, see _exportFbxBinary.)
-  return { nodes };
-}
-
-// A mesh whose world matrix mirrors (det < 0) gets a copy of its geometry with every triangle wound the other way, for the writers
-// that bake the transform into the points. Its polygon list (_moPoly) is the same: a polygon keeps its triangles, only their turn
-// changes, so the quads and n-gons the writers build from it are reversed too. An FBX part written with its own position, turn and
-// scale (_fbxLocalTRS) is left alone: its Model carries the transform and the reader applies it.
-function _flipMirroredForBake(root, format) {
-  const lin = root.userData.exportLin || null;
-  const done = new Map();                      // (a geometry shared by several mirrored meshes is flipped once)
-  const swapped = [];
-  root.traverse(o => {
-    if (!o.isMesh || !o.geometry || !o.geometry.attributes || !o.geometry.attributes.position) return;
-    if (!(o.matrixWorld.determinant() < 0)) return;
-    if (format === 'fbx') { try { if (_fbxLocalTRS(o, lin)) return; } catch (_) {} }
-    const g = o.geometry;
-    let f = done.get(g);
-    if (!f) {
-      f = g.clone();
-      if (g._moPoly) f._moPoly = g._moPoly;
-      if (f.index) {
-        const a = f.index.array;
-        for (let i = 0; i + 2 < a.length; i += 3) { const t = a[i + 1]; a[i + 1] = a[i + 2]; a[i + 2] = t; }
-        f.index.needsUpdate = true;
-      } else {
-        for (const name in f.attributes) {
-          const at = f.attributes[name], n = at.itemSize, arr = at.array;
-          if (at.isInterleavedBufferAttribute) continue;
-          for (let v = 0; v + 2 < at.count; v += 3) for (let k = 0; k < n; k++) { const i1 = (v + 1) * n + k, i2 = (v + 2) * n + k, t = arr[i1]; arr[i1] = arr[i2]; arr[i2] = t; }
-          at.needsUpdate = true;
-        }
-      }
-      done.set(g, f);
-    }
-    swapped.push([o, g]);
-    o.geometry = f;
-  });
-  return () => { for (const [o, g] of swapped) o.geometry = g; };
-}
-
-// ── Quads and n-gons for the OBJ and FBX writers ────────────────────────────────────────────────────────────────────────
-// A geometry in the export root carries `_moPoly` (see buildExportRoot): the polygon each triangle belongs to. This turns that
-// into the faces a modelling program wants: { sizes, verts }, the number of corners of each face and, corner after corner, the
-// mesh's own vertex number (so a corner keeps its own normal and uv), wound as the triangles are. Two triangles of a polygon that
-// share an edge make a quad; a bigger polygon goes round its outline. A polygon whose outline is not one simple loop (a hole in it)
-// is written as its triangles. Returns null when nothing has more than three corners: the writers then keep their fast path.
-function _exportFaces(geom) {
-  const poly = geom && geom._moPoly, pos = geom && geom.attributes && geom.attributes.position;
-  if (!poly || !pos) return null;
-  const idx = geom.index ? geom.index.array : null, nTri = idx ? (idx.length / 3) | 0 : (pos.count / 3) | 0;
-  if (!nTri || poly.length !== nTri) return null;
-  const topo = MEDIT.buildTopology(_wireXYZ(pos, false), idx), W = topo.weld, nW = topo.nVert + 1;      // raw vertex → welded point
-  const raw = (t, k) => idx ? idx[t * 3 + k] : t * 3 + k;
-  let nPoly = 0;
-  for (let t = 0; t < nTri; t++) if (poly[t] >= nPoly) nPoly = poly[t] + 1;
-  const start = new Uint32Array(nPoly + 1);
-  for (let t = 0; t < nTri; t++) start[poly[t] + 1]++;
-  for (let q = 0; q < nPoly; q++) start[q + 1] += start[q];
-  const order = new Uint32Array(nTri), fill = start.slice(0, nPoly);
-  for (let t = 0; t < nTri; t++) order[fill[poly[t]]++] = t;
-  const sizes = new Uint32Array(nTri), verts = new Uint32Array(nTri * 3);       // (a polygon of n triangles has n + 2 corners at most: never more than the triangles' own 3n)
-  const firstTri = new Uint32Array(nTri);                                          // (the first triangle of each polygon written: its material, for a part of several colours)
-  const tm = geom.groups && geom.groups.length > 1 ? FM.triMaterials(geom.groups, nTri) : null;
-  let ns = 0, nv = 0, big = false;
-  const tri = (t) => { verts[nv++] = raw(t, 0); verts[nv++] = raw(t, 1); verts[nv++] = raw(t, 2); firstTri[ns] = t; sizes[ns++] = 3; };
-  for (let q = 0; q < nPoly; q++) {
-    const a = start[q], b = start[q + 1], n = b - a;
-    if (!n) continue;
-    if (n === 1) { tri(order[a]); continue; }
-    if (tm) { let mixed = false; for (let i = a + 1; i < b && !mixed; i++) if (tm[order[i]] !== tm[order[a]]) mixed = true; if (mixed) { for (let i = a; i < b; i++) tri(order[i]); continue; } }      // (a polygon across two colours is written as its triangles)
-    if (n === 2) {                                     // the common case: two triangles that share an edge are one quad a, d, b, c
-      const t1 = order[a], t2 = order[a + 1];
-      let done = false;
-      for (let k = 0; k < 3 && !done; k++) {
-        const wa = W[raw(t1, k)], wb = W[raw(t1, (k + 1) % 3)];
-        for (let j = 0; j < 3; j++) {
-          if (W[raw(t2, j)] === wb && W[raw(t2, (j + 1) % 3)] === wa) {
-            verts[nv++] = raw(t1, k); verts[nv++] = raw(t2, (j + 2) % 3); verts[nv++] = raw(t1, (k + 1) % 3); verts[nv++] = raw(t1, (k + 2) % 3);
-            firstTri[ns] = t1; sizes[ns++] = 4; big = true; done = true; break;
-          }
-        }
-      }
-      if (!done) { tri(t1); tri(t2); }
-      continue;
-    }
-    // more triangles: the outline is the edges that have no triangle of the polygon on the other side, chained into one loop
-    const dir = new Set(), next = new Map();
-    for (let i = a; i < b; i++) { const t = order[i]; for (let k = 0; k < 3; k++) { const wa = W[raw(t, k)], wb = W[raw(t, (k + 1) % 3)]; if (wa !== wb) dir.add(wa * nW + wb); } }
-    let ok = true, nb = 0, first = -1;
-    for (let i = a; i < b && ok; i++) {
-      const t = order[i];
-      for (let k = 0; k < 3; k++) {
-        const wa = W[raw(t, k)], wb = W[raw(t, (k + 1) % 3)];
-        if (wa === wb || dir.has(wb * nW + wa)) continue;
-        if (next.has(wa)) { ok = false; break; }
-        next.set(wa, [wb, raw(t, k)]); nb++; if (first < 0) first = wa;
-      }
-    }
-    const loop = [];
-    if (ok && nb >= 3) {
-      let cur = first;
-      do { const e = next.get(cur); if (!e || loop.length > nb) { ok = false; break; } loop.push(e[1]); cur = e[0]; } while (cur !== first);
-      ok = ok && loop.length === nb;
-    } else ok = false;
-    if (ok) { for (const v of loop) verts[nv++] = v; firstTri[ns] = order[a]; sizes[ns++] = loop.length; big = true; }
-    else for (let i = a; i < b; i++) tri(order[i]);
-  }
-  return big ? { sizes: sizes.subarray(0, ns), verts: verts.subarray(0, nv), firstTri: firstTri.subarray(0, ns) } : null;
-}
-// The colours of a mesh of several materials, as the OBJ and FBX writers write them: one entry a colour that a polygon wears (two
-// materials of one colour are one), in the order of the material list, and the colour of each polygon written (the faces of
-// _exportFaces, else each triangle). null: a mesh of one material.
-function _exportFaceMats(meshObj, faces) {
-  const mat = meshObj && meshObj.material, g = meshObj && meshObj.geometry;
-  if (!Array.isArray(mat) || !g || !g.attributes.position) return null;
-  const nTri = ((g.index ? g.index.count : g.attributes.position.count) / 3) | 0;
-  const tm = FM.triMaterials(g.groups, nTri);
-  const key = (m) => m && m.color ? m.color.getHexString() : 'cccccc';
-  const byKey = new Map(), local = new Int32Array(mat.length), cand = [];
-  for (let i = 0; i < mat.length; i++) { const k = key(mat[i]); let j = byKey.get(k); if (j === undefined) { j = cand.length; byKey.set(k, j); cand.push(mat[i]); } local[i] = j; }
-  const nPoly = faces ? faces.sizes.length : nTri;
-  const poly = new Int32Array(nPoly);
-  for (let f = 0; f < nPoly; f++) { const t = faces ? faces.firstTri[f] : f; poly[f] = local[Math.min(tm[t] || 0, mat.length - 1)]; }
-  const used = new Int32Array(cand.length).fill(-1), colours = [];
-  for (let f = 0; f < nPoly; f++) { const c = poly[f]; if (used[c] < 0) used[c] = 1; }
-  for (let c = 0; c < cand.length; c++) if (used[c] > 0) { used[c] = colours.length; const m = cand[c], col = m && m.color; colours.push({ r: col ? col.r : 0.8, g: col ? col.g : 0.8, b: col ? col.b : 0.8, mat: m }); }
-  for (let f = 0; f < nPoly; f++) poly[f] = used[poly[f]];
-  if (!colours.length) return null;
-  return { colours, poly };
-}
-// The polygon of each triangle to write for a source geometry: the numbers it has (an OBJ or FBX file's own, or what Untriangulate
-// left), else the four-sided pairs found as in Wireframe (a part that went through Triangulate stays triangles). null: triangles.
-const _exportPolyCache = new WeakMap();
-function _exportPolysOf(src) {
-  if (!src || _triOnly.has(src)) return null;
-  const own = _polyIds.get(src);
-  if (own) return own;
-  if (_exportPolyCache.has(src)) return _exportPolyCache.get(src);
-  let out = null;
-  try {
-    const pos = src.attributes.position, tris = src.index ? src.index.count / 3 : pos.count / 3;
-    if (tris > 0 && tris <= 400000) { const topo = MEDIT.buildTopology(_wireXYZ(pos, false), src.index ? src.index.array : null), q = MEDIT.pairQuads(topo); if (q.quads) out = q.polyOf; }
-  } catch (_) { out = null; }
-  _exportPolyCache.set(src, out);
-  return out;
-}
-
-// Bake mesh.matrixWorld into a fresh typed-array of world-space positions
-// and (inverse-transposed) normals. Returns { positions, normals?, indices? }
-// where indices is a typed array if the source geometry was indexed.
-// A part's pivot is the origin of its own mesh (Centre pivot moves it). In the file it is the Model's Lcl Translation, and the part's vertices are
-// written around it, which is how Blender, Maya, Unreal, Cinema 4D and the loaders in three.js and Assimp all read a pivot. `world` is where
-// the pivot is in the scene being written; `local` is the same point in the parent Model's space (the Lcl Translation; the groups are written
-// at identity, so the two are the same unless a group carries a transform).
-function _fbxPivotOf(meshObj) {
-  meshObj.updateWorldMatrix(true, false);
-  const world = new THREE.Vector3().setFromMatrixPosition(meshObj.matrixWorld);
-  const local = world.clone();
-  if (meshObj.parent) {
-    meshObj.parent.updateWorldMatrix(true, false);
-    local.applyMatrix4(new THREE.Matrix4().copy(meshObj.parent.matrixWorld).invert());
-  }
-  return { world, local };
-}
-
-// The part's own position, rotation and scale as the Lcl of its Model, so that the axis of a part that is turned in the scene is turned in the file
-// too. The vertices stay in the part's own frame, with only `lin` (the turn into Y-up and the unit scale, the same for every part) put into them;
-// the object carries what is left, `mesh.matrix * lin^-1`, which has no turn in it for a part that is not turned. FBX turns about X first, then Y,
-// then Z (R = Rz Ry Rx: 'ZYX' in three). Returns null where that cannot be written truthfully (shear, a mirrored part): those are baked.
-function _fbxLocalTRS(meshObj, lin) {
-  meshObj.updateMatrix();
-  const m = new THREE.Matrix4().copy(meshObj.matrix);
-  if (lin) m.multiply(new THREE.Matrix4().copy(lin).invert());
-  if (_matrixHasShear(m) || m.determinant() <= 0) return null;
-  const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
-  m.decompose(p, q, sc);
-  const e = new THREE.Euler().setFromQuaternion(q, 'ZYX'), D = 180 / Math.PI;
-  return { t: [p.x, p.y, p.z], r: [e.x * D, e.y * D, e.z * D], s: [sc.x, sc.y, sc.z] };
-}
-
-// The UVs of a mesh for FBX's LayerElementUV (ByPolygonVertex, IndexToDirect): the vertex UVs as they are, and for every polygon corner,
-// in PolygonVertexIndex order, the vertex it is. FBX counts V from the bottom and the scene from the top (every file is read that way
-// round: see _ingestSceneRoot), so V is turned (1 - v) for the file. (It used to be turned only for a mesh drawn with a glTF texture, so
-// the UVs of an untextured glTF model, and of everything once an OBJ or FBX could come in the other way round, were written mirrored.)
-function _fbxUvData(meshObj, faces) {
-  const g = meshObj.geometry, uvA = g && g.attributes.uv;
-  if (!uvA || uvA.itemSize !== 2) return null;
-  const flip = true;
-  const uv = new Float64Array(uvA.count * 2);
-  for (let i = 0; i < uvA.count; i++) { uv[i * 2] = uvA.getX(i); uv[i * 2 + 1] = flip ? 1 - uvA.getY(i) : uvA.getY(i); }
-  const idx = g.index, n = faces ? faces.verts.length : idx ? idx.count : g.attributes.position.count;
-  const uvIndex = new Int32Array(n);
-  for (let i = 0; i < n; i++) uvIndex[i] = faces ? faces.verts[i] : idx ? idx.getX(i) : i;
-  return { uv, uvIndex };
-}
-function _fbxBakeMeshGeom(meshObj, lin) {
-  const g = meshObj.geometry;
-  const posAttr = g.attributes.position;
-  const norAttr = g.attributes.normal;
-  const idxAttr = g.index;
-  const trs = _fbxLocalTRS(meshObj, lin);
-  const M = trs ? (lin || new THREE.Matrix4()) : meshObj.matrixWorld;      // (with a TRS the vertices only get the Y-up turn and the unit scale)
-  const pivot = trs ? { world: new THREE.Vector3(), local: new THREE.Vector3() } : _fbxPivotOf(meshObj);
-  const N = new THREE.Matrix3().getNormalMatrix(M);
-  const tmpV = new THREE.Vector3();
-  const tmpN = new THREE.Vector3();
-
-  const out = {};
-  const stride = posAttr.itemSize;
-  const arr = posAttr.array;
-  const positions = new Float64Array(posAttr.count * 3);
-  for (let i = 0; i < posAttr.count; i++) {
-    tmpV.set(arr[i*stride], arr[i*stride+1], arr[i*stride+2]).applyMatrix4(M);
-    positions[i*3]   = tmpV.x - pivot.world.x;
-    positions[i*3+1] = tmpV.y - pivot.world.y;
-    positions[i*3+2] = tmpV.z - pivot.world.z;
-  }
-  out.positions = positions;
-  out.pivotLocal = pivot.local;                // (the Model's Lcl Translation)
-  out.trs = trs;                               // (or all three of its Lcl, when the part can be written that way)
-
-  // Build the indexed triangle list first — needed for the "ByPolygonVertex"
-  // normal layout below. FBX wants the LAST index of every polygon to be
-  // bitwise NOT (~i) so the parser can detect polygon ends. We always emit
-  // triangulated geometry, so every 3rd index gets the NOT.
-  const triCount = idxAttr ? idxAttr.count / 3 : posAttr.count / 3;
-  // Quads and n-gons (see _exportFaces): one entry per corner of a polygon, the last of each polygon bitwise NOT.
-  const faces = _exportFaces(g);
-  const polyVertCount = faces ? faces.verts.length : triCount * 3;
-  const indices = new Int32Array(polyVertCount);
-  if (faces) {
-    let o = 0;
-    for (let f = 0; f < faces.sizes.length; f++) {
-      const n = faces.sizes[f];
-      for (let k = 0; k < n - 1; k++) { indices[o] = faces.verts[o]; o++; }
-      indices[o] = ~faces.verts[o]; o++;
-    }
-  } else if (idxAttr) {
-    const ai = idxAttr.array;
-    for (let i = 0; i < ai.length; i += 3) {
-      indices[i]   = ai[i];
-      indices[i+1] = ai[i+1];
-      indices[i+2] = ~ai[i+2];
-    }
-  } else {
-    for (let i = 0; i < triCount; i++) {
-      const j = i * 3;
-      indices[j]   = j;
-      indices[j+1] = j + 1;
-      indices[j+2] = ~(j + 2);
-    }
-  }
-  out.indices = indices;
-  out.triCount = triCount;
-  out.uvData = _fbxUvData(meshObj, faces);      // (null when the mesh has no UVs)
-  out.faceMats = _exportFaceMats(meshObj, faces);      // (a part of several colours: see _exportFaceMats)
-
-  if (norAttr) {
-    // Use Direct layout: one normal per polygon-vertex, in polygon-vertex
-    // order (same order as PolygonVertexIndex). This is what every reference
-    // binary FBX (Blender 2.79, Assimp, Maya) uses and what the FBX SDK
-    // expects by default. IndexToDirect is spec-valid but C4D / Houdini's
-    // FBX SDK implementation has known issues with it for static meshes —
-    // the SDK defaults to Direct when writing, so strict importers test it
-    // more thoroughly. No NormalsIndex array needed.
-    //
-    // normalsDirect: one xyz triple per polygon-vertex.
-    // Size = triCount * 3 * 3 doubles = polyVertCount * 3 doubles.
-    const nArr = norAttr.array;
-    const ns = norAttr.itemSize;
-    const ai = idxAttr ? idxAttr.array : null;
-    const normalsDirect = new Float64Array(polyVertCount * 3);
-    for (let i = 0; i < polyVertCount; i++) {
-      const vi = faces ? faces.verts[i] : ai ? ai[i] : i;   // raw vertex index (no polygon-end NOT)
-      tmpN.set(nArr[vi*ns], nArr[vi*ns+1], nArr[vi*ns+2])
-          .applyMatrix3(N).normalize();
-      normalsDirect[i*3]     = tmpN.x;
-      normalsDirect[i*3 + 1] = tmpN.y;
-      normalsDirect[i*3 + 2] = tmpN.z;
-    }
-    out.normalsDirect = normalsDirect;
-    // Keep a truthy flag so the geom-node builder knows normals exist.
-    out.normals = normalsDirect;
-  }
-  return out;
-}
-
-// What an FBX says about itself in GlobalSettings. It used to say
-// "centimetres, Y up" whatever was written:
-//   Units. One scene unit is a millimetre (see _fmtLen), and the export's
-//     own Unit scale changes what a unit of the file is. FBX gives its unit
-//     in centimetres, so millimetres are 0.1. With 1 here Cinema 4D read a
-//     2.6 m machine as 26 m.
-//   Axes. "Keep as in the scene" writes the scene as it is; "Turn Z-up
-//     into Y-up" turns it. The file has to say which way is up in what was
-//     written, or a reader that follows the file's axes (Blender, Maya,
-//     Unreal) turns a model that was already right. Cinema 4D does not turn
-//     anything on import: it shows the numbers as they are.
-function _fbxGlobals(opts) {
-  const scale = opts && opts.scale > 0 ? opts.scale : 1;
-  // "keep" keeps the scene's own up axis, which is Y for a scene shown Y up
-  // (Scene settings): its data is Y up, whatever the option's label says.
-  const yUp = !!(opts && opts.axis === 'y-up') || state.sceneUpAxis === 'y';
-  return { unit: +(0.1 / scale).toPrecision(12), up: yUp ? 1 : 2, front: yUp ? 2 : 1, frontSign: yUp ? 1 : -1 };
-}
-async function _exportFbxBinary(root, opts) {
-  const _fg = _fbxGlobals(opts);
-  const { nodes } = _collectFbxScene(root);
-
-  const GEOM_ID_BASE  = 100000000;
-  const MODEL_ID_BASE = 200000000;
-  const MAT_ID_BASE   = 300000000;
-  // NodeAttribute IDs: every Model needs an associated NodeAttribute that
-  // declares its kind ("Null" for groups, "Mesh" for meshes). C4D 2026's
-  // world.cpp:1745 fails to build the scene when Models lack this — every
-  // Blender FBX export includes them, which is why Blender's files load
-  // in C4D and ours didn't.
-  const NA_ID_BASE    = 400000000;
-
-  // Bake one geometry per mesh node (no sharing — see ASCII writer note;
-  // sharing requires Lcl Transform on the Mesh Model, which loses precision
-  // on deeply-nested CAD imports).
-  // Per-mesh materials too — Cinema 4D 2026's FBX importer fails to build
-  // the document tree (world.cpp:1745 error) when a single Material is
-  // connected to multiple Models. Inspecting C4D's own export confirms it
-  // writes 1 material per mesh (no dedup). We follow the same convention
-  // here. Slightly larger file (~601 Material entries instead of N unique
-  // colors) but C4D-compatible.
-  const meshIdxToGeomIdx = new Map();
-  const meshIdxToMatIdx = new Map();      // per-mesh material index
-  // The pictures of the materials, embedded in the file as Blender and Cinema 4D write them: a Video (the picture's bytes in Content,
-  // and its file name) and a Texture that shows it, connected to the material's DiffuseColor or NormalMap. The colour map and the normal
-  // map go out (the normal map drawn OpenGL's way up, as Blender, Unity and three read it); the other maps of a PBR material have no
-  // slot in a Phong material.
-  const FBX_TEX = [['map', 'DiffuseColor', 'BaseColor'], ['normalMap', 'NormalMap', 'Normal']];
-  const fbxTex = new Map();               // texture → { idx, tex, kind, flipGreen, file, mime, bytes }
-  const _fbxMapsOf = (mat) => FBX_TEX.filter(([k]) => mat && mat[k] && mat[k].isTexture && mat[k].image)
-    .map(([k, prop, kind]) => {
-      const t = mat[k];
-      let e = fbxTex.get(t);
-      if (!e) {
-        // (a normal map whose green is not turned in the scene is drawn the DirectX way: written turned)
-        const flipGreen = kind === 'Normal' && !!(mat.normalScale && (mat.normalScale.y < 0) === (mat.normalScale.x < 0));
-        e = { idx: fbxTex.size, tex: t, kind, flipGreen };
-        fbxTex.set(t, e);
-      }
-      return [prop, e];
-    });
-  const perMeshMats = [];                 // [{ r, g, b }, ...] one entry per colour (see below)
-  const _binMatByColor = new Map();       // "r,g,b" → index in perMeshMats
-  const bakedGeoms = [];   // index → { meshNodeIndex, baked }
-  // Resolve the display colour for a node, falling back to vertex colours for
-  // the merge-into-one path (material.vertexColors=true, no material.color).
-  const _binResolveColor = (n) => {
-    const rawMat = n.obj.material;
-    const mat = Array.isArray(rawMat) ? rawMat[0] : rawMat;
-    if (mat?.vertexColors && n.obj.geometry?.attributes?.color) {
-      const ca = n.obj.geometry.attributes.color;
-      return { r: ca.getX(0), g: ca.getY(0), b: ca.getZ(0) };
-    }
-    const c = mat?.color;
-    return c ? { r: c.r, g: c.g, b: c.b } : { r: 0.8, g: 0.8, b: 0.8 };
-  };
-  for (let i = 0; i < nodes.length; i++) {
-    if (nodes[i].type !== 'Mesh') continue;
-    meshIdxToGeomIdx.set(i, bakedGeoms.length);
-    bakedGeoms.push({ nodeIdx: i, baked: _fbxBakeMeshGeom(nodes[i].obj, root.userData.exportLin) });
-    const _fmx = bakedGeoms[bakedGeoms.length - 1].baked.faceMats;
-    if (_fmx && _fmx.colours.length > 1) {
-      // A part of several colours: a material for each (shared with the meshes of that colour), connected in this order, and the
-      // geometry's LayerElementMaterial says which polygon wears which (ByPolygon), as Cinema 4D and Blender write and read it.
-      const list = [];
-      for (const c of _fmx.colours) {
-        const _ck = c.r.toFixed(4) + ',' + c.g.toFixed(4) + ',' + c.b.toFixed(4);
-        let _ci = _binMatByColor.get(_ck);
-        if (_ci === undefined) { _ci = perMeshMats.length; _binMatByColor.set(_ck, _ci); perMeshMats.push({ r: c.r, g: c.g, b: c.b }); }
-        list.push(_ci);
-      }
-      meshIdxToMatIdx.set(i, list);
-      continue;
-    }
-    const { r, g, b } = _fmx ? _fmx.colours[0] : _binResolveColor(nodes[i]);
-    const _maps = _fbxMapsOf(Array.isArray(nodes[i].obj.material) ? nodes[i].obj.material[0] : nodes[i].obj.material);
-    // One material per colour, shared by the meshes that wear it. (This used
-    // to write one per mesh, on the belief that Cinema 4D could not build a
-    // file in which models share a material. That was read off files it
-    // refused for another reason, the file id; with that put right it loads
-    // shared materials, as it always did from the ASCII writer: 778 meshes
-    // came in with 778 materials, now with the scene's own few dozen.)
-    const _mk = r.toFixed(4) + ',' + g.toFixed(4) + ',' + b.toFixed(4) + _maps.map(([prop, e]) => '|' + prop + ':' + e.idx).join('');      // (with its maps: two white materials with different pictures stay two)
-    let _mIdx = _binMatByColor.get(_mk);
-    if (_mIdx === undefined) { _mIdx = perMeshMats.length; _binMatByColor.set(_mk, _mIdx); perMeshMats.push({ r, g, b, maps: _maps }); }
-    meshIdxToMatIdx.set(i, _mIdx);
-  }
-
-  if (fbxTex.size) {
-    let tUndo = null;
-    try {
-      tUndo = setExportTextureFormats(root);      // (each picture in the format of its own file: texformat.js)
-      for (const e of fbxTex.values()) { e.mime = (e.tex.userData && e.tex.userData.mimeType) || 'image/png'; e.file = 'Texture_' + e.idx + '_' + e.kind + (e.mime === 'image/jpeg' ? '.jpg' : '.png'); }
-    } finally { if (tUndo) tUndo(); }
-    const got = new Map((await _objTextureFiles([...fbxTex.values()])).map(f => [f.name, f.blob]));
-    for (const e of fbxTex.values()) { const b = got.get(e.file); e.bytes = b ? new Uint8Array(await b.arrayBuffer()) : null; }
-  }
-  const safeName = (s) => (s || 'unnamed').replace(/["\\]/g, '_').replace(/[\x00-\x1f]/g, '_');
-
-  // Choose a binary type code per "Properties70 P-record" entry. The first
-  // type-string slot (t1) tells us the FBX semantic type; we map that to
-  // the appropriate scalar code so importers (Maya, Blender) read each
-  // value back at its declared precision instead of treating everything
-  // as a float (which works for Cinema 4D but corrupts e.g. enum values
-  // that should stay as integers).
-  const numTypeFor = (t1) => {
-    // FBX 'bool' properties are encoded as INT32 even though the type
-    // string is "bool". Blender's importer asserts INT32 for bool props
-    // (io_scene_fbx/import_fbx.py:269) and rejects the file otherwise.
-    // C4D's own export confirms this: P "TranslationActive" "bool" "" "" I:0.
-    if (t1 === 'int' || t1 === 'Integer' || t1 === 'enum' || t1 === 'bool') return 'I';
-    if (t1 === 'KTime') return 'L';
-    return 'D';
-  };
-  const P = (name, t1, t2, t3, ...vals) => {
-    const props = [
-      { type: 'S', value: name },
-      { type: 'S', value: t1 },
-      { type: 'S', value: t2 },
-      { type: 'S', value: t3 },
-    ];
-    const numCode = numTypeFor(t1);
-    for (const v of vals) {
-      if (typeof v === 'number') {
-        if (numCode === 'I') props.push({ type: 'I', value: v | 0 });
-        else if (numCode === 'L') props.push({ type: 'L', value: v });
-        else props.push({ type: 'D', value: v });
-      } else if (typeof v === 'string') {
-        props.push({ type: 'S', value: v });
-      } else if (typeof v === 'boolean') {
-        // FBX 'bool' properties are int32, not 'C' bytes — see numTypeFor.
-        props.push({ type: 'I', value: v ? 1 : 0 });
-      } else {
-        props.push({ type: 'I', value: v });
-      }
-    }
-    return { name: 'P', props };
-  };
-
-  // ── Build node tree ────────────────────────────────────────────────────
-  const now = new Date();
-  const tree = [];
-
-  tree.push({
-    name: 'FBXHeaderExtension', props: [], children: [
-      { name: 'FBXHeaderVersion', props: [{ type: 'I', value: 1003 }] },
-      { name: 'FBXVersion', props: [{ type: 'I', value: 7400 }] },
-      { name: 'EncryptionType', props: [{ type: 'I', value: 0 }] },
-      { name: 'CreationTimeStamp', props: [], children: [
-        { name: 'Version', props: [{ type: 'I', value: 1000 }] },
-        { name: 'Year',    props: [{ type: 'I', value: now.getFullYear() }] },
-        { name: 'Month',   props: [{ type: 'I', value: now.getMonth() + 1 }] },
-        { name: 'Day',     props: [{ type: 'I', value: now.getDate() }] },
-        { name: 'Hour',    props: [{ type: 'I', value: now.getHours() }] },
-        { name: 'Minute',  props: [{ type: 'I', value: now.getMinutes() }] },
-        { name: 'Second',  props: [{ type: 'I', value: now.getSeconds() }] },
-        { name: 'Millisecond', props: [{ type: 'I', value: 0 }] },
-      ]},
-      // The Creator string, and the SceneInfo records below with their
-      // "/foobar.fbx" placeholder paths, are deliberately the ones Blender's
-      // FBX exporter writes. This is a compatibility choice, not a leftover:
-      // this writer follows Blender's layout node for node, and importers
-      // (Cinema 4D 2026 above all, which rejected earlier versions of this
-      // file) read these records to decide how to treat what follows.
-      // Blender's is the most widely tested writer, so its identity is the
-      // one every importer accepts. Do not "correct" them to MeshOptimiser
-      // without re-testing in Cinema 4D, Maya and Houdini.
-      { name: 'Creator', props: [{ type: 'S', value: 'Blender (stable FBX IO) - 4.1.0 - 4.27.1' }] },
-      // OtherFlags block removed — Blender doesn't write it and it's not
-      // required. C4D may have been treating its presence (with our
-      // arbitrary TCDefinition value) as malformed.
-      // SceneInfo block — Maya/Cinema 4D treat its absence as malformed.
-      // The minimum that satisfies them: type, version, MetaData, Properties70.
-      { name: 'SceneInfo',
-        props: [
-          { type: 'S', value: 'GlobalInfo\x00\x01SceneInfo' },
-          { type: 'S', value: 'UserData' },
-        ],
-        children: [
-          { name: 'Type', props: [{ type: 'S', value: 'UserData' }] },
-          { name: 'Version', props: [{ type: 'I', value: 100 }] },
-          { name: 'MetaData', props: [], children: [
-            { name: 'Version', props: [{ type: 'I', value: 100 }] },
-            { name: 'Title',    props: [{ type: 'S', value: '' }] },
-            { name: 'Subject',  props: [{ type: 'S', value: '' }] },
-            { name: 'Author',   props: [{ type: 'S', value: '' }] },
-            { name: 'Keywords', props: [{ type: 'S', value: '' }] },
-            { name: 'Revision', props: [{ type: 'S', value: '' }] },
-            { name: 'Comment',  props: [{ type: 'S', value: '' }] },
-          ]},
-          // Full 14 P-records exactly matching Blender's SceneInfo. C4D
-          // 2026 reads these to identify the file source — incomplete sets
-          // contribute to the world.cpp:1745 rejection.
-          { name: 'Properties70', props: [], children: [
-            P('DocumentUrl', 'KString', 'Url', '', '/foobar.fbx'),
-            P('SrcDocumentUrl', 'KString', 'Url', '', '/foobar.fbx'),
-            P('Original', 'Compound', '', ''),
-            P('Original|ApplicationVendor', 'KString', '', '', 'Blender Foundation'),
-            P('Original|ApplicationName', 'KString', '', '', 'Blender (stable FBX IO)'),
-            P('Original|ApplicationVersion', 'KString', '', '', '4.1.0'),
-            P('Original|DateTime_GMT', 'DateTime', '', '', '01/01/1970 00:00:00.000'),
-            P('Original|FileName', 'KString', '', '', '/foobar.fbx'),
-            P('LastSaved', 'Compound', '', ''),
-            P('LastSaved|ApplicationVendor', 'KString', '', '', 'Blender Foundation'),
-            P('LastSaved|ApplicationName', 'KString', '', '', 'Blender (stable FBX IO)'),
-            P('LastSaved|ApplicationVersion', 'KString', '', '', '4.1.0'),
-            P('LastSaved|DateTime_GMT', 'DateTime', '', '', '01/01/1970 00:00:00.000'),
-            P('Original|ApplicationNativeFile', 'KString', '', '', ''),
-          ]},
-        ],
-      },
-    ],
-  });
-
-  // FileId, CreationTime and the footer code at the end of the file belong
-  // together: the FBX SDK (Cinema 4D, Maya) works the other two out from
-  // the time and refuses the file ("cannot read") when they do not agree.
-  // These are the three Blender writes, a set known to agree. A random id
-  // with today's time, as this used to write, opened in Blender and
-  // three.js, which do not check, and in nothing built on the SDK.
-  // (Tested in Cinema 4D 2026.4: with only the footer or only the time put
-  // right the file is still refused; with all three it loads.)
-  // The real time of the export is in FBXHeaderExtension/CreationTimeStamp.
-  const fileId = new Uint8Array([0x28, 0xb3, 0x2a, 0xeb, 0xb6, 0x24, 0xcc, 0xc2, 0xbf, 0xc8, 0xb0, 0x2a, 0xa9, 0x2b, 0xfc, 0xf1]);
-  tree.push({ name: 'FileId', props: [{ type: 'R', value: fileId }] });
-  tree.push({ name: 'CreationTime', props: [{ type: 'S', value: '1970-01-01 10:00:00:000' }] });
-  tree.push({ name: 'Creator', props: [{ type: 'S', value: 'Blender (stable FBX IO) - 4.1.0 - 4.27.1' }] });
-
-  tree.push({
-    name: 'GlobalSettings', props: [], children: [
-      { name: 'Version', props: [{ type: 'I', value: 1000 }] },
-      { name: 'Properties70', props: [], children: [
-        P('UpAxis', 'int', 'Integer', '', _fg.up),
-        P('UpAxisSign', 'int', 'Integer', '', 1),
-        P('FrontAxis', 'int', 'Integer', '', _fg.front),
-        P('FrontAxisSign', 'int', 'Integer', '', _fg.frontSign),
-        P('CoordAxis', 'int', 'Integer', '', 0),
-        P('CoordAxisSign', 'int', 'Integer', '', 1),
-        P('OriginalUpAxis', 'int', 'Integer', '', -1),     // Blender writes -1, not 1
-        P('OriginalUpAxisSign', 'int', 'Integer', '', 1),
-        P('UnitScaleFactor', 'double', 'Number', '', _fg.unit),
-        P('OriginalUnitScaleFactor', 'double', 'Number', '', 1),
-        P('AmbientColor', 'ColorRGB', 'Color', '', 0, 0, 0),
-        P('DefaultCamera', 'KString', '', '', 'Producer Perspective'),
-        P('TimeMode', 'enum', '', '', 11),
-        P('TimeSpanStart', 'KTime', 'Time', '', 0),
-        P('TimeSpanStop', 'KTime', 'Time', '', 46186158000),
-        P('CustomFrameRate', 'double', 'Number', '', 24),  // Blender includes this; missing made our P-count = 15 instead of 16
-      ]},
-    ],
-  });
-
-  // ── Documents / References / Takes ──────────────────────────────────────
-  // C4D and Maya treat these top-level nodes as required even though they
-  // mostly hold placeholder data. Documents binds the scene root; Takes
-  // declares animation tracks (we have none); References is empty.
-  // Document ID — Cinema 4D uses huge unique IDs (~2 trillion); using a
-  // small value like 1 has been observed to make C4D's document-builder
-  // mistreat the Document as a sentinel/placeholder. Generate a random
-  // 53-bit value (safely representable as a JS number, fits int64).
-  const docId = Math.floor(Math.random() * 0x1FFFFFFFFFFFFF);
-  tree.push({
-    name: 'Documents', props: [], children: [
-      { name: 'Count', props: [{ type: 'I', value: 1 }] },
-      { name: 'Document',
-        props: [
-          { type: 'L', value: docId },
-          { type: 'S', value: 'Scene' },         // name (Blender uses 'Scene', not '')
-          { type: 'S', value: 'Scene' },         // type
-        ],
-        children: [
-          { name: 'Properties70', props: [], children: [
-            P('SourceObject', 'object', '', ''),
-            P('ActiveAnimStackName', 'KString', '', '', ''),
-          ]},
-          { name: 'RootNode', props: [{ type: 'L', value: 0 }] },
-        ],
-      },
-    ],
-  });
-  tree.push({ name: 'References', props: [], children: [] });
-
-  // ── Definitions ─────────────────────────────────────────────────────────
-  tree.push({
-    name: 'Definitions', props: [], children: [
-      { name: 'Version', props: [{ type: 'I', value: 100 }] },
-      // Count = number of distinct ObjectType template blocks, NOT total objects.
-      // Blender 2.79 writes 3 (GlobalSettings + Geometry + Model) for a scene
-      // with 1 of each — confirming this is a template count, not the total
-      // object count. The prior formula (sum of all Geometry + Model + Material
-      // + NodeAttribute counts) could produce values like 3316 for large CAD
-      // scenes, which is technically wrong even if FBX SDK treats it as
-      // informational.
-      { name: 'Count', props: [{ type: 'I', value:
-          1 +                                              // GlobalSettings
-          (bakedGeoms.length > 0 ? 1 : 0) +               // Geometry
-          (nodes.length > 0 ? 1 : 0) +                    // Model
-          (perMeshMats.length > 0 ? 1 : 0) +              // Material
-          (nodes.some(n => n.type === 'Null') ? 1 : 0)    // NodeAttribute
-      }] },
-      { name: 'ObjectType', props: [{ type: 'S', value: 'GlobalSettings' }], children: [
-        { name: 'Count', props: [{ type: 'I', value: 1 }] },
-      ]},
-      { name: 'ObjectType', props: [{ type: 'S', value: 'Geometry' }], children: [
-        { name: 'Count', props: [{ type: 'I', value: bakedGeoms.length }] },
-        { name: 'PropertyTemplate', props: [{ type: 'S', value: 'FbxMesh' }], children: [
-          // Full canonical FbxMesh template — Cinema 4D 2026 cross-checks
-          // every property an object overrides against the template; missing
-          // base properties make C4D reject the entire file as malformed.
-          { name: 'Properties70', props: [], children: [
-            P('Color', 'ColorRGB', 'Color', '', 0.8, 0.8, 0.8),
-            P('BBoxMin', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('BBoxMax', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('Primary Visibility', 'bool', '', '', 1),
-            P('Casts Shadows', 'bool', '', '', 1),
-            P('Receive Shadows', 'bool', '', '', 1),
-          ]},
-        ]},
-      ]},
-      { name: 'ObjectType', props: [{ type: 'S', value: 'Model' }], children: [
-        { name: 'Count', props: [{ type: 'I', value: nodes.length }] },
-        { name: 'PropertyTemplate', props: [{ type: 'S', value: 'FbxNode' }], children: [
-          // Full canonical FbxNode template (~70 P-records) — what FBX SDK
-          // / Cinema 4D / Maya / 3ds Max all write for the Model object
-          // type. Order follows the FBX SDK's canonical template.
-          { name: 'Properties70', props: [], children: [
-            P('QuaternionInterpolate', 'enum', '', '', 0),
-            P('RotationOffset', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('RotationPivot', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('ScalingOffset', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('ScalingPivot', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('TranslationActive', 'bool', '', '', 0),
-            P('TranslationMin', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('TranslationMax', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('TranslationMinX', 'bool', '', '', 0),
-            P('TranslationMinY', 'bool', '', '', 0),
-            P('TranslationMinZ', 'bool', '', '', 0),
-            P('TranslationMaxX', 'bool', '', '', 0),
-            P('TranslationMaxY', 'bool', '', '', 0),
-            P('TranslationMaxZ', 'bool', '', '', 0),
-            P('RotationOrder', 'enum', '', '', 0),
-            P('RotationSpaceForLimitOnly', 'bool', '', '', 0),
-            P('RotationStiffnessX', 'double', 'Number', '', 0),
-            P('RotationStiffnessY', 'double', 'Number', '', 0),
-            P('RotationStiffnessZ', 'double', 'Number', '', 0),
-            P('AxisLen', 'double', 'Number', '', 10),
-            P('PreRotation', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('PostRotation', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('RotationActive', 'bool', '', '', 0),
-            P('RotationMin', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('RotationMax', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('RotationMinX', 'bool', '', '', 0),
-            P('RotationMinY', 'bool', '', '', 0),
-            P('RotationMinZ', 'bool', '', '', 0),
-            P('RotationMaxX', 'bool', '', '', 0),
-            P('RotationMaxY', 'bool', '', '', 0),
-            P('RotationMaxZ', 'bool', '', '', 0),
-            P('InheritType', 'enum', '', '', 0),
-            P('ScalingActive', 'bool', '', '', 0),
-            P('ScalingMin', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('ScalingMax', 'Vector3D', 'Vector', '', 1, 1, 1),
-            P('ScalingMinX', 'bool', '', '', 0),
-            P('ScalingMinY', 'bool', '', '', 0),
-            P('ScalingMinZ', 'bool', '', '', 0),
-            P('ScalingMaxX', 'bool', '', '', 0),
-            P('ScalingMaxY', 'bool', '', '', 0),
-            P('ScalingMaxZ', 'bool', '', '', 0),
-            P('GeometricTranslation', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('GeometricRotation', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('GeometricScaling', 'Vector3D', 'Vector', '', 1, 1, 1),
-            P('MinDampRangeX', 'double', 'Number', '', 0),
-            P('MinDampRangeY', 'double', 'Number', '', 0),
-            P('MinDampRangeZ', 'double', 'Number', '', 0),
-            P('MaxDampRangeX', 'double', 'Number', '', 0),
-            P('MaxDampRangeY', 'double', 'Number', '', 0),
-            P('MaxDampRangeZ', 'double', 'Number', '', 0),
-            P('MinDampStrengthX', 'double', 'Number', '', 0),
-            P('MinDampStrengthY', 'double', 'Number', '', 0),
-            P('MinDampStrengthZ', 'double', 'Number', '', 0),
-            P('MaxDampStrengthX', 'double', 'Number', '', 0),
-            P('MaxDampStrengthY', 'double', 'Number', '', 0),
-            P('MaxDampStrengthZ', 'double', 'Number', '', 0),
-            P('PreferedAngleX', 'double', 'Number', '', 0),
-            P('PreferedAngleY', 'double', 'Number', '', 0),
-            P('PreferedAngleZ', 'double', 'Number', '', 0),
-            P('LookAtProperty', 'object', '', ''),
-            P('UpVectorProperty', 'object', '', ''),
-            P('Show', 'bool', '', '', 1),
-            P('NegativePercentShapeSupport', 'bool', '', '', 1),
-            P('DefaultAttributeIndex', 'int', 'Integer', '', -1),
-            P('Freeze', 'bool', '', '', 0),
-            P('LODBox', 'bool', '', '', 0),
-            P('Lcl Translation', 'Lcl Translation', '', 'A', 0, 0, 0),
-            P('Lcl Rotation', 'Lcl Rotation', '', 'A', 0, 0, 0),
-            P('Lcl Scaling', 'Lcl Scaling', '', 'A', 1, 1, 1),
-            P('Visibility', 'Visibility', '', 'A', 1),
-            P('Visibility Inheritance', 'Visibility Inheritance', '', '', 1),
-          ]},
-        ]},
-      ]},
-      { name: 'ObjectType', props: [{ type: 'S', value: 'Material' }], children: [
-        { name: 'Count', props: [{ type: 'I', value: perMeshMats.length }] },
-        { name: 'PropertyTemplate', props: [{ type: 'S', value: 'FbxSurfacePhong' }], children: [
-          // Full canonical FbxSurfacePhong template — every CAD/DCC tool's
-          // Phong material derives from this base set of properties.
-          { name: 'Properties70', props: [], children: [
-            P('ShadingModel', 'KString', '', '', 'Phong'),
-            P('MultiLayer', 'bool', '', '', 0),
-            P('EmissiveColor', 'Color', '', 'A', 0, 0, 0),
-            P('EmissiveFactor', 'Number', '', 'A', 1),
-            P('AmbientColor', 'Color', '', 'A', 0.2, 0.2, 0.2),
-            P('AmbientFactor', 'Number', '', 'A', 1),
-            P('DiffuseColor', 'Color', '', 'A', 0.8, 0.8, 0.8),
-            P('DiffuseFactor', 'Number', '', 'A', 1),
-            P('Bump', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('NormalMap', 'Vector3D', 'Vector', '', 0, 0, 0),
-            P('BumpFactor', 'double', 'Number', '', 1),
-            P('TransparentColor', 'Color', '', 'A', 0, 0, 0),
-            P('TransparencyFactor', 'Number', '', 'A', 0),
-            P('DisplacementColor', 'ColorRGB', 'Color', '', 0, 0, 0),
-            P('DisplacementFactor', 'double', 'Number', '', 1),
-            P('VectorDisplacementColor', 'ColorRGB', 'Color', '', 0, 0, 0),
-            P('VectorDisplacementFactor', 'double', 'Number', '', 1),
-            P('SpecularColor', 'Color', '', 'A', 0.2, 0.2, 0.2),
-            P('SpecularFactor', 'Number', '', 'A', 1),
-            P('ShininessExponent', 'Number', '', 'A', 20),
-            P('ReflectionColor', 'Color', '', 'A', 0, 0, 0),
-            P('ReflectionFactor', 'Number', '', 'A', 1),
-          ]},
-        ]},
-      ]},
-      // NodeAttribute — only include this ObjectType block when there are
-      // actually Null/group nodes. Writing it with Count=0 would make
-      // Definitions.Count disagree with the actual number of ObjectType
-      // blocks, which strict FBX SDK parsers (C4D, Houdini) treat as
-      // malformed. Blender omits this block entirely when there are no Null
-      // nodes.
-      ...(nodes.some(n => n.type === 'Null') ? [{
-        name: 'ObjectType', props: [{ type: 'S', value: 'NodeAttribute' }], children: [
-          { name: 'Count', props: [{ type: 'I', value: nodes.filter(n => n.type === 'Null').length }] },
-        ],
-      }] : []),
-    ],
-  });
-
-  // ── Objects ─────────────────────────────────────────────────────────────
-  // Order matches Blender exactly: NodeAttribute → Geometry → Model →
-  // Material. C4D's scene-construction pass walks Objects in document
-  // order resolving references; NodeAttribute must come BEFORE the Model
-  // that references it, or world.cpp:1745 fails with an unresolved
-  // reference. Build each type into its own bucket then concat at the end.
-  const naBlocks = [];
-  const geomBlocks = [];
-  const modelBlocks = [];
-  const matBlocks = [];
-  const texBlocks = [], vidBlocks = [];
-  const texWritten = [...fbxTex.values()].filter(e => e.bytes);
-  if (texWritten.length) {
-    const defs = tree.find(n => n.name === 'Definitions');
-    const cnt = defs.children.find(c => c.name === 'Count');
-    if (cnt) cnt.props[0].value += 2;
-    defs.children.push(
-      { name: 'ObjectType', props: [{ type: 'S', value: 'Texture' }], children: [{ name: 'Count', props: [{ type: 'I', value: texWritten.length }] }] },
-      { name: 'ObjectType', props: [{ type: 'S', value: 'Video' }], children: [{ name: 'Count', props: [{ type: 'I', value: texWritten.length }] }] });
-  }
-  const TEX_ID_BASE = 500000000, VID_ID_BASE = 600000000;
-
-  for (let gi = 0; gi < bakedGeoms.length; gi++) {
-    const { nodeIdx, baked } = bakedGeoms[gi];
-    const geomId = GEOM_ID_BASE + gi;
-    const o = nodes[nodeIdx].obj;
-    // CRITICAL: every Geometry name must be UNIQUE. Blender writes them
-    // as "Mesh", "Mesh.001", "Mesh.002", ... — duplicate names confuse
-    // C4D's scene-construction pass even when IDs are unique. Earlier we
-    // were emitting "Mesh" for every single Geometry, which is exactly
-    // what C4D's world.cpp:1745 was choking on.
-    const name = gi === 0
-      ? `Mesh\x00\x01Geometry`
-      : `Mesh.${String(gi).padStart(3, '0')}\x00\x01Geometry`;
-    // Order matches Blender's FBX exporter exactly: empty Properties70
-    // FIRST, then GeometryVersion, then Vertices, then PolygonVertexIndex.
-    // C4D 2026's parser requires GeometryVersion to come BEFORE the vertex
-    // / index arrays — placing it after made C4D's world.cpp:1745 reject
-    // the file. Blender's writer is the de-facto reference for "any DCC
-    // tool reads it" because it's been hardened against every importer's
-    // quirks over many years.
-    const geomNode = {
-      name: 'Geometry',
-      props: [{ type: 'L', value: geomId }, { type: 'S', value: name }, { type: 'S', value: 'Mesh' }],
-      children: [
-        { name: 'Properties70', props: [], children: [] },
-        { name: 'GeometryVersion', props: [{ type: 'I', value: 124 }] },
-        { name: 'Vertices', props: [{ type: 'd', value: baked.positions }] },
-        { name: 'PolygonVertexIndex', props: [{ type: 'i', value: baked.indices }] },
-      ],
-    };
-    if (baked.normals) {
-      // ByPolygonVertex + Direct — one normal per polygon-vertex in
-      // PolygonVertexIndex order. No NormalsIndex array needed.
-      // Blender 2.79, Maya and the reference FBX SDK files all use this layout.
-      // _fbxBakeMeshGeom builds normalsDirect with size = triCount*3*3 doubles.
-      geomNode.children.push({
-        name: 'LayerElementNormal',
-        props: [{ type: 'I', value: 0 }],
-        children: [
-          { name: 'Version', props: [{ type: 'I', value: 101 }] },
-          { name: 'Name', props: [{ type: 'S', value: '' }] },
-          { name: 'MappingInformationType', props: [{ type: 'S', value: 'ByPolygonVertex' }] },
-          { name: 'ReferenceInformationType', props: [{ type: 'S', value: 'Direct' }] },
-          { name: 'Normals', props: [{ type: 'd', value: baked.normalsDirect }] },
-        ],
-      });
-    }
-    if (baked.uvData) {
-      geomNode.children.push({
-        name: 'LayerElementUV',
-        props: [{ type: 'I', value: 0 }],
-        children: [
-          { name: 'Version', props: [{ type: 'I', value: 101 }] },
-          { name: 'Name', props: [{ type: 'S', value: 'UVMap' }] },
-          { name: 'MappingInformationType', props: [{ type: 'S', value: 'ByPolygonVertex' }] },
-          { name: 'ReferenceInformationType', props: [{ type: 'S', value: 'IndexToDirect' }] },
-          { name: 'UV', props: [{ type: 'd', value: baked.uvData.uv }] },
-          { name: 'UVIndex', props: [{ type: 'i', value: baked.uvData.uvIndex }] },
-        ],
-      });
-    }
-    // AllSame material layout — Blender uses this for single-material
-    // meshes and it loads in C4D 2026. We earlier had ByPolygon thinking
-    // C4D needed it; that was wrong (the per-polygon Materials array was
-    // probably triggering its own scene-construction error).
-    // (a part of several colours: ByPolygon, a material number for each polygon, in the order the materials are connected)
-    const _multi = baked.faceMats && baked.faceMats.colours.length > 1;
-    geomNode.children.push({
-      name: 'LayerElementMaterial',
-      props: [{ type: 'I', value: 0 }],
-      children: [
-        { name: 'Version', props: [{ type: 'I', value: 101 }] },
-        { name: 'Name', props: [{ type: 'S', value: '' }] },
-        { name: 'MappingInformationType', props: [{ type: 'S', value: _multi ? 'ByPolygon' : 'AllSame' }] },
-        { name: 'ReferenceInformationType', props: [{ type: 'S', value: 'IndexToDirect' }] },
-        { name: 'Materials', props: [{ type: 'i', value: _multi ? baked.faceMats.poly : new Int32Array([0]) }] },
-      ],
-    });
-    const layerChildren = [{ name: 'Version', props: [{ type: 'I', value: 100 }] }];
-    if (baked.normals) {
-      layerChildren.push({ name: 'LayerElement', props: [], children: [
-        { name: 'Type', props: [{ type: 'S', value: 'LayerElementNormal' }] },
-        { name: 'TypedIndex', props: [{ type: 'I', value: 0 }] },
-      ]});
-    }
-    if (baked.uvData) {
-      layerChildren.push({ name: 'LayerElement', props: [], children: [
-        { name: 'Type', props: [{ type: 'S', value: 'LayerElementUV' }] },
-        { name: 'TypedIndex', props: [{ type: 'I', value: 0 }] },
-      ]});
-    }
-    layerChildren.push({ name: 'LayerElement', props: [], children: [
-      { name: 'Type', props: [{ type: 'S', value: 'LayerElementMaterial' }] },
-      { name: 'TypedIndex', props: [{ type: 'I', value: 0 }] },
-    ]});
-    geomNode.children.push({ name: 'Layer', props: [{ type: 'I', value: 0 }], children: layerChildren });
-    geomBlocks.push(geomNode);
-  }
-
-  // Models. Mesh Models carry the part's pivot as their Lcl Translation (rotation
-  // and scale are baked into the vertices, which are written around the pivot);
-  // Null Models get their decomposed local matrix (identity in practice
-  // since buildExportRoot creates containers at identity).
-  //
-  // CRITICAL: Model names must be unique across the entire scene. C4D's
-  // scene-construction pass uses names as disambiguators alongside IDs;
-  // even with unique IDs, two Models sharing the same name (e.g. two
-  // groups both named "Group") trigger world.cpp:1745. Track seen names
-  // and append an index suffix to duplicates.
-  const seenModelNames = new Map();   // base name → next suffix
-  const seenNANames = new Map();      // same for NodeAttribute names
-  const tmpQ = new THREE.Quaternion();
-  const tmpEuler = new THREE.Euler();
-  const tmpV3 = new THREE.Vector3();
-  const tmpScale = new THREE.Vector3();
-  const RAD2DEG = 180 / Math.PI;
-  for (let ni = 0; ni < nodes.length; ni++) {
-    const n = nodes[ni];
-    const o = n.obj;
-    const modelId = MODEL_ID_BASE + ni;
-    // C4D writes Model names as `name\x00\x01Model` (no Class:: prefix).
-    // De-duplicate by appending an index suffix to repeated base names.
-    let baseName = safeName(o.name || (n.type === 'Mesh' ? `mesh_${ni}` : `group_${ni}`));
-    const seenN = seenModelNames.get(baseName) || 0;
-    if (seenN > 0) baseName = `${baseName}.${String(seenN).padStart(3, '0')}`;
-    seenModelNames.set(safeName(o.name || (n.type === 'Mesh' ? `mesh_${ni}` : `group_${ni}`)), seenN + 1);
-    const name = `${baseName}\x00\x01Model`;
-    let tx=0,ty=0,tz=0,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1;
-    if (n.type === 'Mesh') {
-      // The part's pivot: rotation and scale stay baked into the vertices, the position is the Model's.
-      const bk = bakedGeoms[meshIdxToGeomIdx.get(ni)]?.baked;
-      if (bk && bk.trs) { [tx, ty, tz] = bk.trs.t; [rx, ry, rz] = bk.trs.r; [sx, sy, sz] = bk.trs.s; }
-      else if (bk && bk.pivotLocal) { tx = bk.pivotLocal.x; ty = bk.pivotLocal.y; tz = bk.pivotLocal.z; }
-    } else {
-      o.updateMatrix();
-      o.matrix.decompose(tmpV3, tmpQ, tmpScale);
-      tmpEuler.setFromQuaternion(tmpQ, 'XYZ');
-      tx = tmpV3.x; ty = tmpV3.y; tz = tmpV3.z;
-      rx = tmpEuler.x * RAD2DEG; ry = tmpEuler.y * RAD2DEG; rz = tmpEuler.z * RAD2DEG;
-      sx = tmpScale.x; sy = tmpScale.y; sz = tmpScale.z;
-    }
-    // Order + child set matches Blender's FBX exporter exactly. The
-    // canonical Model child sequence Blender writes (and that loads in
-    // every DCC tool) is:
-    //   Version, Properties70 (with DefaultAttributeIndex + InheritType +
-    //   Lcl Transform), MultiLayer, MultiTake, Shading, Culling.
-    // C4D's world.cpp parser walks Models expecting MultiLayer/MultiTake
-    // top-level children right after Properties70 — without them the
-    // document-construction step asserts.
-    modelBlocks.push({
-      name: 'Model',
-      props: [{ type: 'L', value: modelId }, { type: 'S', value: name }, { type: 'S', value: n.type }],
-      children: [
-        { name: 'Version', props: [{ type: 'I', value: 232 }] },
-        { name: 'Properties70', props: [], children: [
-          P('DefaultAttributeIndex', 'int', 'Integer', '', 0),
-          P('InheritType', 'enum', '', '', 1),
-          P('Lcl Translation', 'Lcl Translation', '', 'A', tx, ty, tz),
-          P('Lcl Rotation', 'Lcl Rotation', '', 'A', rx, ry, rz),
-          P('Lcl Scaling', 'Lcl Scaling', '', 'A', sx, sy, sz),
-        ]},
-        // Blender writes MultiLayer + MultiTake as required Model children.
-        { name: 'MultiLayer', props: [{ type: 'I', value: 0 }] },
-        { name: 'MultiTake', props: [{ type: 'I', value: 0 }] },
-        // Shading: binary FBX 'C' type is a boolean byte — valid values are
-        // 0 (false) or 1 (true). ASCII FBX writes the letter 'Y' but binary
-        // must use the integer 1. Writing 89 ('Y') is wrong and causes strict
-        // SDK parsers (C4D, Houdini, Maya) to reject the Model node.
-        { name: 'Shading', props: [{ type: 'C', value: 1 }] },
-        { name: 'Culling', props: [{ type: 'S', value: 'CullingOff' }] },
-      ],
-    });
-  }
-
-  // ── NodeAttribute blocks. CRITICAL: Blender writes NodeAttribute ONLY
-  // for Null/group nodes — NOT for Mesh nodes. Mesh nodes get their
-  // attribute from the Geometry block via OO connection (Geometry → Model).
-  // Writing a NodeAttribute for a Mesh Model produces a duplicate-attribute
-  // condition that C4D's world.cpp:1745 rejects. Track which node indices
-  // get a NodeAttribute so the connection loop only emits matching edges.
-  const nodeHasAttr = new Set();        // node indices that get a NodeAttribute
-  for (let ni = 0; ni < nodes.length; ni++) {
-    const n = nodes[ni];
-    if (n.type !== 'Null') continue;    // Mesh nodes use Geometry, not NodeAttribute
-    nodeHasAttr.add(ni);
-    const naId = NA_ID_BASE + ni;
-    // Same de-dup as Model names: append a suffix to repeated base names.
-    let baseName = safeName(n.obj.name || `group_${ni}`);
-    const seenN = seenNANames.get(baseName) || 0;
-    if (seenN > 0) baseName = `${baseName}.${String(seenN).padStart(3, '0')}`;
-    seenNANames.set(safeName(n.obj.name || `group_${ni}`), seenN + 1);
-    const naName = `${baseName}\x00\x01NodeAttribute`;
-    naBlocks.push({
-      name: 'NodeAttribute',
-      props: [
-        { type: 'L', value: naId },
-        { type: 'S', value: naName },
-        { type: 'S', value: 'Null' },
-      ],
-      children: [
-        { name: 'TypeFlags', props: [{ type: 'S', value: 'Null' }] },
-        { name: 'Properties70', props: [], children: [] },
-      ],
-    });
-  }
-
-  for (let mi = 0; mi < perMeshMats.length; mi++) {
-    const m = perMeshMats[mi];
-    const matId = MAT_ID_BASE + mi;
-    // C4D writes Material names as `Mat_X\x00\x01Material` (no Class:: prefix).
-    const name = `Mat_${mi}\x00\x01Material`;
-    matBlocks.push({
-      name: 'Material',
-      props: [{ type: 'L', value: matId }, { type: 'S', value: name }, { type: 'S', value: '' }],
-      children: [
-        { name: 'Version', props: [{ type: 'I', value: 102 }] },
-        { name: 'ShadingModel', props: [{ type: 'S', value: 'Phong' }] },
-        { name: 'MultiLayer', props: [{ type: 'I', value: 0 }] },
-        { name: 'Properties70', props: [], children: [
-          P('ShadingModel', 'KString', '', '', 'Phong'),
-          P('DiffuseColor', 'Color', '', 'A', m.r, m.g, m.b),
-          P('DiffuseFactor', 'Number', '', 'A', 1),
-          P('AmbientColor', 'Color', '', 'A', 0, 0, 0),
-          P('AmbientFactor', 'Number', '', 'A', 0),
-          P('SpecularColor', 'Color', '', 'A', 0.2, 0.2, 0.2),
-          P('SpecularFactor', 'Number', '', 'A', 0.5),
-          P('Shininess', 'double', 'Number', '', 20),
-          P('ShininessExponent', 'double', 'Number', '', 20),
-          P('TransparencyFactor', 'Number', '', 'A', 0),
-          P('ReflectionFactor', 'Number', '', 'A', 0),
-        ]},
-      ],
-    });
-  }
-
-  for (const e of texWritten) {
-    const stem = e.file.replace(/\.[^.]+$/, '');
-    vidBlocks.push({
-      name: 'Video',
-      props: [{ type: 'L', value: VID_ID_BASE + e.idx }, { type: 'S', value: stem + '\x00\x01Video' }, { type: 'S', value: 'Clip' }],
-      children: [
-        { name: 'Type', props: [{ type: 'S', value: 'Clip' }] },
-        { name: 'Properties70', props: [], children: [P('Path', 'KString', 'XRefUrl', '', e.file), P('RelPath', 'KString', 'XRefUrl', '', e.file)] },
-        { name: 'UseMipMap', props: [{ type: 'I', value: 0 }] },
-        { name: 'Filename', props: [{ type: 'S', value: e.file }] },
-        { name: 'RelativeFilename', props: [{ type: 'S', value: e.file }] },
-        { name: 'Content', props: [{ type: 'R', value: e.bytes }] },
-      ],
-    });
-    texBlocks.push({
-      name: 'Texture',
-      props: [{ type: 'L', value: TEX_ID_BASE + e.idx }, { type: 'S', value: stem + '\x00\x01Texture' }, { type: 'S', value: '' }],
-      children: [
-        { name: 'Type', props: [{ type: 'S', value: 'TextureVideoClip' }] },
-        { name: 'Version', props: [{ type: 'I', value: 202 }] },
-        { name: 'TextureName', props: [{ type: 'S', value: stem + '\x00\x01Texture' }] },
-        { name: 'Properties70', props: [], children: [P('UseMaterial', 'bool', '', '', 1)] },
-        { name: 'Media', props: [{ type: 'S', value: stem + '\x00\x01Video' }] },
-        { name: 'FileName', props: [{ type: 'S', value: e.file }] },
-        { name: 'RelativeFilename', props: [{ type: 'S', value: e.file }] },
-        { name: 'ModelUVTranslation', props: [{ type: 'D', value: 0 }, { type: 'D', value: 0 }] },
-        { name: 'ModelUVScaling', props: [{ type: 'D', value: 1 }, { type: 'D', value: 1 }] },
-        { name: 'Texture_Alpha_Source', props: [{ type: 'S', value: 'None' }] },
-        { name: 'Cropping', props: [{ type: 'I', value: 0 }, { type: 'I', value: 0 }, { type: 'I', value: 0 }, { type: 'I', value: 0 }] },
-      ],
-    });
-  }
-
-  // Order matches Blender's FBX exporter exactly. C4D's scene-construction
-  // pass walks Objects in document order resolving cross-references —
-  // NodeAttribute MUST come before Model that references it.
-  tree.push({ name: 'Objects', props: [], children:
-    [...naBlocks, ...geomBlocks, ...modelBlocks, ...matBlocks, ...texBlocks, ...vidBlocks]
-  });
-
-  // ── Connections ─────────────────────────────────────────────────────────
-  const conns = [];
-  // No OO 0→docId connection. Blender's exporter does NOT write this.
-  // The Document's RootNode:0 field already registers id=0 as the scene
-  // root — an extra OO connection re-parents the root as a Document child
-  // which confuses the FBX SDK's scene-tree builder.
-  for (let ni = 0; ni < nodes.length; ni++) {
-    const n = nodes[ni];
-    const childId = MODEL_ID_BASE + ni;
-    const parentId = n.parentIdx < 0 ? 0 : MODEL_ID_BASE + n.parentIdx;
-    conns.push({ name: 'C', props: [
-      { type: 'S', value: 'OO' },
-      { type: 'L', value: childId },
-      { type: 'L', value: parentId },
-    ]});
-    // NodeAttribute connection for Null nodes only — Mesh nodes get their
-    // attribute via the Geometry connection below. See nodeHasAttr.
-    if (nodeHasAttr.has(ni)) {
-      conns.push({ name: 'C', props: [
-        { type: 'S', value: 'OO' },
-        { type: 'L', value: NA_ID_BASE + ni },
-        { type: 'L', value: childId },
-      ]});
-    }
-    if (n.type === 'Mesh') {
-      const gIdx = meshIdxToGeomIdx.get(ni);
-      if (gIdx != null) {
-        conns.push({ name: 'C', props: [
-          { type: 'S', value: 'OO' },
-          { type: 'L', value: GEOM_ID_BASE + gIdx },
-          { type: 'L', value: childId },
-        ]});
-      }
-      // Each mesh has its own private Material (no sharing — see comment
-      // at perMeshMats declaration). Look up by node index, not by color.
-      const mIdx = meshIdxToMatIdx.get(ni);
-      for (const mi of (mIdx == null ? [] : Array.isArray(mIdx) ? mIdx : [mIdx])) {      // (a part of several colours: each, in the order its polygons number them)
-        conns.push({ name: 'C', props: [
-          { type: 'S', value: 'OO' },
-          { type: 'L', value: MAT_ID_BASE + mi },
-          { type: 'L', value: childId },
-        ]});
-      }
-    }
-  }
-  for (const e of texWritten) conns.push({ name: 'C', props: [{ type: 'S', value: 'OO' }, { type: 'L', value: VID_ID_BASE + e.idx }, { type: 'L', value: TEX_ID_BASE + e.idx }] });
-  for (let mi = 0; mi < perMeshMats.length; mi++) {
-    for (const [prop, e] of perMeshMats[mi].maps || []) {
-      if (!e.bytes) continue;
-      conns.push({ name: 'C', props: [{ type: 'S', value: 'OP' }, { type: 'L', value: TEX_ID_BASE + e.idx }, { type: 'L', value: MAT_ID_BASE + mi }, { type: 'S', value: prop }] });
-    }
-  }
-  tree.push({ name: 'Connections', props: [], children: conns });
-
-  // ── Takes (animation tracks — empty for static CAD scenes) ──────────────
-  tree.push({
-    name: 'Takes', props: [], children: [
-      { name: 'Current', props: [{ type: 'S', value: '' }] },
-    ],
-  });
-
-  // ── Serialise ───────────────────────────────────────────────────────────
-  const w = new _FbxBinWriter();
-  // Header (27 bytes): magic + version.
-  w.bytes_(_FBX_TENC.encode('Kaydara FBX Binary  '));   // 20 bytes (note 2 trailing spaces)
-  w.u8(0); w.u8(0x1A); w.u8(0);                          // 3 bytes: \0 \x1A \0
-  // Version 7400 — exactly matches what Blender's FBX exporter writes,
-  // and Blender's files load reliably in Cinema 4D 2026. Don't change
-  // this without first verifying the new version still loads in C4D.
-  w.u32(7400);                                           // 4 bytes: version 7.4
-
-  for (const node of tree) await _fbxWriteNode(w, node);
-  // Top-level null record (13 bytes for FBX 7.4: three uint32 + one uint8).
-  w.u32(0); w.u32(0); w.u32(0); w.u8(0);
-
-  // Footer block. FBX SDK and stricter importers (Maya, Cinema 4D 2026)
-  // require this; lenient ones (Blender, three.js's FBXLoader) ignore it.
-  // The first 16 bytes are a well-known "footer code" that open-source
-  // writers (Blender, Assimp) use unconditionally — derived from the FBX
-  // SDK's encryption table for version 7.x. Followed by zero-padding,
-  // version, more zero-padding, and a fixed 16-byte post-footer magic.
-  const FOOT_CODE = new Uint8Array([
-    0xfa, 0xbc, 0xab, 0x09, 0xd0, 0xc8, 0xd4, 0x66,
-    0xb1, 0x76, 0xfb, 0x83, 0x1c, 0xf7, 0x26, 0x7e,
-  ]);
-  const POST_FOOT_MAGIC = new Uint8Array([
-    0xf8, 0x5a, 0x8c, 0x6a, 0xde, 0xf5, 0xd9, 0x7e,
-    0xec, 0xe9, 0x0c, 0xe3, 0x75, 0x8f, 0x29, 0x0b,
-  ]);
-  w.bytes_(FOOT_CODE);
-  // Blender's encode_bin.py writes 4 zero bytes immediately after FOOT_CODE,
-  // then pads to the next 16-byte boundary with a minimum of 16 bytes
-  // (so when already aligned it still writes 16, never 0).
-  w.u32(0);  // 4 forced zeros — Blender always writes these
-  const _footPad = 16 - (w.pos % 16);  // always 1..16 (never 0)
-  for (let _i = 0; _i < _footPad; _i++) w.u8(0);
-  w.u32(7400);   // version must match the header
-  for (let i = 0; i < 120; i++) w.u8(0);
-  w.bytes_(POST_FOOT_MAGIC);
-
-  return new Blob([w.finalize()], { type: 'application/octet-stream' });
-}
-
-// ───────────────────────────────────────────────────────────────────
-// ASCII FBX exporter (version 7400 / "FBX 2014").
-// Why hand-rolled: three.js doesn't ship an FBX exporter, and a writer of
-// our own needs nothing fetched at export time.
-// What's written: the group hierarchy (groups as Null models), per-mesh
-// triangle geometry (no normals: importers rebuild them), one diffuse
-// colour material per colour. Each mesh's transform is baked into its
-// vertices, so geometry is not shared between meshes. Cinema 4D, Blender,
-// Maya, 3ds Max, and Houdini all read this dialect.
-// ───────────────────────────────────────────────────────────────────
-function _exportFbxAscii(root, opts) {
-  const _fg = _fbxGlobals(opts);
-  // FBX uses int64 ids; we space them out by ranges so the output is readable
-  // and ids don't collide across object types (Geometry / Model / Material).
-  const GEOM_ID_BASE  = 100000000;
-  const MODEL_ID_BASE = 200000000;
-  const MAT_ID_BASE   = 300000000;
-
-  // ── Walk the scene tree ─────────────────────────────────────────────────
-  // We collect THREE objects (Group + Mesh) into a flat list with per-node
-  // parent indices so the Connections block can wire up the hierarchy. Each
-  // node gets an FBX Model id; THREE.Group nodes become FBX "Null" Models,
-  // THREE.Mesh nodes become "Mesh" Models. The export root itself is treated
-  // as the FBX scene root and gets id 0 implicitly (FBX convention).
-  root.updateMatrixWorld(true);
-  const nodes = [];           // { obj, parentIdx, type }  — type: 'Null' | 'Mesh'
-  const objToIdx = new Map(); // Object3D → index in nodes[]
-  function visit(obj, parentIdx) {
-    if (obj === root) {
-      // root maps to FBX scene root (parent index = -1, never emitted).
-      objToIdx.set(obj, -1);
-    } else {
-      const isMesh = !!obj.isMesh;
-      // Skip invisible meshes; meshes without a position attribute would
-      // otherwise produce dangling Connections to Geometry blocks we never
-      // emit (the Geometry loop bails on missing position). InstancedMesh
-      // is also a Mesh subclass — we don't have a Geometry-instancing path
-      // here, so route them as plain meshes (they'll bake one geom and
-      // one node, identical to the GLB exporter's behaviour for them).
-      if (isMesh && obj.visible === false) return;
-      if (isMesh && !obj.geometry?.attributes?.position) return;
-      const idx = nodes.length;
-      nodes.push({ obj, parentIdx, type: isMesh ? 'Mesh' : 'Null' });
-      objToIdx.set(obj, idx);
-      parentIdx = idx;
-    }
-    if (obj.children) {
-      for (const c of obj.children) visit(c, parentIdx);
-    }
-  }
-  visit(root, -1);
-
-  // Drop empty Null nodes (groups with no descendant meshes). Walks bottom-up.
-  // An empty group has neither a mesh nor any non-empty descendants.
-  {
-    const liveDescendantCount = new Array(nodes.length).fill(0);
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      const n = nodes[i];
-      const mine = n.type === 'Mesh' ? 1 : 0;
-      if (n.parentIdx >= 0) liveDescendantCount[n.parentIdx] += mine + liveDescendantCount[i];
-      // Keep the count as is; we use it to decide whether to keep this node.
-      liveDescendantCount[i] += mine;
-    }
-    const keep = nodes.map((n, i) => n.type === 'Mesh' || liveDescendantCount[i] > 0);
-    if (keep.some(k => !k)) {
-      const remap = new Array(nodes.length).fill(-1);
-      const filtered = [];
-      for (let i = 0; i < nodes.length; i++) {
-        if (!keep[i]) continue;
-        remap[i] = filtered.length;
-        const n = nodes[i];
-        // Walk up parents until we find one we kept (or hit root).
-        let p = n.parentIdx;
-        while (p >= 0 && !keep[p]) p = nodes[p].parentIdx;
-        filtered.push({ obj: n.obj, parentIdx: p < 0 ? -1 : remap[p], type: n.type });
-      }
-      nodes.length = 0;
-      for (const n of filtered) nodes.push(n);
-      objToIdx.clear();
-      objToIdx.set(root, -1);
-      for (let i = 0; i < nodes.length; i++) objToIdx.set(nodes[i].obj, i);
-    }
-  }
-
-  // ── Dedup materials ─────────────────────────────────────────────────────
-  // (Geometries are not shared in this writer: every mesh node gets a
-  // Geometry block of its own, with its transform baked in. See "Geometry
-  // blocks" below for why.)
-  // Materials are keyed by RGB hex so meshes with identical colours share
-  // one Material entry. Different metalness/roughness/etc. would need finer
-  // keys; our pipeline produces flat color-only materials so hex is enough.
-  const mats = [];                       // [{ r, g, b }]
-  const colorHexToIdx = new Map();
-  // Helper: resolve the effective display colour for a mesh node.
-  // When the merge-into-one path is used, material.vertexColors=true and the
-  // actual colours live in geometry.attributes.color. Read the first vertex
-  // colour as a representative hue so merged meshes aren't forced grey.
-  const resolveColor = (n) => {
-    // Three.js material may be an array when a mesh has multiple material groups.
-    // Take the first entry so dedup still works — a per-face material array means
-    // the mesh needs to be split per-group for perfect accuracy, which is out of
-    // scope here. Single-material meshes (the STEP-importer norm) are unaffected.
-    const rawMat = n.obj.material;
-    const mat = Array.isArray(rawMat) ? rawMat[0] : rawMat;
-    if (mat?.vertexColors && n.obj.geometry?.attributes?.color) {
-      const ca = n.obj.geometry.attributes.color;
-      // Read first vertex (stride can be 3 or 4).
-      return { r: ca.getX(0), g: ca.getY(0), b: ca.getZ(0) };
-    }
-    const c = mat?.color;
-    return c ? { r: c.r, g: c.g, b: c.b } : { r: 0.8, g: 0.8, b: 0.8 };
-  };
-  const asciiFaceMats = new Map();       // mesh object -> { colours, poly, idx } for a part of several colours (see _exportFaceMats)
-  const colourIdx = ({ r, g, b }) => {
-    const key = ((r * 255 | 0) << 16) | ((g * 255 | 0) << 8) | (b * 255 | 0);
-    if (!colorHexToIdx.has(key)) { colorHexToIdx.set(key, mats.length); mats.push({ r, g, b }); }
-    return colorHexToIdx.get(key);
-  };
-  for (const n of nodes) {
-    if (n.type !== 'Mesh') continue;
-    const fmx = Array.isArray(n.obj.material) && n.obj.geometry ? _exportFaceMats(n.obj, _exportFaces(n.obj.geometry)) : null;
-    if (fmx && fmx.colours.length > 1) {
-      const idx = fmx.colours.map(colourIdx);
-      if (new Set(idx).size === idx.length) { asciiFaceMats.set(n.obj, { ...fmx, idx }); continue; }      // (two colours that round to one byte value: one material)
-    }
-    colourIdx(fmx ? fmx.colours[0] : resolveColor(n));
-  }
-
-  // Streaming via array-of-strings + Blob([chunks]) — sidesteps the V8
-  // ~512 MB single-string limit while keeping the writer simple.
-  const chunks = [];
-  const push = (s) => chunks.push(s);
-
-  const now = new Date();
-  const year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate();
-  const hour = now.getHours(), minute = now.getMinutes(), second = now.getSeconds();
-
-  // ── Header ────────────────────────────────────────────────────────────
-  push(`; FBX 7.4.0 project file
-; Created by MeshOptimiser
-; ----------------------------------------------------
-
-FBXHeaderExtension:  {
-\tFBXHeaderVersion: 1003
-\tFBXVersion: 7400
-\tCreationTimeStamp:  {
-\t\tVersion: 1000
-\t\tYear: ${year}
-\t\tMonth: ${month}
-\t\tDay: ${day}
-\t\tHour: ${hour}
-\t\tMinute: ${minute}
-\t\tSecond: ${second}
-\t\tMillisecond: 0
-\t}
-\tCreator: "MeshOptimiser ASCII FBX exporter"
-}
-GlobalSettings:  {
-\tVersion: 1000
-\tProperties70:  {
-\t\tP: "UpAxis", "int", "Integer", "",${_fg.up}
-\t\tP: "UpAxisSign", "int", "Integer", "",1
-\t\tP: "FrontAxis", "int", "Integer", "",${_fg.front}
-\t\tP: "FrontAxisSign", "int", "Integer", "",${_fg.frontSign}
-\t\tP: "CoordAxis", "int", "Integer", "",0
-\t\tP: "CoordAxisSign", "int", "Integer", "",1
-\t\tP: "OriginalUpAxis", "int", "Integer", "",-1
-\t\tP: "OriginalUpAxisSign", "int", "Integer", "",1
-\t\tP: "UnitScaleFactor", "double", "Number", "",${_fg.unit}
-\t\tP: "OriginalUnitScaleFactor", "double", "Number", "",1
-\t\tP: "AmbientColor", "ColorRGB", "Color", "",0,0,0
-\t\tP: "DefaultCamera", "KString", "", "", "Producer Perspective"
-\t\tP: "TimeMode", "enum", "", "",11
-\t\tP: "TimeSpanStart", "KTime", "Time", "",0
-\t\tP: "TimeSpanStop", "KTime", "Time", "",46186158000
-\t}
-}
-
-`);
-
-  // ── Definitions ───────────────────────────────────────────────────────
-  // Count = number of distinct ObjectType template blocks, not total objects.
-  // Blender writes: 3 for a scene with GlobalSettings+Geometry+Model templates.
-  // Per-block ObjectType.Count values carry the actual per-type object counts.
-  const _asciiNullNodes = nodes.filter(n => n.type === 'Null');
-  const _asciiMeshNodes = nodes.filter(n => n.type === 'Mesh' && n.obj.geometry?.attributes?.position);
-  const _asciiDefCount = 1 +                                    // GlobalSettings
-    (_asciiMeshNodes.length > 0 ? 1 : 0) +                     // Geometry
-    (nodes.length > 0 ? 1 : 0) +                               // Model
-    (mats.length > 0 ? 1 : 0) +                                // Material
-    (_asciiNullNodes.length > 0 ? 1 : 0);                      // NodeAttribute
-  push(`Definitions:  {
-\tVersion: 100
-\tCount: ${_asciiDefCount}
-\tObjectType: "GlobalSettings" {
-\t\tCount: 1
-\t}
-\tObjectType: "Geometry" {
-\t\tCount: ${_asciiMeshNodes.length}
-\t\tPropertyTemplate: "FbxMesh" {
-\t\t\tProperties70:  {
-\t\t\t\tP: "Color", "ColorRGB", "Color", "",0.8,0.8,0.8
-\t\t\t}
-\t\t}
-\t}
-\tObjectType: "Model" {
-\t\tCount: ${nodes.length}
-\t\tPropertyTemplate: "FbxNode" {
-\t\t\tProperties70:  {
-\t\t\t\tP: "DefaultAttributeIndex", "int", "Integer", "",0
-\t\t\t}
-\t\t}
-\t}
-\tObjectType: "Material" {
-\t\tCount: ${mats.length}
-\t\tPropertyTemplate: "FbxSurfacePhong" {
-\t\t\tProperties70:  {
-\t\t\t\tP: "ShadingModel", "KString", "", "", "Phong"
-\t\t\t\tP: "DiffuseColor", "Color", "", "A",0.8,0.8,0.8
-\t\t\t}
-\t\t}
-\t}
-\tObjectType: "NodeAttribute" {
-\t\tCount: ${_asciiNullNodes.length}
-\t}
-}
-
-`);
-
-  // ── Objects ───────────────────────────────────────────────────────────
-  push(`Objects:  {
-`);
-
-  // Helper: format a number compactly, to 7 significant digits. (A fixed
-  // number of decimals was wrong at either end: an export scaled to metres
-  // lost most of its digits, one in large units carried digits that mean
-  // nothing.)
-  const fmt = (n) => Math.abs(n) < 1e-10 ? '0' : (+n.toPrecision(7)).toString();
-  // Sanitise names — FBX is fragile around backslashes, double-quotes and
-  // control characters in object labels.
-  const safeName = (s) => (s || 'unnamed').replace(/["\\]/g, '_').replace(/[\x00-\x1f]/g, '_');
-
-  // ── Geometry blocks. We BAKE each mesh's local matrix into its emitted
-  //    vertex stream (as opposed to relying on Lcl Translation/Rotation/
-  //    Scaling on the Mesh Model) to sidestep Euler decomposition issues
-  //    that surface on deeply-nested or sheared transforms. With identity
-  //    Lcl on every Mesh node, world pose comes purely from vertex coords —
-  //    no T/R/S decomposition step can lose information. Cost: each Mesh
-  //    Model gets its own Geometry (no sharing across instances), so the
-  //    file is larger than if we trusted Lcl. Worth it: the alternative is
-  //    visible misorientation on instances buried under non-uniform-scaled
-  //    parent groups (Cinema-4D / Blender export idiom).
-  //
-  //    Hierarchy is still preserved via Connections — group containers'
-  //    own Lcl is identity (buildExportRoot creates them at identity), so
-  //    they only contribute structure, not transform.
-  const geoms = [];                        // one per mesh node: { source: BufferGeometry, mesh }
-  const meshIdxToGeomIdx = new Map();      // node index → geom block index
-  for (let ni = 0; ni < nodes.length; ni++) {
-    const n = nodes[ni];
-    if (n.type !== 'Mesh') continue;
-    const g = n.obj.geometry;
-    if (!g) continue;
-    meshIdxToGeomIdx.set(ni, geoms.length);
-    geoms.push({ source: g, mesh: n.obj });
-  }
-
-  const _bakeM = new THREE.Matrix4();
-  const _bakeV = new THREE.Vector3();
-
-  for (let gi = 0; gi < geoms.length; gi++) {
-    const entry = geoms[gi];
-    const g = entry.source;
-    const meshObj = entry.mesh;
-    const geomId = GEOM_ID_BASE + gi;
-    const posAttr = g.attributes.position;
-    if (!posAttr) continue;
-    const idxAttr = g.index;
-    const stride = posAttr.itemSize;
-    const arr = posAttr.array;
-    // World transform we'll bake into the emitted vertex stream. matrixWorld
-    // is the right source: it composes the mesh's local matrix with every
-    // ancestor's local matrix, which is exactly what an FBX importer would
-    // otherwise reconstruct from Lcl chains. Baking into vertices means
-    // emitted Mesh Models carry identity Lcl — no decomposition risk.
-    meshObj.updateWorldMatrix(true, false);
-    const _lin = root.userData.exportLin || null;
-    const _trs = _fbxLocalTRS(meshObj, _lin);   // (see there: position, rotation and scale on the Model, the vertices in the own frame of the part)
-    if (_trs) _bakeM.copy(_lin || new THREE.Matrix4()); else _bakeM.copy(meshObj.matrixWorld);
-    const _pv = _trs ? { world: new THREE.Vector3(), local: new THREE.Vector3() } : _fbxPivotOf(meshObj);   // else the vertices are written around the pivot, the Model carries its position
-    entry.pivotLocal = _pv.local; entry.trs = _trs;
-
-    push(`\tGeometry: ${geomId}, "Geometry::geom_${gi}", "Mesh" {
-\t\tGeometryVersion: 124
-\t\tVertices: *${posAttr.count * 3} {
-\t\t\ta: `);
-    {
-      const parts = new Array(posAttr.count);
-      for (let i = 0; i < posAttr.count; i++) {
-        // Bake matrixWorld into the emitted position. Identity Lcl on the
-        // Mesh Model (below) means the importer won't re-transform.
-        _bakeV.set(arr[i*stride], arr[i*stride+1], arr[i*stride+2]).applyMatrix4(_bakeM).sub(_pv.world);
-        parts[i] = fmt(_bakeV.x) + ',' + fmt(_bakeV.y) + ',' + fmt(_bakeV.z);
-      }
-      push(parts.join(','));
-    }
-    push(`
-\t\t}
-\t\tPolygonVertexIndex: *`);
-    {
-      // FBX marks the LAST vertex of each polygon with bitwise NOT (~i)
-      // so the parser can tell where polygons end. For triangle meshes
-      // that's every 3rd index. We always emit triangulated geometry.
-      let count;
-      let parts;
-      const faces = _exportFaces(g);      // (quads and n-gons: see _exportFaces)
-      if (faces) {
-        count = faces.verts.length;
-        parts = new Array(faces.sizes.length);
-        let o = 0;
-        for (let f = 0; f < faces.sizes.length; f++) {
-          const n = faces.sizes[f];
-          let s = '';
-          for (let k = 0; k < n - 1; k++) s += faces.verts[o++] + ',';
-          parts[f] = s + (~faces.verts[o++]);
-        }
-      } else if (idxAttr) {
-        count = idxAttr.count;
-        const ai = idxAttr.array;
-        const triCount = count / 3;
-        parts = new Array(triCount);
-        for (let i = 0; i < triCount; i++) {
-          const j = i * 3;
-          parts[i] = ai[j] + ',' + ai[j+1] + ',' + (~ai[j+2]);
-        }
-      } else {
-        count = posAttr.count;
-        const triCount = count / 3;
-        parts = new Array(triCount);
-        for (let i = 0; i < triCount; i++) {
-          const j = i * 3;
-          parts[i] = j + ',' + (j+1) + ',' + (~(j+2));
-        }
-      }
-      push(count + ` {
-\t\t\ta: `);
-      push(parts.join(','));
-    }
-    push(`
-\t\t}
-`);
-
-    // Normals are intentionally omitted from the ASCII export.
-    // ASCII FBX is already 3-5× larger than binary; normals alone match
-    // the vertex-position footprint (3 floats/vertex × same count). Every
-    // major importer (Houdini, C4D, Maya, Blender) recomputes smooth or
-    // hard-edge normals from the polygon topology on load, so the visual
-    // result is identical while the file stays half the size.
-    // If you need to restore normals, uncomment the block below and also
-    // add back the LayerElementNormal entry in the Layer block.
-
-    // UVs (see _fbxUvData): written when the mesh has them
-    const _uvd = _fbxUvData(meshObj, _exportFaces(g));
-    if (_uvd) {
-      const uvs = new Array(_uvd.uv.length); for (let i = 0; i < _uvd.uv.length; i++) uvs[i] = fmt(_uvd.uv[i]);
-      push(`\t\tLayerElementUV: 0 {
-\t\t\tVersion: 101
-\t\t\tName: "UVMap"
-\t\t\tMappingInformationType: "ByPolygonVertex"
-\t\t\tReferenceInformationType: "IndexToDirect"
-\t\t\tUV: *${_uvd.uv.length} {
-\t\t\t\ta: `);
-      push(uvs.join(','));
-      push(`
-\t\t\t}
-\t\t\tUVIndex: *${_uvd.uvIndex.length} {
-\t\t\t\ta: `);
-      push(Array.from(_uvd.uvIndex).join(','));
-      push(`
-\t\t\t}
-\t\t}
-`);
-    }
-    // One material slot, slot 0; a part of several colours has one a colour, and a slot for each polygon (ByPolygon).
-    const _afm = asciiFaceMats.get(meshObj);
-    push(`\t\tLayerElementMaterial: 0 {
-\t\t\tVersion: 101
-\t\t\tName: ""
-\t\t\tMappingInformationType: "${_afm ? 'ByPolygon' : 'AllSame'}"
-\t\t\tReferenceInformationType: "IndexToDirect"
-\t\t\tMaterials: *${_afm ? _afm.poly.length : 1} {
-\t\t\t\ta: ${_afm ? Array.from(_afm.poly).join(',') : 0}
-\t\t\t}
-\t\t}
-\t\tLayer: 0 {
-\t\t\tVersion: 100
-`);
-    if (_uvd) push(`\t\t\tLayerElement:  {
-\t\t\t\tType: "LayerElementUV"
-\t\t\t\tTypedIndex: 0
-\t\t\t}
-`);
-    push(`\t\t\tLayerElement:  {
-\t\t\t\tType: "LayerElementMaterial"
-\t\t\t\tTypedIndex: 0
-\t\t\t}
-\t\t}
-\t}
-`);
-  }
-
-  // ── NodeAttribute blocks — one per Null/group node. Mesh nodes get their
-  //    attribute from the Geometry via OO connection; only Null nodes need an
-  //    explicit NodeAttribute (type "Null") for the FBX SDK to build a valid
-  //    scene hierarchy. Without these, Houdini's FBX SDK emits "failed to load".
-  const _ASCII_NA_BASE = 400000000;
-  for (let ni = 0; ni < nodes.length; ni++) {
-    const n = nodes[ni];
-    if (n.type !== 'Null') continue;
-    const naId = _ASCII_NA_BASE + ni;
-    const naName = safeName(n.obj.name || `group_${ni}`);
-    push(`\tNodeAttribute: ${naId}, "NodeAttribute::${naName}", "Null" {
-\t\tTypeFlags: "Null"
-\t}
-`);
-  }
-
-  // ── Model blocks. One per scene-graph node; type = "Null" for groups
-  //    (containers that hold other Models) and "Mesh" for actual geometry.
-  //    Lcl Translation/Rotation/Scale carry the LOCAL transform; the
-  //    parent-child relationships are wired up in Connections below. ──────
-  const tmpQ = new THREE.Quaternion();
-  const tmpEuler = new THREE.Euler();
-  const tmpV = new THREE.Vector3();
-  const tmpScale = new THREE.Vector3();
-  const RAD2DEG = 180 / Math.PI;
-  // Model names are made unique, as the binary writer makes them: Cinema 4D
-  // will not build a scene in which two Models carry one name, even when
-  // their ids differ. A repeated name gets ".001", ".002", …
-  const seenModelNames = new Map();   // name → how many times it has come up
-  for (let ni = 0; ni < nodes.length; ni++) {
-    const n = nodes[ni];
-    const o = n.obj;
-    const modelId = MODEL_ID_BASE + ni;
-    const rawName = safeName(o.name || (n.type === 'Mesh' ? `mesh_${ni}` : `group_${ni}`));
-    const seenN = seenModelNames.get(rawName) || 0;
-    seenModelNames.set(rawName, seenN + 1);
-    const modelName = seenN > 0 ? `${rawName}.${String(seenN).padStart(3, '0')}` : rawName;
-    // Mesh nodes carry only their pivot as Lcl Translation: rotation and scale
-    // were baked into the emitted vertex stream, around that pivot. Group ('Null') nodes get the decomposed
-    // local matrix so their structural placement (if any) is preserved —
-    // buildExportRoot creates them at identity so this is also (0,0,0)/etc.
-    // in practice, but we honour any Lcl that may have ended up on them.
-    let tx = 0, ty = 0, tz = 0;
-    let rx = 0, ry = 0, rz = 0;
-    let sx = 1, sy = 1, sz = 1;
-    if (n.type === 'Mesh') {
-      const ge = geoms[meshIdxToGeomIdx.get(ni)];
-      if (ge && ge.trs) { [tx, ty, tz] = ge.trs.t; [rx, ry, rz] = ge.trs.r; [sx, sy, sz] = ge.trs.s; }
-      else if (ge && ge.pivotLocal) { tx = ge.pivotLocal.x; ty = ge.pivotLocal.y; tz = ge.pivotLocal.z; }    // (the pivot: see _fbxPivotOf)
-    } else {
-      o.updateMatrix();
-      o.matrix.decompose(tmpV, tmpQ, tmpScale);
-      tmpEuler.setFromQuaternion(tmpQ, 'XYZ');
-      tx = tmpV.x; ty = tmpV.y; tz = tmpV.z;
-      rx = tmpEuler.x * RAD2DEG; ry = tmpEuler.y * RAD2DEG; rz = tmpEuler.z * RAD2DEG;
-      sx = tmpScale.x; sy = tmpScale.y; sz = tmpScale.z;
-    }
-    push(`\tModel: ${modelId}, "Model::${modelName}", "${n.type}" {
-\t\tVersion: 232
-\t\tProperties70:  {
-\t\t\tP: "DefaultAttributeIndex", "int", "Integer", "",0
-\t\t\tP: "InheritType", "enum", "", "",1
-\t\t\tP: "Lcl Translation", "Lcl Translation", "", "A",${fmt(tx)},${fmt(ty)},${fmt(tz)}
-\t\t\tP: "Lcl Rotation", "Lcl Rotation", "", "A",${fmt(rx)},${fmt(ry)},${fmt(rz)}
-\t\t\tP: "Lcl Scaling", "Lcl Scaling", "", "A",${fmt(sx)},${fmt(sy)},${fmt(sz)}
-\t\t}
-\t\tMultiLayer: 0
-\t\tMultiTake: 0
-\t\tShading: Y
-\t\tCulling: "CullingOff"
-\t}
-`);
-  }
-
-  // ── Material blocks (one per unique color). ─────────────────────────────
-  for (let mi = 0; mi < mats.length; mi++) {
-    const m = mats[mi];
-    const matId = MAT_ID_BASE + mi;
-    push(`\tMaterial: ${matId}, "Material::mat_${mi}", "" {
-\t\tVersion: 102
-\t\tShadingModel: "Phong"
-\t\tMultiLayer: 0
-\t\tProperties70:  {
-\t\t\tP: "ShadingModel", "KString", "", "", "Phong"
-\t\t\tP: "DiffuseColor", "Color", "", "A",${fmt(m.r)},${fmt(m.g)},${fmt(m.b)}
-\t\t\tP: "DiffuseFactor", "Number", "", "A",1
-\t\t\tP: "AmbientColor", "Color", "", "A",0,0,0
-\t\t\tP: "AmbientFactor", "Number", "", "A",0
-\t\t\tP: "SpecularColor", "Color", "", "A",0.2,0.2,0.2
-\t\t\tP: "SpecularFactor", "Number", "", "A",0.5
-\t\t\tP: "Shininess", "double", "Number", "",20
-\t\t\tP: "ShininessExponent", "double", "Number", "",20
-\t\t\tP: "TransparencyFactor", "Number", "", "A",0
-\t\t\tP: "ReflectionFactor", "Number", "", "A",0
-\t\t}
-\t}
-`);
-  }
-
-  push(`}
-
-`);
-
-  // ── Documents + References ─────────────────────────────────────────────
-  // Both top-level nodes are REQUIRED by the Autodesk FBX SDK (used by Houdini,
-  // Maya, and 3ds Max internally). Without them, the SDK fails to initialize the
-  // scene graph and returns a silent "failed to load" error.
-  push(`Documents:  {
-\tCount: 1
-\tDocument: 1000000000, "Scene", "Scene" {
-\t\tProperties70:  {
-\t\t\tP: "SourceObject", "object", "", ""
-\t\t\tP: "ActiveAnimStackName", "KString", "", "", ""
-\t\t}
-\t\tRootNode: 0
-\t}
-}
-References:  {
-}
-
-`);
-
-  // ── Connections ───────────────────────────────────────────────────────
-  // For each node: child Model → parent Model (or scene root id 0).
-  // For mesh nodes additionally: Geometry → Model, Material → Model.
-  // For Null nodes: NodeAttribute → Model (FBX SDK requires this for groups).
-  push(`Connections:  {
-`);
-  // REQUIRED: Scene root (id 0) → Document. The FBX SDK uses this connection
-  // to register the scene root with the Document node. Without it, Cinema 4D
-  // and Houdini (both use the Autodesk FBX SDK) cannot build the scene tree.
-  push(`\tC: "OO",0,1000000000\n`);
-  for (let ni = 0; ni < nodes.length; ni++) {
-    const n = nodes[ni];
-    const childId = MODEL_ID_BASE + ni;
-    const parentId = n.parentIdx < 0 ? 0 : MODEL_ID_BASE + n.parentIdx;
-    push(`\tC: "OO",${childId},${parentId}\n`);
-    if (n.type === 'Mesh') {
-      const gIdx = meshIdxToGeomIdx.get(ni);
-      if (gIdx != null) push(`\tC: "OO",${GEOM_ID_BASE + gIdx},${childId}\n`);
-      // Use the same resolveColor helper used when building the mats table,
-      // so vertex-colour meshes (merge path) get the right material connection.
-      const _afm = asciiFaceMats.get(n.obj);
-      if (_afm) { for (const mi of _afm.idx) push(`\tC: "OO",${MAT_ID_BASE + mi},${childId}\n`); }      // (in the order its polygons number them)
-      else {
-        const fm1 = Array.isArray(n.obj.material) ? _exportFaceMats(n.obj, _exportFaces(n.obj.geometry)) : null;
-        const { r, g, b } = fm1 ? fm1.colours[0] : resolveColor(n);
-        const key = ((r * 255 | 0) << 16) | ((g * 255 | 0) << 8) | (b * 255 | 0);
-        const mIdx = colorHexToIdx.get(key);
-        if (mIdx != null) push(`\tC: "OO",${MAT_ID_BASE + mIdx},${childId}\n`);
-      }
-    }
-    if (n.type === 'Null') {
-      // NodeAttribute → Model for every group node. The FBX SDK walks
-      // these connections to build the scene tree; missing them = load failure.
-      push(`\tC: "OO",${_ASCII_NA_BASE + ni},${childId}\n`);
-    }
-  }
-  push(`}
-
-`);
-
-  // ── Takes (required by FBX SDK even for static scenes without animation) ──
-  push(`Takes:  {
-\tCurrent: ""
-}
-`);
-
-  return new Blob(chunks, { type: 'application/octet-stream' });
-}
-
-// OBJ precision — default JS Number.toString() emits up to 17 significant
-// digits, which roughly doubles file size with no real-world benefit. 6
-// decimals on positions/UVs and 5 on normals is sub-micron at 1 m scale
-// and well below CAD tolerance.
-const _OBJ_POS_DEC = 6;
-const _OBJ_UV_DEC  = 6;
-const _OBJ_NRM_DEC = 5;
-
-// Format a float with up to `d` decimals, stripping trailing zeros and the
-// dangling `.` so we don't pay for digits we didn't need. Avoids "-0".
-function _objFloat(n, d) {
-  if (!isFinite(n) || n === 0) return '0';
-  let s = n.toFixed(d);
-  if (s.indexOf('.') !== -1) {
-    s = s.replace(/0+$/, '');
-    if (s.endsWith('.')) s = s.slice(0, -1);
-  }
-  return s === '-0' ? '0' : s;
-}
-
-// Streaming OBJ exporter — bypasses V8's ~500 MB single-string limit.
-//
-// three.js's stock OBJExporter builds one giant string and returns it. For a
-// 10M-vertex model that string is ~300 MB; V8 caps single strings at ~500 MB
-// and concat operations at ~256 MB on some builds, so the user sees
-// "Invalid string length" and the download fails outright.
-//
-// This version writes per-mesh chunks into a BlobPart array. Each chunk is
-// capped at TARGET_CHUNK bytes of UTF-8 — small enough that V8's string
-// concat path stays in the fast lane, large enough that we don't churn out
-// millions of tiny array entries. The final Blob has no total-size limit.
-//
-// Numbers are written with a fixed number of decimals (_OBJ_POS_DEC and
-// friends above), not three.js's default toString().
-function _exportObjStreaming(root, mtlBaseName) {
-  const TARGET_CHUNK = 4 * 1024 * 1024;   // 4 MB per string chunk
-  const _objSeen = new Map();             // the object names used in this file (local: kept on the function it held the whole export root)
-  // Banner spells out the OBJ format's two structural limitations so a future
-  // user reading the file knows why pivots/hierarchy look the way they do.
-  const parts = [
-    '# Exported by MeshOptimiser\n',
-    ...(root.userData && root.userData.moUp ? ['# Up axis: ' + root.userData.moUp + '; 1 unit = ' + (root.userData.moMmPerUnit || 1) + ' mm\n'] : []),
-    '# OBJ does not store per-object transforms — all vertices are baked\n',
-    '# into world space, so every imported object inherits an origin at\n',
-    '# (0,0,0). In Blender, enable the importer\'s "Object Origin → Bounds\n',
-    '# Center" option to recompute correct per-part pivots on import.\n',
-    '# Group hierarchy is encoded in the object name as parent/child/leaf.\n',
-  ];
-  let buf = '';
-  const flush = () => { if (buf) { parts.push(buf); buf = ''; } };
-  const append = (s) => { buf += s; if (buf.length >= TARGET_CHUNK) flush(); };
-
-  // ── Material table ──────────────────────────────────────────────────────
-  // OBJ references named materials by `usemtl <name>`; the actual definitions
-  // live in a sibling .mtl file linked via `mtllib`. We collect unique
-  // materials by hex color (any two meshes with the same color share one mtl
-  // entry) and emit the .mtl as a parallel Blob so the caller can download
-  // both files together.
-  // A material with pictures is an entry of its own (its colour and its maps), so two white materials with different maps stay apart.
-  // Each picture is written once, as a file beside the .obj named after it (<name>_BaseColor.jpg, <name>_Normal.png, ...), and the
-  // .mtl points at it: map_Kd the colour, norm and map_Bump the normal map (Blender reads either as a normal map), map_Pr, map_Pm and
-  // map_d the roughness, metalness and opacity of the PBR extension. The pictures themselves are encoded by the caller (_objTextureFiles).
-  const matByHex = new Map();    // key (colour, and the maps) → { name, r, g, b, metalness, roughness, maps }
-  const texFiles = new Map();    // texture → { file, kind, tex, flipGreen }
-  const usedTexNames = new Set();
-  const OBJ_TEX = [['map', 'BaseColor'], ['normalMap', 'Normal'], ['roughnessMap', 'Roughness'], ['metalnessMap', 'Metallic'], ['alphaMap', 'Opacity']];
-  const texFile = (t, kind, mat) => {
-    let f = texFiles.get(t);
-    if (!f) {
-      const mime = (t.userData && t.userData.mimeType) || 'image/png';
-      const ext = mime === 'image/jpeg' ? 'jpg' : 'png';
-      let stem = (mtlBaseName || 'model') + '_' + kind, n = 1;
-      while (usedTexNames.has(stem + (n > 1 ? '_' + n : ''))) n++;
-      stem += n > 1 ? '_' + n : ''; usedTexNames.add(stem);
-      // (a normal map whose green is not turned in the scene is drawn the DirectX way: written turned, as OBJ readers expect OpenGL's)
-      const flipGreen = kind === 'Normal' && !!(mat.normalScale && (mat.normalScale.y < 0) === (mat.normalScale.x < 0));
-      f = { file: stem + '.' + ext, kind, tex: t, mime, flipGreen };
-      texFiles.set(t, f);
-    }
-    return f.file;
-  };
-  const matNameFor = (mat) => {
-    if (!mat || !mat.color) return null;
-    const hex = mat.color.getHex();
-    const maps = OBJ_TEX.filter(([k]) => mat[k] && mat[k].isTexture && mat[k].image);
-    const key = maps.length ? hex + '|' + maps.map(([k]) => k + ':' + mat[k].uuid).join('|') : hex;
-    let entry = matByHex.get(key);
-    if (!entry) {
-      let name = 'mat_' + hex.toString(16).padStart(6, '0');
-      if (maps.length) { let n = 1; for (const e of matByHex.values()) if (e.name === name || e.name.startsWith(name + '_tex')) n++; name += '_tex' + n; }
-      entry = {
-        name,
-        r: mat.color.r, g: mat.color.g, b: mat.color.b,
-        metalness: typeof mat.metalness === 'number' ? mat.metalness : 0,
-        roughness: typeof mat.roughness === 'number' ? mat.roughness : 1,
-        maps: maps.map(([k, kind]) => [k, texFile(mat[k], kind, mat)]),
-      };
-      matByHex.set(key, entry);
-    }
-    return entry.name;
-  };
-
-  if (mtlBaseName) parts.push(`mtllib ${mtlBaseName}.mtl\n`);
-
-  // OBJ uses 1-based indices that span the entire file. Track running totals
-  // across meshes so a mesh's faces reference the right global vertex IDs.
-  let vOffset = 0, nOffset = 0, uvOffset = 0, objIdx = 0;
-
-  const tmpV = new THREE.Vector3();
-  const tmpN = new THREE.Vector3();
-  const normalMatrix = new THREE.Matrix3();
-
-  // Build the group chain for a mesh: outermost ancestor → ... → leaf parent.
-  // OBJ has no real hierarchy, and most importers ignore the `g` directive
-  // for object splitting (they split on `o` instead). So we ALSO bake the
-  // chain into the object name with `/` as a separator — Blender, Maya and
-  // 3ds Max all preserve the full string verbatim, and Blender groups names
-  // alphabetically in the outliner so a chain prefix produces correct
-  // visible grouping. The redundant `g <chain>` line is still emitted for
-  // tools that DO use it (some legacy CAD tools, Substance).
-  const sanitize = (s) => (s || '').replace(/\s+/g, '_').replace(/[^\p{L}\p{N}_.-]/gu, '') || 'Part';
-  const chainNames = (child) => {
-    const names = [];
-    let cur = child.parent;
-    while (cur && cur !== root) {
-      if (cur.name) names.unshift(sanitize(cur.name));
-      cur = cur.parent;
-    }
-    return names;
-  };
-
-  root.traverse((child) => {
-    if (!child.isMesh) return;
-    const geom = child.geometry;
-    const pos = geom?.attributes?.position;
-    if (!pos) return;
-    const nrm = geom.attributes.normal || null;
-    const uv  = geom.attributes.uv     || null;
-    const idx = geom.index;
-    const matrix = child.matrixWorld;
-    normalMatrix.getNormalMatrix(matrix);
-
-    objIdx++;
-    const _objNameSeen = _objSeen;
-    const chain = chainNames(child);
-    const baseName = sanitize(child.name || 'Mesh_' + objIdx);
-    // `o` line: prefix with chain joined by `/` so the importer's outliner
-    // shows the full path. Identifier-safe characters only.
-    let objName = chain.length ? chain.join('/') + '/' + baseName : baseName;
-    // Parts that share a name (and a place in the tree) get a number: an
-    // importer that goes by name (Cinema 4D) made one object of all of them,
-    // 778 parts arriving as 325.
-    { const k = (_objNameSeen.get(objName) || 0) + 1; _objNameSeen.set(objName, k); if (k > 1) objName += '.' + String(k - 1).padStart(3, '0'); }
-    append(`o ${objName}\n`);
-    // `g` line: same chain space-separated. Some tools read it as group tags.
-    if (chain.length) append('g ' + chain.join(' ') + '\n');
-    const faces = _exportFaces(geom);      // quads and n-gons, when the part has polygons (see _exportFaces)
-    const fmat = _exportFaceMats(child, faces);      // (a part of several colours: a usemtl for each, below)
-    const matName = matNameFor(fmat ? fmat.colours[0].mat : child.material);
-    if (matName && !(fmat && fmat.colours.length > 1)) append('usemtl ' + matName + '\n');
-
-    // positions (apply world matrix)
-    const vc = pos.count;
-    for (let i = 0; i < vc; i++) {
-      tmpV.fromBufferAttribute(pos, i).applyMatrix4(matrix);
-      append('v ' + _objFloat(tmpV.x, _OBJ_POS_DEC) + ' ' + _objFloat(tmpV.y, _OBJ_POS_DEC) + ' ' + _objFloat(tmpV.z, _OBJ_POS_DEC) + '\n');
-    }
-    // uvs
-    if (uv) {
-      const uc = uv.count;
-      for (let i = 0; i < uc; i++) {
-        append('vt ' + _objFloat(uv.getX(i), _OBJ_UV_DEC) + ' ' + _objFloat(1 - uv.getY(i), _OBJ_UV_DEC) + '\n');      // (OBJ counts V from the bottom; the scene from the top)
-      }
-    }
-    // normals (apply normal matrix; renormalize)
-    if (nrm) {
-      const nc = nrm.count;
-      for (let i = 0; i < nc; i++) {
-        tmpN.fromBufferAttribute(nrm, i).applyMatrix3(normalMatrix).normalize();
-        append('vn ' + _objFloat(tmpN.x, _OBJ_NRM_DEC) + ' ' + _objFloat(tmpN.y, _OBJ_NRM_DEC) + ' ' + _objFloat(tmpN.z, _OBJ_NRM_DEC) + '\n');
-      }
-    }
-    // faces — combine all referenced index arrays + format depends on what's
-    // actually present, matching the OBJExporter's per-vertex slot syntax
-    // (`v[/vt][/vn]`).
-    const ia = idx ? idx.array : null;
-    const triCount = (ia ? ia.length : vc) / 3;
-
-    if (fmat && fmat.colours.length > 1) {
-      // A part of several colours: its faces a colour at a time, each run under the usemtl of its material (Blender, Cinema 4D and
-      // three's OBJLoader read them as one object with a material a polygon).
-      const ref = uv && nrm ? (a) => (a + vOffset) + '/' + (a + uvOffset) + '/' + (a + nOffset) : nrm ? (a) => (a + vOffset) + '//' + (a + nOffset) : uv ? (a) => (a + vOffset) + '/' + (a + uvOffset) : (a) => String(a + vOffset);
-      const nF = faces ? faces.sizes.length : triCount;
-      const fStart = new Uint32Array(nF + 1);
-      if (faces) for (let f = 0; f < nF; f++) fStart[f + 1] = fStart[f] + faces.sizes[f];
-      for (let c = 0; c < fmat.colours.length; c++) {
-        append('usemtl ' + matNameFor(fmat.colours[c].mat || { color: new THREE.Color(fmat.colours[c].r, fmat.colours[c].g, fmat.colours[c].b) }) + '\n');
-        for (let f = 0; f < nF; f++) {
-          if (fmat.poly[f] !== c) continue;
-          let line = 'f';
-          if (faces) for (let o = fStart[f]; o < fStart[f + 1]; o++) line += ' ' + ref(faces.verts[o] + 1);
-          else for (let k = 0; k < 3; k++) line += ' ' + ref((ia ? ia[f * 3 + k] : f * 3 + k) + 1);
-          append(line + '\n');
-        }
-      }
-    } else if (faces) {
-      let o = 0;
-      for (let f = 0; f < faces.sizes.length; f++) {
-        const n = faces.sizes[f];
-        let line = 'f';
-        for (let k = 0; k < n; k++) {
-          const a = faces.verts[o++] + 1;
-          line += ' ' + (a + vOffset) + (uv && nrm ? '/' + (a + uvOffset) + '/' + (a + nOffset) : nrm ? '//' + (a + nOffset) : uv ? '/' + (a + uvOffset) : '');
-        }
-        append(line + '\n');
-      }
-    } else if (uv && nrm) {
-      for (let t = 0; t < triCount; t++) {
-        const a = (ia ? ia[t*3]   : t*3)   + 1;
-        const b = (ia ? ia[t*3+1] : t*3+1) + 1;
-        const c = (ia ? ia[t*3+2] : t*3+2) + 1;
-        append('f ' +
-          (a + vOffset) + '/' + (a + uvOffset) + '/' + (a + nOffset) + ' ' +
-          (b + vOffset) + '/' + (b + uvOffset) + '/' + (b + nOffset) + ' ' +
-          (c + vOffset) + '/' + (c + uvOffset) + '/' + (c + nOffset) + '\n');
-      }
-    } else if (nrm) {
-      for (let t = 0; t < triCount; t++) {
-        const a = (ia ? ia[t*3]   : t*3)   + 1;
-        const b = (ia ? ia[t*3+1] : t*3+1) + 1;
-        const c = (ia ? ia[t*3+2] : t*3+2) + 1;
-        append('f ' +
-          (a + vOffset) + '//' + (a + nOffset) + ' ' +
-          (b + vOffset) + '//' + (b + nOffset) + ' ' +
-          (c + vOffset) + '//' + (c + nOffset) + '\n');
-      }
-    } else if (uv) {
-      for (let t = 0; t < triCount; t++) {
-        const a = (ia ? ia[t*3]   : t*3)   + 1;
-        const b = (ia ? ia[t*3+1] : t*3+1) + 1;
-        const c = (ia ? ia[t*3+2] : t*3+2) + 1;
-        append('f ' +
-          (a + vOffset) + '/' + (a + uvOffset) + ' ' +
-          (b + vOffset) + '/' + (b + uvOffset) + ' ' +
-          (c + vOffset) + '/' + (c + uvOffset) + '\n');
-      }
-    } else {
-      for (let t = 0; t < triCount; t++) {
-        const a = (ia ? ia[t*3]   : t*3)   + 1;
-        const b = (ia ? ia[t*3+1] : t*3+1) + 1;
-        const c = (ia ? ia[t*3+2] : t*3+2) + 1;
-        append('f ' + (a + vOffset) + ' ' + (b + vOffset) + ' ' + (c + vOffset) + '\n');
-      }
-    }
-
-    vOffset  += vc;
-    if (nrm) nOffset  += nrm.count;
-    if (uv)  uvOffset += uv.count;
-  });
-
-  flush();
-  const objBlob = new Blob(parts, { type: 'text/plain' });
-
-  // Build the .mtl content. PBR roughness/metalness aren't standard OBJ MTL
-  // fields, but `Pr` (roughness) and `Pm` (metalness) are the de-facto PBR
-  // extension that Blender, Substance, and SideFX Houdini all read.
-  let mtlBlob = null;
-  if (mtlBaseName && matByHex.size > 0) {
-    const lines = ['# Exported by MeshOptimiser\n'];
-    for (const e of matByHex.values()) {
-      lines.push(`newmtl ${e.name}\n`);
-      lines.push(`Kd ${_objFloat(e.r, 4)} ${_objFloat(e.g, 4)} ${_objFloat(e.b, 4)}\n`);
-      lines.push(`Ka 0 0 0\n`);
-      lines.push(`Ks 0 0 0\n`);
-      lines.push(`d 1\n`);                       // opacity
-      lines.push(`illum 2\n`);                   // diffuse + specular
-      lines.push(`Pr ${_objFloat(e.roughness, 3)}\n`);
-      lines.push(`Pm ${_objFloat(e.metalness, 3)}\n`);
-      for (const [k, file] of e.maps || []) {
-        if (k === 'map') lines.push(`map_Kd ${file}\n`);
-        else if (k === 'normalMap') lines.push(`norm ${file}\n`, `map_Bump -bm 1 ${file}\n`);
-        else if (k === 'roughnessMap') lines.push(`map_Pr ${file}\n`);
-        else if (k === 'metalnessMap') lines.push(`map_Pm ${file}\n`);
-        else if (k === 'alphaMap') lines.push(`map_d ${file}\n`);
-      }
-    }
-    mtlBlob = new Blob(lines, { type: 'text/plain' });
-  }
-  return { objBlob, mtlBlob, textures: [...texFiles.values()] };
-}
-
-// The pictures an OBJ export names in its .mtl, as files: each texture drawn at its own size and encoded in its own format (JPEG at
-// 0.92, as GLTFExporter does, or PNG). A normal map drawn the DirectX way has its green turned on the way out. A texture that only lives
-// on the graphics card (compressed, KTX2) has no picture to draw and is left out, and said so.
-async function _objTextureFiles(textures) {
-  const out = [], missed = [];
-  for (const f of textures || []) {
-    try {
-      const img = f.tex && f.tex.image;
-      const w = img && (img.naturalWidth || img.videoWidth || img.width), h = img && (img.naturalHeight || img.videoHeight || img.height);
-      if (!img || !w || !h || f.tex.isCompressedTexture) { missed.push(f.file); continue; }
-      const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const x = c.getContext('2d', { willReadFrequently: f.flipGreen });
-      if (img.data) {                                      // (raw pixels: a DataTexture)
-        const d = new Uint8ClampedArray(w * h * 4), src = img.data, ch = src.length / (w * h);
-        for (let i = 0, j = 0; i < w * h; i++, j += ch) { d[i * 4] = src[j]; d[i * 4 + 1] = ch > 1 ? src[j + 1] : src[j]; d[i * 4 + 2] = ch > 2 ? src[j + 2] : src[j]; d[i * 4 + 3] = ch > 3 ? src[j + 3] : 255; }
-        x.putImageData(new ImageData(d, w, h), 0, 0);
-      } else x.drawImage(img, 0, 0, w, h);
-      if (f.flipGreen) { const id = x.getImageData(0, 0, w, h), d = id.data; for (let i = 1; i < d.length; i += 4) d[i] = 255 - d[i]; x.putImageData(id, 0, 0); }
-      const blob = await new Promise(r => c.toBlob(r, f.mime, f.mime === 'image/jpeg' ? 0.92 : undefined));
-      if (blob) out.push({ name: f.file, blob }); else missed.push(f.file);
-    } catch (e) { console.warn('[obj] picture not written:', f.file, e); missed.push(f.file); }
-  }
-  if (missed.length) { try { toast('Some pictures not written', missed.join(', ') + ': they live only on the graphics card (compressed) or could not be read.', 'warn', 6000); } catch (_) {} }
-  return out;
-}
-
+// ── The FBX and OBJ writers are in export-writers.js (set up below _wireXYZ) ──────────────────────────────────
 // ── Save / restore scene state ──────────────────────────────────────────────
 // Round-trips through a normal .glb. We bundle a JSON sidecar (camera, view
 // toggles, threshold) into the scene's `extras`; whether a part is hidden or
@@ -28819,10 +27093,13 @@ function _clayExit() {
 // A view mode like Clay: the parts' own materials are set aside while it is on and put back
 // when any other mode is chosen; Export and Save switch to Solid (_withSolidView), so none
 // of it reaches a file. The look is one of _CAD_LOOKS (a right-click on the button chooses it).
+// (sRGB values. The side away from the light is a soft grey, never near black, and the lit side is light: the view is for working in for
+// hours, and a near-black half of every part hid its shape and made the whole model read dark. The warm colour on faces that look up
+// is a hint only; at full strength it turned every top face orange-brown.)
 const _CAD_LOOKS = {
-  ceramic: { label: 'Ceramic', icon: 'circle', dark: [38, 39, 44],  light: [150, 158, 171], warm: [186, 160, 138], warmAmt: 1.0 },
-  light:   { label: 'Light',   icon: 'sun',    dark: [92, 96, 106],  light: [214, 220, 230], warm: [234, 216, 198], warmAmt: 0.8 },
-  mono:    { label: 'Mono',    icon: 'moon',   dark: [30, 30, 33],   light: [170, 170, 175], warm: [170, 170, 175], warmAmt: 0 },
+  ceramic: { label: 'Ceramic', icon: 'circle', dark: [92, 97, 108],   light: [214, 219, 228], warm: [226, 214, 198], warmAmt: 0.45 },
+  light:   { label: 'Light',   icon: 'sun',    dark: [128, 133, 143], light: [238, 241, 246], warm: [244, 234, 220], warmAmt: 0.4 },
+  mono:    { label: 'Mono',    icon: 'moon',   dark: [80, 80, 84],    light: [206, 206, 210], warm: [206, 206, 210], warmAmt: 0 },
 };
 const _cadLook = () => { const k = _Prefs.get('cadLook'); return _CAD_LOOKS[k] ? k : 'ceramic'; };
 let _cadTex = null;
@@ -28839,7 +27116,7 @@ function _cadPaintMatcap(canvas, look) {
     let nx = (x + 0.5) / S * 2 - 1, ny = 1 - (y + 0.5) / S * 2, nz;
     const r2 = nx * nx + ny * ny;
     if (r2 > 1) { const k = 1 / Math.sqrt(r2); nx *= k; ny *= k; nz = 0; } else nz = Math.sqrt(1 - r2);   // past the rim: the rim's colour, so a grazing face is never empty
-    const t = step(0.02, 0.92, (nx * L[0] + ny * L[1] + nz * L[2]) / ln);          // how much light: little on the right, a lot on the left
+    const t = step(-0.45, 0.95, (nx * L[0] + ny * L[1] + nz * L[2]) / ln);         // how much light, wrapped round: a face turned from the light still has some
     const w = look.warmAmt * step(0.50, 0.90, ny);                                 // faces that look up take the warm colour
     const i = (y * S + x) * 4;
     for (let c = 0; c < 3; c++) d[i + c] = Math.round(mix(mix(look.dark[c], look.light[c], t), look.warm[c], w));
@@ -28847,7 +27124,12 @@ function _cadPaintMatcap(canvas, look) {
   }
   ctx.putImageData(img, 0, 0);
 }
+// the linear lightness of the look's lit colour: a coloured part is shaded relative to it, so it is as deep in every look
+let _cadLumRef = null;
+const _srgbLin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
 function _cadMatcap() {
+  if (!_cadLumRef) _cadLumRef = THREE.TSL.uniform(1);
+  { const l = _CAD_LOOKS[_cadLook()].light; _cadLumRef.value = 0.299 * _srgbLin(l[0]) + 0.587 * _srgbLin(l[1]) + 0.114 * _srgbLin(l[2]); }
   if (!_cadTex) {
     const c = document.createElement('canvas'); c.width = c.height = 256;
     _cadTex = new THREE.CanvasTexture(c);
@@ -28874,8 +27156,9 @@ function _cadMaterialFor(own) {
   const mx = T.max(T.max(col.x, col.y), col.z), mn = T.min(T.min(col.x, col.y), col.z);
   const sat = mx.sub(mn).div(T.max(mx, 0.0001));
   const amt = T.smoothstep(0.10, 0.28, sat);                                     // grey and white parts take the matcap itself; coloured ones, their colour
-  const neutral = mc.mul(T.clamp(cl.mul(1.5), 0.22, 1.1));                        // (dimmed for a dark grey part)
-  const tinted = col.mul(lum.mul(1.6));
+  const neutral = mc.mul(T.clamp(T.pow(cl, 1 / 2.2).mul(1.15), 0.3, 1.0));          // (dimmed for a darker grey part, by how light it looks)
+  _cadMatcap();
+  const tinted = col.mul(T.clamp(lum.div(_cadLumRef).mul(1.05), 0.0, 1.15));      // (the part's colour where the look is lit, deeper where it is not)
   m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, fog: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
   const shaded = T.mix(neutral, tinted, amt);
   // The outline of a smooth surface (a cylinder's side has no crease to draw): where it turns edge-on to the camera
@@ -29936,6 +28219,9 @@ function _wireXYZ(pos, copy) {
   for (let i = 0; i < pos.count; i++) { out[i * 3] = pos.getX(i); out[i * 3 + 1] = pos.getY(i); out[i * 3 + 2] = pos.getZ(i); }
   return out;
 }
+// The FBX and OBJ writers: export-writers.js. Set up here, below what they use (_polyIds, _triOnly, _wireXYZ): the six they give back
+// are called by the export (buildExportRoot, the Export dialog), never while the page loads.
+const { _exportFbxAscii, _exportFbxBinary, _exportObjStreaming, _exportPolysOf, _flipMirroredForBake, _objTextureFiles } = installExportWriters({ state, _polyIds, _triOnly, toast: (...a) => toast(...a), _matrixHasShear: (...a) => _matrixHasShear(...a), _wireXYZ: (...a) => _wireXYZ(...a) });
 // The index of the lines for `g`: { key, lines, polys }, null if it has no triangles, false while a worker is still on it.
 function _wireLinesFor(g) {
   const key = _wireKeyFor(g), have = _wireData.get(g);
@@ -31792,7 +30078,8 @@ function wireUI() {
       didHold = true;
       btn.classList.add('active');
       pop.innerHTML = '';
-      _LastTool.items.forEach(it => {
+      // the list opens upward from the button, so the newest is at the bottom, next to it
+      _LastTool.items.slice().reverse().forEach(it => {
         const row = document.createElement('button');
         row.type = 'button'; row.className = 'vp-prim-pop-item vp-last-item';
         // text only, and the command's shortcut at the right when it has one
@@ -34753,12 +33040,11 @@ function _libInspectorRender() {
   const card = _renderPrimitiveSection({ isPrimitive: true, primitiveKind: kind, primParams: params, locked: false });
   side.innerHTML = `
     <div class="li-top">
-      <div class="li-id"><div class="li-name">${escapeHtml(_primitiveDefaultName(kind))}</div></div>
+      <div class="li-id"><div class="li-name">${escapeHtml(_primitiveDefaultName(kind))}</div><div class="li-facts" id="lib-facts"></div></div>
       <button type="button" class="lc-icon-btn li-fav${fav ? ' active' : ''}" id="lib-fav" aria-pressed="${fav}" title="${fav ? 'Take it off the Favourites shelf' : 'Keep it on the Favourites shelf'}"><i data-lucide="star"></i></button>
     </div>
     <div class="li-params">${card || '<div class="li-empty">Nothing to set on this part.</div>'}</div>
-    <div class="li-facts" id="lib-facts"></div>
-    <div class="li-actions"><button type="button" class="btn primary" id="lib-add" title="Add the part with these parameters">Add to scene</button></div>`;
+    <button type="button" class="li-add" id="lib-add" title="Add to scene, with these parameters" aria-label="Add to scene"><i data-lucide="plus"></i></button>`;
   try { _lucide(); } catch (_) {}
   _libWireParams(side, kind, params);
   side.querySelector('#lib-fav')?.addEventListener('click', () => {
@@ -35474,14 +33760,16 @@ function _renderSplineSections(p) {
 }
 // the card above the sections (points, size, length, share of the model) follows an edit made in them
 function _updateSplineReadouts(root, p, sp) {
-  const cells = root.querySelectorAll('.prop-grid .prop-value');
-  if (cells.length < 4) return;
+  const cell = (k) => root.querySelector('[data-readout="' + k + '"]');
+  const pts = cell('Points'), size = cell('Size'), length = cell('Length'), share = cell('% of model');
+  if (!pts || !size || !length || !share) return;
   let len = 0;
   try { const pl = _splinePolyline(sp); len = SPL.polylineLength(pl.points, pl.closed); } catch (_) {}
-  cells[0].textContent = fmtNum(_srcOf(sp).points.length);
-  cells[1].textContent = _fmtDims(p.bbox.getSize(new THREE.Vector3()));
-  cells[2].textContent = _fmtLen(len, 3);
-  cells[3].textContent = (p.sizeMetrics.diag / _liveSceneDiag() * 100).toFixed(2) + '%';
+  const set = (el, v) => { el.textContent = v; el.title = v; };
+  set(pts, fmtNum(_srcOf(sp).points.length));
+  set(size, _fmtDims(p.bbox.getSize(new THREE.Vector3())));
+  set(length, _fmtLen(len, 3));
+  set(share, (p.sizeMetrics.diag / _liveSceneDiag() * 100).toFixed(2) + '%');
 }
 function _wireSplineSections(root, p) {
   const sp = _splineById(p.splineId);
@@ -37003,7 +35291,7 @@ function _renderPrimitiveSection(p) {
       const min = f.min ?? 1, max = f.max ?? 64;
       return `<div class="prim-row" data-prim-field="${f.id}">
         <label class="prim-label">${escapeHtml(f.label)}</label>
-        <input type="range" data-prim-input min="${min}" max="${max}" step="1" value="${v}" class="prim-slider" tabindex="-1">
+        <input type="range" data-prim-input min="${min}" max="${max}" step="1" value="${v}" class="prim-slider range-bar" aria-label="${escapeHtml(f.label)}">
         <span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" data-prim-value min="${min}" max="${max}" step="1" value="${v}"></span>
       </div>`;
     }
@@ -37012,7 +35300,7 @@ function _renderPrimitiveSection(p) {
     const _ul = _UNIT_LABEL[state.displayUnit] || '';
     return `<div class="prim-row" data-prim-field="${f.id}">
       <label class="prim-label">${escapeHtml(f.label)}</label>
-      <input type="range" data-prim-input data-prim-size min="${min}" max="${max}" step="1" value="${Math.round(v)}" class="prim-slider" tabindex="-1">
+      <input type="range" data-prim-input data-prim-size min="${min}" max="${max}" step="1" value="${Math.round(v)}" class="prim-slider range-bar" aria-label="${escapeHtml(f.label)}">
       <span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" data-prim-value data-prim-size min="${min}" max="${max}" step="1" value="${Math.round(v)}"><span class="prim-unit">${escapeHtml(_ul)}</span></span>
     </div>`;
   }
@@ -37194,6 +35482,12 @@ function _wirePrimitiveSliders(rootEl, p) {
       applyVal(v);
     };
     input.addEventListener('input', update);
+    if (input.type === 'range' && input.classList.contains('range-bar')) {      // (the fill bar: dragged, one undo step; the name fades while it is held)
+      row.classList.add('has-bar', 'prim-bar-row');
+      input.addEventListener('pointerdown', () => { _beginGesture(input); row.classList.add('is-held'); });
+      const done = () => { if (row.classList.contains('is-held')) { row.classList.remove('is-held'); _commitGesture(); } };
+      input.addEventListener('pointerup', done); input.addEventListener('pointercancel', done); input.addEventListener('lostpointercapture', done);
+    }
     if (input.type === 'checkbox') {
       // Booleans flip atomically — wrap the change event.
       input.addEventListener('change', () => { _beginGesture(input); _commitGesture(); });
@@ -39096,14 +37390,25 @@ const _Arrange = (() => {
     });
     document.addEventListener('cmd-open', (e) => {
       if (!(e.target && e.target.dataset && e.target.dataset.cmd === 'arrange')) return;
-      const n = state.selected ? state.selected.size : 0;
-      say(n ? plural(n) + ' selected.' : 'Select the parts or groups to line up first.');
+      selLine();
       e.target.dataset.up = state.sceneUpAxis === 'y' ? 'y' : 'z';      // (which row's pictures stand upright: see .arr-set in the page)
     }, true);
   }
-  return { align: alignG, spread: spreadG, to: (t) => { if (t) setTo(t); return to; } };
+  // the line under the card: how many are selected (on opening, and again whenever the selection changes while it is open)
+  let saidSel = null;
+  function selLine() {
+    const n = state.selected ? state.selected.size : 0;
+    saidSel = state.selected ? [...state.selected].join('|') : '';
+    say(n ? plural(n) + ' selected.' : 'Select the parts or groups to line up first.');
+  }
+  function follow() {
+    const c = document.querySelector('.section-cmd[data-cmd="arrange"]'); if (!c || c.hidden) return;
+    if ((state.selected ? [...state.selected].join('|') : '') !== saidSel) selLine();
+  }
+  return { align: alignG, spread: spreadG, to: (t) => { if (t) setTo(t); return to; }, follow };
 })();
 window.__moArrange = _Arrange;
+_selFollowers.push(_Arrange);
 
 function recenterModel(opts) {
   // (with a selection: only the selection. The button passes its click event, Claude's tool says { whole: true })
@@ -44967,6 +43272,7 @@ const _Wand = (() => {
     }
     if (h !== hot) {
       hot = h;
+      if (h >= 0) _UiSound.tick();      // (a tick for each slice the pointer comes onto)
       const grp = h >= 0 && slots[h] && slots[h].group && !slots[h].off ? h : -1;
       if (grp !== fanFor) { fanOpen(grp); entryD = d; committed = false; }
       root.querySelectorAll('.qw-slice,.qw-item').forEach(e => e.classList.toggle('is-hot', +e.dataset.i === h));
@@ -44975,6 +43281,7 @@ const _Wand = (() => {
     }
     if (sj !== sub) {
       sub = sj;
+      if (sj >= 0) _UiSound.tick();
       root.querySelectorAll('.qw-sub,.qw-lab,.qw-subico').forEach(e => e.classList.toggle('is-hot', +e.dataset.j === sj));
       root.querySelectorAll('.qw-sub').forEach(e => e.setAttribute('d', +e.dataset.j === sj ? e.dataset.dh : e.dataset.d));
       const sp = sj >= 0 ? root.querySelector('.qw-sub[data-j="' + sj + '"]') : null, si = sp && slots[fanFor] ? slots[fanFor].items[sj] : null;
@@ -45006,6 +43313,7 @@ const _Wand = (() => {
       open = true;
       try { window.__moHoverLink && window.__moHoverLink.off(); } catch (_) {}      // (no row of the tree stays lit under the ring)
       clearTimeout(hideT); root.classList.remove('is-in'); root.style.display = 'block'; void root.offsetWidth; root.classList.add('is-in');
+      _UiSound.pop(true);
       aim();
     } catch (err) {                                   // whatever went wrong: no half-built ring stays on screen
       console.warn('[wand] could not open:', err);
@@ -45020,6 +43328,7 @@ const _Wand = (() => {
     if (!open || !root) return;
     if (aimQ) { cancelAnimationFrame(aimQ); aimQ = 0; if (run) { try { aim(); } catch (_) {} } }      // (what is run is what is under the pointer now)
     const go = run && runCurrent();
+    if (go) _UiSound.click();      // (a command run)
     open = false; sticky = false; closedAt = performance.now(); root.classList.remove('is-in');
     clearTimeout(hideT); hideT = setTimeout(() => { if (!open && root) root.style.display = 'none'; }, 160);      // (it shrinks and fades first, as it grew; nothing in it takes a click meanwhile)
     if (go && byPress) {
@@ -45159,15 +43468,15 @@ const _QuickColour = (() => {
       #qc-wheel .qc-dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-sizing:border-box;border:2px solid var(--black);pointer-events:none;display:none;transform:translate3d(var(--x,0px),var(--y,0px),0);transition:background 180ms ease-out}
       /* crossing the cancel line (either way) the dot and the pill glide to their new place; while the pointer drags them they follow it at once */
       #qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:background 180ms ease-out,opacity 140ms ease-out,transform 240ms cubic-bezier(.16,1,.3,1)}
-      #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:rgba(20,20,20,.94);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 3px 9px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
+      #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:var(--gz-bg);box-shadow:0 0 0 1px var(--gz-line),0 3px 9px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
       #qc-wheel .qc-cancel svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
       #qc-wheel .qc-cancel em{font-style:normal;color:var(--tx3);font-size:11px}
       #qc-wheel.cancelling .qc-cancel{opacity:1;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%)}
       @media (prefers-reduced-motion:reduce){#qc-wheel canvas,#qc-wheel .qc-cancel,#qc-wheel .qc-dot,#qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:none}}
-      #qc-wheel .qc-cap{margin-top:-8px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:var(--surface-bar);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 4px 13px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
+      #qc-wheel .qc-cap{margin-top:-8px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:var(--gz-bg);box-shadow:0 0 0 1px var(--gz-line),0 4px 13px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
       #qc-wheel .qc-cap i{width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
       #qc-wheel .qc-cap svg{width:10px;height:10px;color:var(--tx3);fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-      #qc-wheel .qc-cap b{font-weight:500;font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px;letter-spacing:.02em;text-align:left}
+      #qc-wheel .qc-cap b{font-weight:var(--fw-regular,400);font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px;letter-spacing:.02em;text-align:left}
       #qc-wheel .qc-cap u{width:1px;height:12px;margin:0 5px;background:rgba(255,255,255,.14)}
       #qc-wheel .qc-cap b{margin-left:5px}
       #qc-wheel .qc-cap em{margin-left:3px}
@@ -45290,7 +43599,7 @@ const _QuickColour = (() => {
     const dx = px - ox, dy = py - oy, d = Math.hypot(dx, dy);
     const out = d > CANCEL;
     if (out !== cancelling) {                         // (gone far out: the colour goes back and a Cancel pill shows; letting go there keeps nothing)
-      cancelling = out; root.classList.toggle('cancelling', out);
+      cancelling = out; root.classList.toggle('cancelling', out); _UiSound.tick();
       for (const el of [dotEl, cancelPill]) { el.classList.add('glide'); }
       clearTimeout(glideT); glideT = setTimeout(() => { dotEl.classList.remove('glide'); cancelPill.classList.remove('glide'); }, 280);
       if (out) requestAnimationFrame(() => { if (!open || !cancelling) return; mats.forEach((m, i) => _applyMatSnapshot(m, snaps[i])); try { requestRender(); } catch (_) {} });      // (after the first frame of the glide: the model's work does not hold the dot back)
@@ -45337,7 +43646,7 @@ const _QuickColour = (() => {
     document.body.classList.add('qc-nocursor');
     lookAway(true);
     clearTimeout(leaveT); root.classList.remove('show', 'leaving'); revealed = false; clearTimeout(holdT);
-    const reveal = () => { if (!open) return; revealed = true; void root.offsetWidth; root.classList.add('show'); };       // (the class goes on after a reflow, so the growing plays from the start)
+    const reveal = () => { if (!open) return; revealed = true; void root.offsetWidth; root.classList.add('show'); _UiSound.pop(true); };       // (the class goes on after a reflow, so the growing plays from the start)
     reveal();                                                              // (it shows the moment the key goes down; let go without moving and nothing has changed)
     return true;
   }
@@ -45345,6 +43654,7 @@ const _QuickColour = (() => {
   function close(keep, byClick) {
     if (!open) return;
     if (cancelling) keep = false;
+    if (keep && revealed) _UiSound.click();      // (a colour kept)
     open = false; clearTimeout(holdT); revealed = false;
     document.body.classList.remove('qc-nocursor');
     lookAway(false);
@@ -46334,2063 +44644,20 @@ function hideUnselected() {
 // they cannot drift. The loop runs only while something is animated. The poses are a view: an export or a scene save puts everything
 // back first and starts it again after; pressing a gizmo handle on something animated removes its animation first. To add a kind: an
 // entry in TYPES, its controls in the window (data-for), a case in `layerPose`, and a line in `summary`.
-const _Anim = (() => {
-  const KEY = 'mo-anim2';
-  const TYPES = { spin: ['Spin', 'rotate-cw'], swing: ['Swing', 'arrow-left-right'], noise: ['Noise', 'audio-waveform'], path: ['Path', 'spline'], oscillate: ['Oscillate', 'arrow-up-down'] };
-  const DEFAULTS = {
-    type: 'spin',
-    spin: { axis: 'Z', dir: -1, rpm: 60 },                           // dir -1 is clockwise seen from the tip of the axis (the arrow of the gizmo)
-    swing: { axis: 'Z', amp: 45, period: 2 },                        // degrees each way, seconds for there and back
-    noise: { type: 'wave', pos: 5, rot: 10, speed: 1, seed: 1, detail: 1, rough: 50, sx: 'xyz', rx: 'xyz' },   // wave / random / steps; % of the object's size, degrees, times, a number, layers of finer noise, how strong they are in %, the axes that shift and turn
-    path: { shape: 'circle', plane: 'XY', size: 50, period: 6 },     // % of the object's size, seconds for one round
-    oscillate: { wave: 'sine', period: 1, tx: 0, ty: 0, tz: 20, ax: 0, ay: 0, az: 0, spread: 0, lag: 0, ratio: 3.5 },   // wave; seconds for one to-and-fro; shift of each axis in % of the object's size; turn of each axis in degrees; lag between the axes and of the turn behind the shift, in degrees of the cycle; rod length over crank length (piston)
-    loop: { mode: 'loop', repeat: 0, delay: 0, from: 0, to: 100 },   // loop points in % of the cycle
-  };
-  // Pose and Look are made of keys, not of a cycle: they are drawn on the timeline as diamonds, and are not among the motions the window offers.
-  TYPES.keys = ['Pose', 'diamond']; TYPES.look = ['Look', 'eye'];
-  const KEYED = new Set(['keys', 'look']);
-  let idSeq = 1; const nid = () => idSeq++;                      // (ids of layers and of keys)
-  const folded = new Set();      // the objects whose clips are folded away in the timeline's list
-  const selLids = new Set(), selKeys = new Set(); let selLid = 0;      // what is selected on the timeline: clips, keys
-  const tracks = { explode: null, camera: null };                // the scene's own tracks: { keys: [{ id, t, v, e }], muted }
-  const sceneN = () => (tracks.explode && tracks.explode.keys.length ? 1 : 0) + (tracks.camera && tracks.camera.keys.length ? 1 : 0);
-  const anyAnim = () => items.size > 0 || sceneN() > 0;
-  const LIMITS = { rpm: [1, 600], amp: [1, 180], period: [0.2, 60], pos: [0, 50], rot: [0, 90], speed: [0.1, 5], seed: [1, 99], detail: [1, 4], rough: [0, 100], size: [5, 200], tx: [0, 100], ty: [0, 100], tz: [0, 100], ax: [0, 180], ay: [0, 180], az: [0, 180], spread: [0, 360], lag: [0, 360], ratio: [1.5, 8], repeat: [0, 999], delay: [0, 60], from: [0, 100], to: [0, 100] };
-  const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-  const clampKey = (k, v) => { const L = LIMITS[k]; v = +v; if (!Number.isFinite(v)) return null; return L ? Math.max(L[0], Math.min(L[1], v)) : v; };
-  try {
-    const o = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (o && typeof o === 'object') {
-      if (TYPES[o.type]) cfg.type = o.type;
-      for (const g of ['spin', 'swing', 'noise', 'path', 'oscillate', 'loop']) for (const k of Object.keys(DEFAULTS[g])) {
-        const v = o[g] && o[g][k]; if (v == null) continue;
-        cfg[g][k] = typeof DEFAULTS[g][k] === 'number' ? (clampKey(k, v) ?? DEFAULTS[g][k]) : String(v);
-      }
-      if (![1, -1].includes(cfg.spin.dir)) cfg.spin.dir = -1;
-      if (!['wave', 'random', 'steps'].includes(cfg.noise.type)) cfg.noise.type = 'wave';
-      if (!['sine', 'piston', 'eased', 'triangle'].includes(cfg.oscillate.wave)) cfg.oscillate.wave = 'sine';
-      for (const k of ['sx', 'rx']) cfg.noise[k] = ['x', 'y', 'z'].filter(c => String(cfg.noise[k]).toLowerCase().includes(c)).join('');
-      cfg.noise.detail = Math.round(cfg.noise.detail); cfg.noise.seed = Math.round(cfg.noise.seed);
-    }
-  } catch (_) {}
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (_) {} };
+// Animate: anim.js (moved from here; the notes above say what it does).
+const _Anim = installAnim({
+  state, _MotionPerf, _UndoOps,
+  get camera() { return camera; }, get renderer() { return renderer; }, get controls() { return controls; },
+  get _Elements() { return _Elements; }, get _DraggablePopup() { return _DraggablePopup; },
+  _finalizeUndo: (...a) => _finalizeUndo(...a), _libShow: (...a) => _libShow(...a), _lucide: (...a) => _lucide(...a), _openTurntableDialog: (...a) => _openTurntableDialog(...a), _partWorldBoxOwn: (...a) => _partWorldBoxOwn(...a), _promoteInstanceToMesh: (...a) => _promoteInstanceToMesh(...a), _treeGroupDescendants: (...a) => _treeGroupDescendants(...a), applyExplode: (...a) => applyExplode(...a), applySelectionColors: (...a) => applySelectionColors(...a), getPart: (...a) => getPart(...a), onResize: (...a) => onResize(...a), pushUndo: (...a) => pushUndo(...a), rebuildTreeSelectionOnly: (...a) => rebuildTreeSelectionOnly(...a), refreshPropertiesPanel: (...a) => refreshPropertiesPanel(...a), requestRender: (...a) => requestRender(...a), revealSelectedInTree: (...a) => revealSelectedInTree(...a), selectPart: (...a) => selectPart(...a), toast: (...a) => toast(...a), updateGizmo: (...a) => updateGizmo(...a),
+});
 
-  const AX = { X: new THREE.Vector3(1, 0, 0), Y: new THREE.Vector3(0, 1, 0), Z: new THREE.Vector3(0, 0, 1) };
-  const D2R = Math.PI / 180;
-  // key ('p:<part id>' or 'g:<group id>') → { key, kind, label, layers: [{ type, p, loop, t }], rests: Map(part id → place in partsRoot's space), … }
-  //   a part:  partId, c = the middle of its geometry (its own space), size = its diagonal
-  //   a group: gid, members = part ids, C = the middle of the whole in partsRoot's space, Q = the group's axes there, size
-  const items = new Map();
-  let reverse = false, raf = 0, last = 0, suspended = false, paused = true, dismissed = false, clock = 0, rate = 1, ver = 0, popup = null, poll = 0, sig = '', listSig = '', headLay = null, headRaf = 0;
-  // The timeline: how long it is (0 = as long as the longest cycle, at least 5 s), whether playing wraps round, where it lives (the dock
-  // along the bottom, or the small floating window), how far it is zoomed. `popup` is whichever of the two is on screen.
-  const TLKEY = 'mo-anim-tl';
-  const tlp = (() => { try { return JSON.parse(localStorage.getItem(TLKEY) || '{}') || {}; } catch (_) { return {}; } })();
-  // The project's frame rate (24, 30 or 60, like the clip export): the playhead snaps to frames, the arrow keys step one frame, and a clip
-  // is exported at it. Kept with the timeline's length, in this browser.
-  let projFps = [24, 30, 60].includes(+tlp.fps) ? +tlp.fps : 30, FRAME = 1 / projFps;
-  let dur = +tlp.dur > 0 ? Math.min(600, +tlp.dur) : 0, playLoop = tlp.loop !== false, pingpong = !!tlp.pingpong, bounce = 1, mode = tlp.mode === 'mini' ? 'mini' : 'dock', showL = tlp.left !== false, showR = tlp.right !== false, zoom = 1, switching = false, dragBar = false, pps = 60;
-  const ui = { dock: null, mini: null };
-  const saveTl = () => { try { localStorage.setItem(TLKEY, JSON.stringify({ dur, fps: projFps, loop: playLoop, pingpong, mode, left: showL, right: showR })); } catch (_) {} };
-  const M1 = new THREE.Matrix4(), M2 = new THREE.Matrix4(), M3 = new THREE.Matrix4(), M4 = new THREE.Matrix4(), M5 = new THREE.Matrix4();
-  const Q1 = new THREE.Quaternion(), V1 = new THREE.Vector3(), E1 = new THREE.Euler();
-
-  // A part that is drawn as its own mesh. An instanced part (most parts of a converted assembly) has none until it is promoted, as the gizmo does.
-  const live = (id) => { const p = getPart(id); return p && !p.deleted && p.mesh ? p : null; };
-  const exists = (id) => { const p = getPart(id); return p && !p.deleted && (p.mesh || p.instancedMesh) ? p : null; };
-  const promote = (p) => { if (p && !p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} } return p && p.mesh ? p : null; };
-
-  // What one pass over the animated objects needs again and again (a frame of the animation, a seek, a refresh), worked out once: partsRoot's
-  // world matrix, the inverse of its rotation (for the exploded offsets), whether the view is exploded, and the inverse of each parent's matrix.
-  const FR = { R: new THREE.Matrix4(), rot3: new THREE.Matrix3(), exploded: false, parents: new Map() };
-  const IDENT = new THREE.Matrix4();
-  const beginFrame = () => {
-    if (state.partsRoot) state.partsRoot.updateWorldMatrix(true, false);
-    FR.R.copy(state.partsRoot ? state.partsRoot.matrixWorld : IDENT);
-    FR.rot3.setFromMatrix4(FR.R).invert();
-    const e = state.explode; FR.exploded = !!(e && (e.x || e.y || e.z));
-    FR.parents.clear();
-  };
-  const parentInv = (par) => {
-    let m = FR.parents.get(par);
-    if (!m) { par.updateWorldMatrix(true, false); m = new THREE.Matrix4().copy(par.matrixWorld).invert(); FR.parents.set(par, m); }
-    return m;
-  };
-  // The exploded view moves each part away by p._exOff (a vector in the world); an animation works from where the part is in the assembled
-  // model, and the offset is added on top, so the two go together (the offset is in partsRoot's space here).
-  const OFF = new THREE.Vector3(), RE = new THREE.Matrix4();
-  const exOff = (id, out) => {
-    const p = getPart(id);
-    if (!FR.exploded || !p || !p._exOff) return out.set(0, 0, 0);
-    return out.copy(p._exOff).applyMatrix3(FR.rot3);
-  };
-  // the part's place in the assembled model, as seen from partsRoot (a change of the scene's scale or turn does not spoil it)
-  const restOf = (mesh, id) => {
-    mesh.updateWorldMatrix(true, false);
-    const m = new THREE.Matrix4().copy(FR.R).invert().multiply(mesh.matrixWorld);
-    if (id != null && FR.exploded) { exOff(id, OFF); m.premultiply(M1.makeTranslation(-OFF.x, -OFF.y, -OFF.z)); }
-    return m;
-  };
-  // …and with the exploded view's offset on it, as it is now (the rest itself when the view is not exploded: nothing is made)
-  const restE = (id, rec) => {
-    const r = rec.rests.get(id);
-    if (!FR.exploded) return r;
-    exOff(id, OFF); return RE.makeTranslation(OFF.x, OFF.y, OFF.z).multiply(r);
-  };
-  // Put a mesh at `rootMat` (a matrix in partsRoot's space), whatever it is parented to now (the gizmo's pivot, a group, partsRoot).
-  const place = (mesh, rootMat) => {
-    (mesh.parent ? M3.copy(parentInv(mesh.parent)) : M3.identity()).multiply(FR.R).multiply(rootMat).decompose(mesh.position, mesh.quaternion, mesh.scale);
-    mesh.updateMatrixWorld(true);
-  };
-  const centreOf = (mesh) => {
-    const g = mesh.geometry; if (!g) return { c: new THREE.Vector3(), size: 1 };
-    if (!g.boundingBox) { try { g.computeBoundingBox(); } catch (_) {} }
-    const b = g.boundingBox;
-    return b && !b.isEmpty() ? { c: b.getCenter(new THREE.Vector3()), size: Math.max(1e-6, b.getSize(new THREE.Vector3()).length()) } : { c: new THREE.Vector3(), size: 1 };
-  };
-
-  // ---- the motions: a layer gives a shift (pos) and a turn (quat), in the object's own axes ----
-  const smooth = (t, ch, seed) => { const s = seed * 12.9898 + ch * 78.233; return Math.sin(t + s) * 0.55 + Math.sin(t * 2.31 + s * 1.7) * 0.30 + Math.sin(t * 4.13 + s * 2.9) * 0.15; };
-  // three kinds of noise, each a number between −1 and 1 for a time, a channel and a seed: a mix of sines, smooth random values (value noise)
-  // and random values held until the next (steps). Detail adds finer layers of the same noise, each as strong as roughness says.
-  const nHash = (n, ch, seed) => { const x = Math.sin(n * 127.1 + ch * 74.7 + seed * 311.7) * 43758.5453; return (x - Math.floor(x)) * 2 - 1; };
-  const nValue = (t, ch, seed) => { const i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f); return nHash(i, ch, seed) * (1 - u) + nHash(i + 1, ch, seed) * u; };
-  const nSteps = (t, ch, seed) => nHash(Math.floor(t), ch, seed);
-  const NOISE = { wave: smooth, random: nValue, steps: nSteps };
-  const fbm = (fn, t, ch, seed, oct, rough) => { let a = 1, f = 1, sum = 0, norm = 0; for (let k = 0; k < oct; k++) { sum += a * fn(t * f + k * 17.31, ch, seed); norm += a; a *= rough; f *= 2.03; } return norm ? sum / norm : 0; };
-  const SHAPES = {
-    circle:  { closed: true,  pts: Array.from({ length: 8 }, (_, i) => [Math.cos(i / 8 * 2 * Math.PI), Math.sin(i / 8 * 2 * Math.PI)]) },
-    figure8: { closed: true,  pts: Array.from({ length: 12 }, (_, i) => [Math.sin(i / 12 * 2 * Math.PI), Math.sin(2 * i / 12 * 2 * Math.PI) * 0.6]) },
-    square:  { closed: true,  pts: [[-1, -1], [1, -1], [1, 1], [-1, 1]] },
-    wave:    { closed: false, pts: [[-1, 0], [-0.5, 0.6], [0, 0], [0.5, -0.6], [1, 0]] },
-    line:    { closed: false, pts: [[-1, 0], [1, 0]] },
-  };
-  const curveOf = (lay) => {
-    const key = lay.p.shape + lay.p.plane;
-    if (lay._ck === key) return lay._curve;
-    const sh = SHAPES[lay.p.shape] || SHAPES.circle, pl = lay.p.plane;
-    const pts = sh.pts.map(([a, b]) => pl === 'XZ' ? new THREE.Vector3(a, 0, b) : pl === 'YZ' ? new THREE.Vector3(0, a, b) : new THREE.Vector3(a, b, 0));
-    lay._curve = new THREE.CatmullRomCurve3(pts, sh.closed, 'catmullrom', 0.5); lay._ck = key;
-    return lay._curve;
-  };
-  // Where the cycle is now, 0..1, after the delay, the repeats, the loop mode and the loop points.
-  const phase = (lay, openShape) => {
-    const L = lay.loop, e = tOf(lay) - L.delay;
-    const from = Math.min(L.from, L.to) / 100, to = Math.max(L.from, L.to) / 100;
-    if (e <= 0) return from;
-    const period = lay.type === 'spin' ? 60 / lay.p.rpm : lay.p.period;
-    const mode = openShape && L.mode === 'loop' ? 'pingpong' : L.mode;
-    const cyc = e / period, done = L.repeat > 0 && cyc >= L.repeat;
-    let u;
-    if (mode === 'once') u = Math.min(cyc, 1);
-    else if (mode === 'pingpong') { const f = done ? 0 : cyc % 1; u = 1 - Math.abs(1 - 2 * f); }
-    else u = done ? 1 : cyc % 1;
-    return from + (to - from) * u;
-  };
-  const layerPose = (lay, size, out) => {
-    out.pos.set(0, 0, 0); out.quat.identity();
-    const p = lay.p;
-    if (lay.muted || (lay.end != null && lay.t > lay.end)) return;      // (a clip that is switched off, or past its end, moves nothing)
-    const te = tOf(lay) - (lay.loop.delay || 0);      // (swing, noise and oscillate wait for their delay; spin and path do it in phase)
-    if ((lay.type === 'swing' || lay.type === 'noise' || lay.type === 'oscillate') && te < 0) return;
-    switch (lay.type) {
-      case 'spin': {
-        const axis = lay.axisVec || AX[p.axis];
-        out.quat.setFromAxisAngle(axis, p.dir * 2 * Math.PI * phase(lay, false));
-        break;
-      }
-      case 'swing':
-        out.quat.setFromAxisAngle(AX[p.axis], p.amp * D2R * Math.sin(te * 2 * Math.PI / p.period));
-        break;
-      case 'noise': {
-        const fn = NOISE[p.type] || smooth;
-        const t = fn === smooth ? te * p.speed * Math.PI : te * p.speed * 1.5;      // (a speed of 1 is about half a shake a second, or a new random value every two thirds of a second)
-        const sh = p.pos / 100 * size, rt = p.rot * D2R, oct = Math.max(1, Math.min(4, Math.round(p.detail || 1))), rg = (p.rough == null ? 50 : p.rough) / 100;
-        const n = (ch) => fbm(fn, t, ch, p.seed, oct, rg), sx = p.sx == null ? 'xyz' : p.sx, rx = p.rx == null ? 'xyz' : p.rx;
-        out.pos.set(sx.includes('x') ? n(0) * sh : 0, sx.includes('y') ? n(1) * sh : 0, sx.includes('z') ? n(2) * sh : 0);
-        E1.set(rx.includes('x') ? n(3) * rt : 0, rx.includes('y') ? n(4) * rt : 0, rx.includes('z') ? n(5) * rt : 0, 'XYZ');
-        out.quat.setFromEuler(E1);
-        break;
-      }
-      case 'oscillate': {
-        const f = OSC[p.wave] || OSC.sine, th = te * 2 * Math.PI / Math.max(0.05, p.period), sp = p.spread * D2R, lg = p.lag * D2R, n = Math.max(1.5, p.ratio || 3.5), sh = size / 100;
-        out.pos.set(p.tx * sh * f(th, n), p.ty * sh * f(th + sp, n), p.tz * sh * f(th + 2 * sp, n));
-        E1.set(p.ax * D2R * f(th + lg, n), p.ay * D2R * f(th + lg + sp, n), p.az * D2R * f(th + lg + 2 * sp, n), 'XYZ');
-        out.quat.setFromEuler(E1);
-        break;
-      }
-      case 'keys': {
-        const v = keyEval(lay.keys, lay.t, mixNum); if (!v) break;
-        const sh = size / 100;
-        out.pos.set(v.mx * sh, v.my * sh, v.mz * sh);
-        E1.set(v.rx * D2R, v.ry * D2R, v.rz * D2R, 'XYZ');
-        out.quat.setFromEuler(E1);
-        break;
-      }
-      case 'path': {
-        const sh = SHAPES[p.shape] || SHAPES.circle;
-        curveOf(lay).getPointAt(Math.min(1, Math.max(0, phase(lay, !sh.closed))), V1);
-        out.pos.copy(V1).multiplyScalar(p.size / 100 * size * 0.5);
-        break;
-      }
-    }
-  };
-  // The waves of Oscillate: a number between −1 and 1 for an angle of the cycle (any angle: it repeats every turn, so it loops for ever).
-  //   sine      the smooth to-and-fro
-  //   piston    the real motion of a crank turning a rod: quicker through the middle at one end than the other (rod over crank = `ratio`)
-  //   eased     the same distance with a rest at each end and a firm move between
-  //   triangle  the same speed all the way, turning round at the ends
-  const OSC = {
-    sine: (a) => Math.sin(a),
-    piston: (a, n) => { const s = Math.sin(a); return Math.cos(a) + Math.sqrt(Math.max(0, n * n - s * s)) - n; },
-    eased: (a) => { const u = (2 / Math.PI * Math.asin(Math.sin(a)) + 1) / 2; return (u * u * (3 - 2 * u)) * 2 - 1; },
-    triangle: (a) => 2 / Math.PI * Math.asin(Math.sin(a)),
-  };
-  // ---- keys: easing, what lies between two keys, the tracks of the scene, the look of a part ----
-  const tOf = (lay) => lay.t + (lay.skip || 0);      // (the time a clip is at: a trimmed start skips what was cut off)
-  const EASES = {
-    linear: ['Linear', (u) => u],
-    ease: ['Smooth', (u) => u * u * (3 - 2 * u)],
-    in: ['Ease in', (u) => u * u * u],
-    out: ['Ease out', (u) => 1 - (1 - u) ** 3],
-    spring: ['Spring', (u) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (u - 1) ** 3 + c1 * (u - 1) ** 2; }],
-    hold: ['Hold', (u) => (u >= 1 ? 1 : 0)],
-  };
-  // the value at time t between the keys (before the first and after the last it stays as the nearest key has it); mix(a, b, u) blends two
-  function keyEval(keys, t, mix) {
-    const n = keys.length; if (!n) return null;
-    if (n === 1 || t <= keys[0].t) return keys[0].v;
-    if (t >= keys[n - 1].t) return keys[n - 1].v;
-    let i = 0; while (i < n - 2 && t >= keys[i + 1].t) i++;
-    const a = keys[i], b = keys[i + 1];
-    return mix(a.v, b.v, (EASES[a.e] || EASES.ease)[1]((t - a.t) / Math.max(1e-9, b.t - a.t)));
-  }
-  const mixNum = (a, b, u) => { const o = {}; for (const k in a) o[k] = typeof a[k] === 'number' && typeof b[k] === 'number' ? a[k] + (b[k] - a[k]) * u : a[k]; return o; };
-  const lookCol = new THREE.Color(), lookCol2 = new THREE.Color();
-  const mixLook = (a, b, u) => { const o = mixNum(a, b, u); o.c = '#' + lookCol.set(a.c || '#4f9dff').lerp(lookCol2.set(b.c || '#4f9dff'), u).getHexString(); return o; };
-  // the camera goes round the middle it looks at: the distance and the middle are blended, the direction is turned (not cut through the model)
-  const _cd = new THREE.Vector3(), _ce = new THREE.Vector3(), _cq = new THREE.Quaternion(), _cI = new THREE.Quaternion();
-  function mixCam(a, b, u) {
-    const L = (x, y) => x + (y - x) * u;
-    const tx = L(a.tx, b.tx), ty = L(a.ty, b.ty), tz = L(a.tz, b.tz);
-    _cd.set(a.px - a.tx, a.py - a.ty, a.pz - a.tz); _ce.set(b.px - b.tx, b.py - b.ty, b.pz - b.tz);
-    const da = _cd.length(), db = _ce.length(), dist = L(da, db);
-    if (da > 1e-9) _cd.divideScalar(da); else _cd.set(0, 0, 1);
-    if (db > 1e-9) _ce.divideScalar(db); else _ce.set(0, 0, 1);
-    _cq.setFromUnitVectors(_cd, _ce); _cI.identity().slerp(_cq, u); _cd.applyQuaternion(_cI);
-    return { px: tx + _cd.x * dist, py: ty + _cd.y * dist, pz: tz + _cd.z * dist, tx, ty, tz, fov: L(a.fov, b.fov) };
-  }
-  function applyCamKey(v) {
-    if (!(camera && controls && v)) return;
-    camera.position.set(v.px, v.py, v.pz); controls.target.set(v.tx, v.ty, v.tz);
-    if (camera.isPerspectiveCamera && Number.isFinite(v.fov) && Math.abs(camera.fov - v.fov) > 1e-4) { camera.fov = v.fov; camera.updateProjectionMatrix(); }
-    camera.lookAt(controls.target);
-    try { controls.update(); } catch (_) {}
-    try { requestRender(); } catch (_) {}
-  }
-  let exSig = '', exUi = 0;
-  // The scene's own tracks at time t: the explode of the view, and the camera. force: even when nothing seems to have changed.
-  function applyScene(t, force, uiToo) {
-    const ex = tracks.explode;
-    if (ex && !ex.muted && ex.keys.length && state.parts && state.parts.length) {
-      const v = keyEval(ex.keys, t, mixNum);
-      const sg = Math.round(v.x * 10) + ',' + Math.round(v.y * 10) + ',' + Math.round(v.z * 10);
-      if (force || sg !== exSig) {
-        exSig = sg; state.explode = { x: v.x, y: v.y, z: v.z };
-        try { applyExplode(); } catch (_) {}
-        if (uiToo || (++exUi % 6) === 0) {      // (the Explode panel follows: not on every frame)
-          try {
-            const top = Math.max(v.x, v.y, v.z); if (top > 0) state._explodeLast = top;
-            const sc = state._explodeScrubbers; if (sc) { sc.all?.setValue(top); for (const k of ['x', 'y', 'z']) sc[k]?.setValue(v[k]); }
-            state._explodePaint?.();
-          } catch (_) {}
-        }
-      }
-    }
-    const cm = tracks.camera;
-    if (cm && !cm.muted && cm.keys.length) applyCamKey(keyEval(cm.keys, t, mixCam));
-  }
-  // Look: a part is drawn through a copy of its material (see-through, tinted) while a Look layer is on it; the material it had is put back after.
-  function applyLook(rec) {
-    let lay = null;
-    for (const l of rec.layers) if (l.type === 'look' && !l.muted && l.keys && l.keys.length) lay = l;
-    if (!lay) { if (rec.look && rec.look.size) restoreLook(rec); return; }
-    const v = keyEval(lay.keys, lay.t, mixLook); if (!v) return;
-    const ids = rec.kind === 'part' ? [rec.partId] : rec.members;
-    if (!rec.look) rec.look = new Map();
-    for (const id of ids) {
-      const p = live(id); if (!p) continue;
-      const mesh = p.mesh; let m = rec.look.get(id);
-      if (!m || m.mesh !== mesh || mesh.material !== m.clone) {      // (new, or a view mode has put another material on it since)
-        const orig = mesh.material;
-        if (!orig || Array.isArray(orig) || typeof orig.clone !== 'function') continue;
-        if (m && m.clone && m.clone !== orig) { try { m.clone.dispose(); } catch (_) {} }
-        const clone = orig.clone(); clone.transparent = true; clone.depthWrite = false; clone.needsUpdate = true;
-        m = { mesh, orig, clone, c0: orig.color ? orig.color.clone() : null };
-        mesh.material = clone; rec.look.set(id, m);
-      }
-      m.clone.opacity = Math.max(0, Math.min(1, v.o));
-      if (m.c0 && m.clone.color) { m.clone.color.copy(m.c0); if (v.tm > 0) m.clone.color.lerp(lookCol.set(v.c || '#4f9dff'), Math.max(0, Math.min(1, v.tm))); }
-    }
-  }
-  function restoreLook(rec) {
-    if (!rec.look) return;
-    for (const m of rec.look.values()) { if (m.mesh.material === m.clone) m.mesh.material = m.orig; try { m.clone.dispose(); } catch (_) {} }
-    rec.look.clear();
-  }
-  const POSE = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
-  // The layers of an animated object, added up, as one matrix about the middle (in the object's own axes).
-  const deltaOf = (rec, out) => {
-    out.identity();
-    for (const lay of rec.layers) {
-      layerPose(lay, rec.size, POSE);
-      M1.makeTranslation(POSE.pos.x, POSE.pos.y, POSE.pos.z);
-      out.multiply(M1).multiply(M2.makeRotationFromQuaternion(POSE.quat));
-    }
-    return out;
-  };
-  const DELTA = new THREE.Matrix4(), F4 = new THREE.Matrix4(), G4 = new THREE.Matrix4(), RG = new THREE.Matrix4(), W4 = new THREE.Matrix4(), T4 = new THREE.Matrix4(), N4 = new THREE.Matrix4();
-  const stats = { ms: 0, parts: 0 };                 // the time of the last frame's work, and how many parts it moved
-  // Parenting: an object can follow another animated object. What the parent does (its own motion and, in turn, what it follows) is put on the
-  // child first, then the child's own motion on top: a piston on a crank turns with it and also slides on its own.
-  // Returns that motion as a matrix in the root frame, or null when there is no parent.
-  // The motion of a part as a rigid transform in the root frame. The part's matrix `rest` can hold a turn, a shift, a scale (and, for odd files, a
-  // mirror or an uneven scale); the motion must hold none of the scale: it turns about the middle of the part's geometry (`c`, in the part's own
-  // coordinates, so its place in the root frame is rest·c), along the part's own axes (the turn of `rest`, made exactly orthonormal), and a shift in
-  // the animation's units is brought to the root frame's units by the part's overall scale. Written as T(P) · Rr · D · Rr⁻¹ · T(−P), so it is a
-  // proper rigid motion whatever `rest` is, and what follows a part stays the shape it was.
-  const _RM = { P: new THREE.Vector3(), pos: new THREE.Vector3(), sc: new THREE.Vector3(), q: new THREE.Quaternion(), Rr: new THREE.Matrix4(), Ri: new THREE.Matrix4(), Dt: new THREE.Matrix4(), tp: new THREE.Matrix4(), tn: new THREE.Matrix4(), B: new THREE.Matrix4() };
-  function rigidPartMotion(rest, c, D, out) {
-    const m = _RM;
-    m.P.copy(c).applyMatrix4(rest);
-    rest.decompose(m.pos, m.q, m.sc);
-    // an uneven or mirrored scale leaves a turn that is still a pure rotation (decompose takes the sign of the mirror into the scale)
-    const det = rest.determinant(), s = Math.cbrt(Math.abs(det)) || 1;
-    m.Rr.makeRotationFromQuaternion(m.q); m.Ri.copy(m.Rr).invert();
-    // D = T(shift) · R(turn) in the part's own axes with the shift in the part's own units: scale only the shift
-    m.Dt.copy(D); m.Dt.elements[12] *= s; m.Dt.elements[13] *= s; m.Dt.elements[14] *= s;
-    m.tp.makeTranslation(m.P.x, m.P.y, m.P.z); m.tn.makeTranslation(-m.P.x, -m.P.y, -m.P.z);
-    return out.copy(m.tp).multiply(m.Rr).multiply(m.Dt).multiply(m.Ri).multiply(m.tn);
-  }
-  function parentDelta(rec, depth) {
-    const par = rec.parent && rec.parent !== rec.key ? items.get(rec.parent) : null;
-    if (!par || (depth || 0) > 8) return null;
-    const up = parentDelta(par, (depth || 0) + 1);
-    const D = deltaOf(par, new THREE.Matrix4()), out = new THREE.Matrix4();
-    if (par.kind === 'part') {
-      rigidPartMotion(restE(par.partId, par), par.c, D, out);
-    } else {
-      const F = new THREE.Matrix4().makeRotationFromQuaternion(par.Q);
-      out.makeTranslation(par.C.x, par.C.y, par.C.z).multiply(F).multiply(D).multiply(F.clone().invert()).multiply(new THREE.Matrix4().makeTranslation(-par.C.x, -par.C.y, -par.C.z));
-    }
-    if (up) out.premultiply(up);
-    return out;
-  }
-  function applyRec(rec) {
-    const PW = parentDelta(rec, 0);
-    deltaOf(rec, DELTA);
-    applyLook(rec);
-    if (rec.kind === 'part') {
-      // a deleted part keeps its record (−1: nothing moved, keep it): it comes back with its motion and its rest when the delete is
-      // undone. The record used to be dropped on the first pass, with the only copy of the rest, so undo brought the part back frozen mid-turn.
-      const p = live(rec.partId); if (!p) return getPart(rec.partId) ? -1 : 0;
-      // rest · T(c) · delta · T(−c): the turn is about the middle of the part's own geometry
-      const R0 = restE(rec.partId, rec);
-      rigidPartMotion(R0, rec.c, DELTA, M5); M5.multiply(R0);      // (the motion first as a rigid transform, then the part's rest under it)
-      if (PW) M5.premultiply(PW);
-      place(p.mesh, M5);
-      return 1;
-    }
-    // a group: T(C) · F · delta · F⁻¹ · T(−C), then each part from where it started
-    F4.makeRotationFromQuaternion(rec.Q);
-    G4.makeTranslation(rec.C.x, rec.C.y, rec.C.z).multiply(F4).multiply(DELTA);
-    F4.invert(); G4.multiply(F4).multiply(T4.makeTranslation(-rec.C.x, -rec.C.y, -rec.C.z));
-    if (PW) G4.premultiply(PW);
-    RG.multiplyMatrices(FR.R, G4);
-    let n = 0, gone = 0;
-    for (const id of rec.members) {
-      const p = live(id); if (!p) { if (getPart(id)) gone++; continue; }
-      const m = p.mesh;
-      W4.multiplyMatrices(RG, restE(id, rec));
-      (m.parent ? M3.copy(parentInv(m.parent)) : M3.identity()).multiply(W4).decompose(m.position, m.quaternion, m.scale);
-      m.updateMatrixWorld(true);
-      n++;
-    }
-    return n || (gone ? -1 : 0);      // (a group whose members are all deleted waits for them, as a part does)
-  }
-  // one pass over some objects (all of them, or the one that changed); an object that has nothing left to move is dropped
-  // (0), one whose parts are deleted is kept for their return (−1)
-  function applyAll(recs) {
-    beginFrame();
-    let n = 0;
-    for (const rec of (recs || items.values())) { const k = applyRec(rec); if (k === 0) items.delete(rec.key); else if (k > 0) n += k; }
-    return n;
-  }
-  const apply = (rec) => { beginFrame(); return applyRec(rec) > 0; };
-  function tick(now) {
-    raf = 0;
-    if (suspended || held || paused || !anyAnim()) return;
-    const t0 = performance.now();
-    fpsNote(now - last);
-    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)) * rate * (reverse ? -1 : 1) * bounce; last = now;
-    clock += dt;
-    for (const rec of items.values()) for (const lay of rec.layers) lay.t += dt;
-    const D = durOf();
-    if (clock >= D || clock < 0) {      // an end of the timeline: stop there (Once), turn round (Ping-pong) or go on at the other end (Loop)
-      const fwd = clock >= D;
-      if (!playLoop) { clock = fwd ? D : 0; paused = true; }
-      else if (pingpong) { clock = fwd ? Math.max(0, 2 * D - clock) : Math.min(D, -clock); bounce = -bounce; }
-      else clock = fwd ? clock % D : ((clock % D) + D) % D;
-      for (const rec of items.values()) for (const lay of rec.layers) lay.t = clock;
-    }
-    applyScene(clock, false, false);
-    stats.parts = applyAll();
-    requestRender();
-    stats.ms = stats.ms ? stats.ms * 0.8 + (performance.now() - t0) * 0.2 : performance.now() - t0;
-    if (anyAnim() && !paused) raf = requestAnimationFrame(tick); else sync();
-  }
-  function loop() { if (!raf && anyAnim() && !suspended && !held && !paused) { last = performance.now(); raf = requestAnimationFrame(tick); } updateTag(); }
-  // The pill of the animation, with the other status pills of the view (Isolated, Exploded, Measure: #vp-mode-pills, right of the camera
-  // pill, the same size). "Animate mode" while the Animate window is open, and while something is animated "Playing" or "Paused" with a
-  // pause / play button and an X. Pause keeps the poses and the animations; the X leaves: everything is paused and the controls go away.
-  // A click on the pill itself brings the Animate window back.
-  function updateTag() {
-    try { applyDraft(); } catch (_) {}
-    try { window.dispatchEvent(new Event('mo-anim')); } catch (_) {}      // (the Animation card in the right sidebar follows it)
-    let el = document.getElementById('vp-animate-pill');
-    if (!el) return;
-    const mode = !!state._animMode, running = anyAnim() && !dismissed && !suspended && !held && !paused;      // (the pill says Playing and is gone when it is paused: play it again from the card in the right sidebar or the timeline)
-    el.hidden = !(mode || running);
-    if (el.hidden) return;
-    if (!el._wired) {
-      el._wired = true;
-      el.innerHTML = '<span class="anim-pill-dot" aria-hidden="true"></span><span class="vp-pill-label"></span>' +
-        '<span class="anim-pill-btn" role="button" tabindex="0" data-a="toggle"></span>' +
-        '<span class="anim-pill-btn" role="button" tabindex="0" data-a="exit" title="Exit: pause everything and close these buttons" aria-label="Exit"><i data-lucide="x" aria-hidden="true"></i></span>';
-      const act = (e) => {
-        const b = e.target.closest('[data-a]');
-        if (!b) { open(); return; }                       // the pill itself: the window comes back
-        e.stopPropagation();
-        if (b.dataset.a === 'exit') exit(); else if (paused) play(); else pause();
-      };
-      el.addEventListener('click', act);
-      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(e); } });
-      try { _lucide(); } catch (_) {}
-    }
-    el.classList.toggle('is-paused', paused);
-    el.classList.toggle('has-play', running);
-    const label = [mode ? 'Animate mode' : '', running ? (paused ? 'Paused' : 'Playing') : ''].filter(Boolean).join(' · ');
-    const lab = el.querySelector('.vp-pill-label'); if (lab && lab.textContent !== label) lab.textContent = label;
-    for (const x of el.querySelectorAll('.anim-pill-dot,.anim-pill-btn')) x.hidden = !running;
-    const tb = el.querySelector('[data-a="toggle"]'), st = paused ? 'play' : 'pause';
-    if (tb && tb.dataset.s !== st) {
-      tb.dataset.s = st; tb.innerHTML = `<i data-lucide="${st}" aria-hidden="true"></i>`;
-      tb.title = paused ? 'Play every animation' : 'Pause every animation where it is'; tb.setAttribute('aria-label', paused ? 'Play' : 'Pause');
-      try { _lucide(); } catch (_) {}
-    }
-    el.title = 'Open the Animate window';
-  }
-  function exit() { paused = true; dismissed = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); sync(); }
-  // The playhead of the timeline: where the animation of the selection is in its cycle (only while the window is open and it runs).
-  function headTick() {
-    headRaf = 0;
-    if (!popup || !popup.el.classList.contains('show')) return;
-    updatePlaybar();
-    const head = popup.body.querySelector('#anim-tl-head');
-    if (head) {
-      const lay = headLay;
-      if (lay && (lay.type === 'spin' || lay.type === 'path')) {
-        head.hidden = false;
-        head.style.left = (phase(lay, lay.type === 'path' && !(SHAPES[lay.p.shape] || SHAPES.circle).closed) * 100) + '%';
-      } else head.hidden = true;
-    }
-    if (!paused && !suspended && anyAnim()) headRaf = requestAnimationFrame(headTick);
-  }
-  // ---- the playbar: rewind, play / pause, a scrubber over one cycle of the longest animation, the time ----
-  const cycleOf = (l) => l.keys ? (l.keys.length ? l.keys[l.keys.length - 1].t : 0) : l.type === 'spin' ? 60 / Math.max(1, l.p.rpm) : l.type === 'noise' ? 10 : Math.max(0.2, +l.p.period || 1);
-  let cycVer = -1, cycLen = 1;
-  const cycleLength = () => { if (cycVer === ver) return cycLen; let m = 0; for (const r of items.values()) for (const l of r.layers) m = Math.max(m, cycleOf(l) + (l.keys ? 0 : (l.loop ? l.loop.delay || 0 : 0))); for (const nm of ['explode', 'camera']) if (tracks[nm] && tracks[nm].keys.length) m = Math.max(m, tracks[nm].keys[tracks[nm].keys.length - 1].t); cycVer = ver; cycLen = Math.min(60, Math.max(1, m)); return cycLen; };
-  const fmtClock = (t) => { t = Math.max(0, t); const m = Math.floor(t / 60); return m + ':' + (t - m * 60).toFixed(1).padStart(4, '0'); };
-  // Every animation goes to time `sec` (a new start of the playbar, or the place the scrubber is dragged to).
-  function seekTo(sec) {
-    clock = Math.max(0, Math.min(durOf(), sec));
-    for (const rec of items.values()) for (const lay of rec.layers) lay.t = clock;
-    applyScene(clock, true, false);
-    applyAll();
-    try { requestRender(); } catch (_) {}
-    updatePlaybar();
-  }
-  function rewind() { seekTo(0); }
-  const durOf = () => dur > 0 ? dur : Math.max(5, Math.ceil(cycleLength()));
-  const PB = { frac: '', time: '', aria: '', len: '', off: null, st: '', rate: '' };
-  const resetPB = () => { for (const k of Object.keys(PB)) PB[k] = k === 'off' ? null : ''; };
-  function updatePlaybar() { if (!popup) return; if (popup === ui.dock) updateDockBar(); else updateMiniBar(); }
-  function updateMiniBar() {
-    const pb = popup.el.querySelector('#anim-pb'); if (!pb) return;
-    const any = anyAnim(), len = durOf(), frac = any ? Math.min(1, clock / len) : 0;
-    if (PB.off !== !any) { PB.off = !any; pb.classList.toggle('is-off', !any); }
-    const f = (frac * 100).toFixed(2); if (f !== PB.frac) { PB.frac = f; pb.style.setProperty('--pb', f + '%'); }
-    const tv = any ? fmtClock(Math.min(clock, len)) : '0:00.0'; if (tv !== PB.time) { PB.time = tv; const t = pb.querySelector('#anim-pb-time'); if (t) t.textContent = tv; }
-    const av = any ? Math.round(frac * 100) + '|' + fmtClock(Math.min(clock, len)) + ' of ' + fmtClock(len) : 'nothing animated';
-    if (av !== PB.aria) { PB.aria = av; const sc = pb.querySelector('#anim-pb-scrub'); if (sc) { sc.setAttribute('aria-valuenow', Math.round(frac * 100)); sc.setAttribute('aria-valuetext', any ? fmtClock(Math.min(clock, len)) + ' of ' + fmtClock(len) : 'nothing animated'); } }
-    const st = !any ? 'off' : paused ? 'play' : 'pause';
-    if (st !== PB.st) {
-      PB.st = st;
-      const pl = pb.querySelector('#anim-pb-play');
-      if (pl) {
-        pl.disabled = !any;
-        pl.innerHTML = `<i data-lucide="${paused || !any ? 'play' : 'pause'}"></i>`;
-        pl.setAttribute('aria-label', paused || !any ? 'Play' : 'Pause'); pl.title = !any ? 'Nothing is animated yet' : paused ? 'Play every animation (Space)' : 'Pause every animation where it is (Space)';
-        try { _lucide(); } catch (_) {}
-      }
-      for (const b of pb.querySelectorAll('#anim-pb-rew,#anim-pb-rate')) b.disabled = !any;
-    }
-    const lv = any ? fmtClock(len) : ''; if (lv !== PB.len) { PB.len = lv; const le = pb.querySelector('#anim-pb-len'); if (le) le.textContent = lv; }
-    const rv = (rate === 1 ? '1' : String(rate)) + '×'; if (rv !== PB.rate) { PB.rate = rv; const rb = pb.querySelector('#anim-pb-rate'); if (rb) { rb.textContent = rv; rb.title = 'Playback speed: ' + rv + ' (click for the next)'; } }
-  }
-  function pause() { paused = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); sync(); }
-  function play() { if (!anyAnim()) return; if (!playLoop && ((reverse ? -bounce : bounce) < 0 ? clock <= 0 : clock >= durOf())) seekTo((reverse ? -bounce : bounce) < 0 ? durOf() : 0); paused = false; dismissed = false; loop(); sync(); }
-
-  // ---- what the selection is: the groups that are selected, else the parts ----
-  function groupInfo(gid) {
-    const numId = parseInt(gid, 10);
-    let members = null, frame = null, label = '';
-    if (!Number.isNaN(numId) && state.treeNodes) {
-      const hn = state.treeNodes.find(n => n.kind === 'group' && n.id === numId);
-      if (hn) { members = _treeGroupDescendants(numId); frame = hn.obj3d || null; label = hn.name || 'Group'; }
-    }
-    if (!members) {
-      const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
-      if (ug && ug.ref) { members = [...ug.partIds]; frame = ug.ref; label = ug.name || 'Group'; }
-    }
-    if (!members) return null;
-    return { key: 'g:' + gid, kind: 'group', gid, members, frame, label };
-  }
-  function targets() {
-    const gids = state.selectedGroupIds ? [...state.selectedGroupIds] : [];
-    if (gids.length) {
-      // (a group counts only while what is selected still is that group: a selection made some other way can leave an old group id behind)
-      const gts = gids.map(groupInfo).filter(t => t && t.members.some(exists) && t.members.every(id => state.selected.has(id) || !exists(id)));
-      if (gts.length) return gts;
-    }
-    return [...(state.selected || [])].map(exists).filter(Boolean).map(p => ({ key: 'p:' + p.partId, kind: 'part', partId: p.partId, p, label: p.name || ('Part ' + p.partId) }));
-  }
-
-  // Make the record of an object that is not animated yet (its start pose is taken now).
-  function makeRec(t) {
-    beginFrame();
-    if (t.kind === 'part') {
-      if (!promote(t.p)) return null;
-      const { c, size } = centreOf(t.p.mesh);
-      return { key: t.key, kind: 'part', label: t.label, partId: t.partId, layers: [], c, size, rests: new Map([[t.partId, restOf(t.p.mesh, t.partId)]]) };
-    }
-    for (const id of t.members) promote(exists(id));
-    const parts = t.members.map(live).filter(p => p && !p.locked);
-    if (!parts.length) return null;
-    const box = new THREE.Box3();
-    for (const p of parts) { const b = _partWorldBoxOwn(p.mesh); if (!b.isEmpty()) box.union(b); }
-    const inv = new THREE.Matrix4().copy(FR.R).invert();
-    const C = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3()).applyMatrix4(inv);
-    // (the size is in the units the motion is worked out in, the root frame's: a scene scale of the file or the viewer is taken out of it)
-    const sRoot = Math.cbrt(Math.abs(FR.R.determinant())) || 1;
-    const size = box.isEmpty() ? 1 : Math.max(1e-6, box.getSize(new THREE.Vector3()).length() / sRoot);
-    const Q = new THREE.Quaternion();
-    if (t.frame) { t.frame.updateWorldMatrix(true, false); t.frame.getWorldQuaternion(Q); if (state.partsRoot) { const pq = new THREE.Quaternion(); state.partsRoot.getWorldQuaternion(pq); Q.premultiply(pq.invert()); } }
-    return { key: t.key, kind: 'group', label: t.label, gid: t.gid, layers: [], members: parts.map(p => p.partId), C, Q, size, rests: new Map(parts.map(p => [p.partId, restOf(p.mesh, p.partId)])) };
-  }
-  // Give each of the objects a layer of this kind (it replaces one of that kind it already has). → how many, how many were locked
-  function addTo(ts, type, p, loopSet) {
-    let n = 0, locked = 0;
-    const wasEmpty = !items.size;
-    if (wasEmpty) clock = 0;
-    for (const t of ts) {
-      let rec = items.get(t.key);
-      if (!rec) {
-        if (t.kind === 'part' && t.p.locked) { locked++; continue; }
-        rec = makeRec(t);
-        if (!rec) { locked++; continue; }
-        items.set(t.key, rec);
-      }
-      const lay = { id: nid(), type, p: { ...p }, loop: { ...loopSet }, t: clock };      // (a new layer starts at the time the others are at)
-      let i = rec.layers.findIndex(l => l.id === selLid && l.type === type);      // (the one that is selected is the one that is replaced)
-      if (i < 0) i = rec.layers.findIndex(l => l.type === type);
-      if (i >= 0) { lay.t = rec.layers[i].t; lay.id = rec.layers[i].id; rec.layers[i] = lay; } else rec.layers.push(lay);
-      selLid = lay.id;
-      n++;
-    }
-    if (n && wasEmpty) { paused = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } }      // (the first animation of a scene never starts by itself, even if the clock ran before the last one was removed)
-    if (n) { dismissed = false; ver++; try { applyAll(); requestRender(); } catch (_) {} }      // (it does not start to play: the object shows its pose at the time the clock is at; Play is the user's)
-    loop(); sync();
-    if (n) commit('Animate');
-    return { n, locked };
-  }
-  // The "Add" button: the kind and the settings that are in the window, on what is selected.
-  function addLayer() {
-    const ts = targets();
-    if (!ts.length) { toast('Animate', 'Select a part or a group to animate first', 'warn', 3000); return; }
-    const r = addTo(ts, cfg.type, cfg[cfg.type], { ...cfg.loop, delay: 0 });      // (a new clip starts at 0 s: where it goes later is the timeline's to say)
-    if (!r.n && r.locked) toast('Animate', 'Those parts are locked: unlock them to animate', 'warn', 3000);
-  }
-  // A setting that is changed in the window changes the layer of that kind on what is selected.
-  // A setting that is changed in the window changes the clips of that kind it is about: the one of each selected object, and every clip of
-  // that kind that is picked on the timeline (Shift+click adds clips). With several clips only what was changed goes to all of them (the
-  // axis of one, the speed of the other stay as they are when the speed is what was dragged); with one clip it is all of the settings.
-  function retune() {
-    const type = cfg.type, lays = new Map();
-    for (const t of targets()) {
-      const rec = items.get(t.key); const lay = rec && (rec.layers.find(l => l.id === selLid && l.type === type) || rec.layers.find(l => l.type === type));
-      if (lay) lays.set(lay.id, lay);
-    }
-    if (selLids.size > 1) for (const x of clipsSelected()) if (x.lay.type === type && !KEYED.has(type)) lays.set(x.lay.id, x.lay);
-    const many = lays.size > 1 && cfgSnap && cfgSnap.type === type, now = cfg[type] || {}, was = many ? cfgSnap.p : null, nowL = cfg.loop || {}, wasL = many ? cfgSnap.loop : null;
-    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-    for (const lay of lays.values()) {
-      if (many) {
-        for (const k of Object.keys(now)) if (!same(now[k], was[k])) lay.p[k] = JSON.parse(JSON.stringify(now[k]));
-        for (const k of Object.keys(nowL)) if (k !== 'delay' && k !== 'repeat' && !same(nowL[k], wasL[k])) lay.loop[k] = nowL[k];
-      } else { lay.p = { ...now }; lay.loop = { ...nowL, delay: lay.loop.delay, repeat: lay.loop.repeat }; }      // (where a clip starts is the timeline's)
-      ver++;
-    }
-    if (lays.size) snapCfg();
-    commitSoon('Edit motion');
-  }
-  // (a deleted part's hidden mesh goes back to rest too, so an undo of the delete finds it there)
-  function dropRec(rec) { restoreLook(rec); for (const id of rec.rests.keys()) { const p = getPart(id); if (p && p.mesh) place(p.mesh, restE(id, rec)); } }
-  function dropAll(recs) { beginFrame(); for (const rec of recs) dropRec(rec); }
-  // Take a kind of layer (or everything) off the given keys; an object with no layer left goes back to where it started.
-  function remove(keys, type) {
-    for (const key of (keys || targets().map(t => t.key))) {
-      const rec = items.get(key); if (!rec) continue;
-      if (type) rec.layers = rec.layers.filter(l => l.type !== type);
-      else rec.layers = [];
-      ver++;
-      if (!rec.layers.length) { items.delete(key); beginFrame(); dropRec(rec); }
-      else apply(rec);
-    }
-    try { requestRender(); } catch (_) {}
-    sync();
-    commit('Remove animation');
-  }
-  // While a video is being made the animation is not run by the clock: each frame is put at its own time (seek), and the times that
-  // were running are given back after.
-  let held = null;
-  function hold(on) {
-    if (on) {
-      if (held) return;
-      held = new Map(); for (const rec of items.values()) for (const lay of rec.layers) held.set(lay, lay.t);      // (the tracks of the scene are put back by hold(false))
-      if (raf) { cancelAnimationFrame(raf); raf = 0; }
-      updateTag();
-    } else if (held) {
-      for (const [lay, t] of held) lay.t = t;
-      held = null;
-      applyScene(clock, true, true);
-      applyAll();
-      requestRender(); loop();
-    }
-  }
-  function seek(sec) {
-    for (const rec of items.values()) for (const lay of rec.layers) lay.t = sec;
-    applyScene(sec, true, false);
-    applyAll();
-    try { state.partsRoot && state.partsRoot.updateMatrixWorld(true); } catch (_) {}
-  }
-  const heldNow = () => !!held;
-  // The exploded view has moved the parts: the animated ones are put where their animation says (with the new offsets).
-  function refresh() { if (!items.size || suspended || held) return; applyAll(); try { requestRender(); } catch (_) {} }
-  // An export or a scene save sees everything where it started, and the motion goes on after it.
-  function suspend() {
-    if (suspended) return;
-    suspended = true;
-    if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    dropAll(items.values());
-    try { requestRender(); } catch (_) {}
-    updateTag();
-  }
-  function resume() { if (!suspended) return; suspended = false; applyAll(); try { requestRender(); } catch (_) {} loop(); }
-  function reset() { for (const rec of items.values()) { try { restoreLook(rec); } catch (_) {} } items.clear(); tracks.explode = null; tracks.camera = null; selLids.clear(); selKeys.clear(); selLid = 0; base = EMPTY; clearTimeout(cTimer); cTimer = 0; ver++; clock = 0; suspended = false; paused = false; dismissed = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } sync(); }
-  // For the file export: step through the timeline and write down where every animated part is at each frame (its world matrix), as
-  // Float32 arrays, together with where it is at rest. Parts that never move are left out. The parts go back to rest afterwards.
-  // `fps` is lowered when the timeline is long or many parts move, to keep the file at a size that opens.
-  function bake(fps) {
-    const ids = new Set();
-    for (const rec of items.values()) { if (!rec.layers.length) continue; if (rec.kind === 'part') ids.add(rec.partId); else for (const id of rec.members) ids.add(id); }
-    if (!ids.size) return null;
-    const D = durOf(), hold = { clock, ts: new Map() };
-    for (const rec of items.values()) for (const lay of rec.layers) hold.ts.set(lay, lay.t);
-    beginFrame(); dropAll(items.values());
-    const meshes = [...ids].map(id => ({ id, p: live(id) })).filter(x => x.p && x.p.mesh);
-    if (!meshes.length) return null;
-    for (const x of meshes) { x.p.mesh.updateWorldMatrix(true, false); x.W0 = x.p.mesh.matrixWorld.clone(); }
-    fps = Math.max(5, Math.min(60, Math.round(fps) || 30));
-    while (fps > 5 && Math.ceil(D * fps) * meshes.length > 1.5e6) fps--;
-    const n = Math.max(2, Math.floor(D * fps) + 1);
-    for (const x of meshes) { x.mats = new Float32Array(16 * n); x.moves = false; }
-    try {
-      for (let i = 0; i < n; i++) {
-        const t = Math.min(D, i / fps);
-        for (const rec of items.values()) for (const lay of rec.layers) lay.t = t;
-        beginFrame(); applyAll();
-        for (const x of meshes) {
-          x.p.mesh.updateWorldMatrix(true, false);
-          const e = x.p.mesh.matrixWorld.elements, o16 = x.W0.elements;
-          for (let k = 0; k < 16; k++) { const v = e[k]; x.mats[16 * i + k] = v; if (!x.moves && Math.abs(v - o16[k]) > 1e-7 * Math.max(1, Math.abs(v))) x.moves = true; }
-        }
-      }
-    } finally {
-      for (const [lay, t] of hold.ts) lay.t = t;
-      clock = hold.clock; beginFrame(); dropAll(items.values());
-    }
-    const parts = new Map();
-    for (const x of meshes) if (x.moves) parts.set(x.id, { W0: x.W0, mats: x.mats });
-    return parts.size ? { fps, n, duration: (n - 1) / fps, parts } : null;
-  }
-  const run = async (fn) => { suspend(); try { return await fn(); } finally { resume(); } };
-
-  // A press on a gizmo handle starts a drag of the selection: whatever is animated in it is put back first, so the drag starts from there.
-  window.addEventListener('pointerdown', () => {
-    if (!items.size || !state.gizmo || !state.gizmo.axis) return;
-    const keys = targets().map(t => t.key).filter(k => items.has(k));
-    if (keys.length) remove(keys);
-  }, true);
-
-  // ---- the window ----
-  const f1 = (v) => String(Math.round(v * 10) / 10);
-  function summary(lay) {
-    const p = lay.p, L = lay.loop;
-    if (lay.type === 'keys') return 'Pose · ' + lay.keys.length + (lay.keys.length === 1 ? ' key' : ' keys');
-    if (lay.type === 'look') return 'Look · ' + lay.keys.length + (lay.keys.length === 1 ? ' key' : ' keys');
-    const loopTxt = () => {
-      const bits = [];
-      if (L.mode !== 'loop') bits.push(L.mode === 'pingpong' ? 'ping-pong' : 'once');
-      if (L.repeat > 0) bits.push('×' + L.repeat);
-      if (L.delay > 0) bits.push('delay ' + f1(L.delay) + ' s');
-      if (L.from !== 0 || L.to !== 100) bits.push(`points ${Math.round(L.from)}–${Math.round(L.to)}%`);
-      return bits.length ? ' · ' + bits.join(' · ') : '';
-    };
-    switch (lay.type) {
-      case 'spin':  return `Spin · ${p.axis} · ${p.dir < 0 ? 'clockwise' : 'counter-clockwise'} · ${p.rpm} rpm${loopTxt()}`;
-      case 'swing': return `Swing · ${p.axis} · ±${p.amp}° · ${f1(p.period)} s`;
-      case 'noise': return `Noise · ${p.type === 'random' ? 'random' : p.type === 'steps' ? 'steps' : 'wave'} · shift ${p.pos}% ${(p.sx == null ? 'xyz' : p.sx).toUpperCase() || '–'} · turn ${p.rot}° ${(p.rx == null ? 'xyz' : p.rx).toUpperCase() || '–'} · ${f1(p.speed)}× · detail ${p.detail || 1} · seed ${p.seed}`;
-      case 'oscillate': { const ax = (a, b, c) => ['X', 'Y', 'Z'].filter((_, i) => [a, b, c][i] > 0).join('') || '–'; return `Oscillate · ${p.wave} · shift ${ax(p.tx, p.ty, p.tz)} · turn ${ax(p.ax, p.ay, p.az)} · ${f1(p.period)} s`; }
-      case 'path':  return `Path · ${p.shape === 'figure8' ? 'figure 8' : p.shape} · ${p.plane} · ${p.size}% · ${f1(p.period)} s${loopTxt()}`;
-    }
-    return lay.type;
-  }
-  // The short line on an animation's card: the basic values only (the whole of it is in the settings, and in summary() on the timeline)
-  function brief(lay) {
-    const p = lay.p;
-    switch (lay.type) {
-      case 'spin': return `${p.axis} · ${p.rpm} rpm`;
-      case 'swing': return `${p.axis} · ±${p.amp}° · ${f1(p.period)} s`;
-      case 'noise': return `${p.pos}% · ${p.rot}° · ${f1(p.speed)}×`;
-      case 'oscillate': return `${p.wave} · ${f1(p.period)} s`;
-      case 'path': return `${p.shape === 'figure8' ? 'figure 8' : p.shape} · ${f1(p.period)} s`;
-    }
-    return summary(lay).replace(/^[A-Za-z]+ · /, '');
-  }
-  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const getP = (path) => { const [g, k] = path.split('.'); return cfg[g][k]; };
-  const setP = (path, v) => { const [g, k] = path.split('.'); cfg[g][k] = v; };
-  const fmtVal = (path, v, unit) => (path === 'loop.repeat' && !v) ? '∞' : (Number.isInteger(+v) ? String(v) : f1(+v)) + (unit || '');
-
-  function sync(force) {
-    updateTag();
-    if (!popup) return;
-    const q = (s) => popup.body.querySelector(s);
-    popup.body.dataset.type = cfg.type;
-    for (const b of popup.body.querySelectorAll('[data-type]')) if (b.tagName === 'BUTTON') b.classList.toggle('active', b.dataset.type === cfg.type);
-    for (const el of popup.body.querySelectorAll('[data-for]')) el.hidden = !el.dataset.for.split(' ').includes(cfg.type);
-    for (const b of popup.body.querySelectorAll('[data-set]')) b.classList.toggle('active', String(getP(b.dataset.set)) === b.dataset.val);
-    for (const b of popup.body.querySelectorAll('[data-tog]')) { const on = String(getP(b.dataset.tog)).includes(b.dataset.val); b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }
-    for (const el of popup.body.querySelectorAll('[data-p]')) {
-      const v = getP(el.dataset.p);
-      if (el.value !== String(v) && document.activeElement !== el) el.value = v;
-      const lab = popup.body.querySelector(`[data-v="${el.dataset.p}"]`); if (lab) lab.textContent = fmtVal(el.dataset.p, v, lab.dataset.u || '');
-    }
-    // what the selection is, and its layers
-    const ts = targets(), recs = ts.map(t => items.get(t.key));
-    const on = recs.filter(Boolean).length, withType = recs.filter(r => r && r.layers.some(l => l.type === cfg.type)).length;
-    const names = ts.length === 1 ? esc(ts[0].label) : ts.length ? `${ts.length} ${ts[0].kind === 'group' ? 'groups' : 'parts'}` : '';
-    const layerTypes = Object.keys(TYPES).filter(k => recs.some(r => r && r.layers.some(l => l.type === k)));
-    const selEl = q('#anim-sel');
-    if (selEl) {
-      const html1 = !ts.length ? '<span class="anim-none">Select a part or a group to animate it.</span>'
-        : `<div class="anim-sel-n"><i data-lucide="${ts[0].kind === 'group' ? 'folder' : 'box'}"></i><b>${names}</b><span>${on ? (on === ts.length ? 'animated' : on + ' animated') : 'not animated'}</span>${popup === ui.dock ? `<div class="anim-sel-addwrap"><button type="button" class="anim-sel-add" data-cardadd aria-haspopup="menu" aria-expanded="false" title="Add an animation to ${ts.length === 1 ? 'this object' : 'these objects'}" aria-label="Add an animation"><i data-lucide="plus"></i></button><div class="adk-menu anim-sel-menu" hidden role="menu">${Object.entries(TYPES).filter(([k]) => !KEYED.has(k)).map(([k, [label, icon]]) => `<button type="button" role="menuitem" data-addtype="${k}"><i data-lucide="${icon}"></i><span>${label}</span></button>`).join('')}</div></div>` : ''}</div>` +
-          (layerTypes.length ? `<div class="anim-lays">${layerTypes.map(k => {
-            const have = recs.filter(r => r && r.layers.some(l => l.type === k)), lay = have[0].layers.find(l => l.type === k);
-            return `<div class="anim-lay${k === cfg.type ? ' active' : ''}" data-type="${k}"><button type="button" class="anim-lay-b" data-layer="${k}" data-lid="${lay.id}" data-okey="${esc(have[0].key)}" title="Edit this animation"><i data-lucide="${TYPES[k][1]}"></i><span class="anim-lay-t"><b>${TYPES[k][0]}</b><em>${esc(brief(lay))}</em></span>${recs.length > 1 ? `<span class="anim-lay-n">${have.length}/${recs.length}</span>` : ''}</button><button type="button" class="anim-lay-x" data-rmlayer="${k}" aria-label="Remove ${TYPES[k][0]}" title="Remove it"><i data-lucide="x"></i></button></div>`;
-          }).join('')}</div>` : '');
-      let html2 = html1;
-      if (popup === ui.dock && ts.length === 1 && recs[0]) {      // (what this object follows: any other animated object that does not follow it back)
-        const me = recs[0], below = (r) => { for (let q = r, n = 0; q && n < 9; q = items.get(q.parent), n++) if (q === me) return true; return false; };
-        const partsOf = (r) => r.kind === 'part' ? [r.partId] : r.members, mine = new Set(partsOf(me));      // (not one that shares a part with this object: the same mesh cannot follow itself)
-        const opts = [...items.values()].filter(r => r !== me && !below(r) && !partsOf(r).some(id => mine.has(id))).map(r => `<option value="${esc(r.key)}"${me.parent === r.key ? ' selected' : ''}>${esc(r.label)}</option>`).join('');
-        html2 += `<div class="anim-follow"><span class="anim-l">Follows</span><select class="mac-sel" data-follow="${esc(me.key)}" aria-label="Follows another object"><option value="">Nothing</option>${opts}</select></div>`;
-      }
-      const html = html2;
-      if (selEl.dataset.h !== html) { selEl.dataset.h = html; selEl.innerHTML = html; try { _lucide(); } catch (_) {} }
-      // In the dock, with a clip picked on the timeline, the object card and its list of layers are not needed (the timeline shows them): only that clip's settings
-      const pick = selLids.size ? selLids : null;      // (a clip picked on the timeline: not the layer that was loaded when a part was selected)
-      const editing = !!(popup === ui.dock && pick && recs.some(r => r && r.layers.some(l => pick.has(l.id))));
-      selEl.hidden = editing;
-      // The settings (axis, angle, speed, loop) belong to a clip: in the dock they are listed only while a clip is picked on the timeline.
-      for (const c of popup.body.querySelectorAll('.anim-card')) c.hidden = popup === ui.dock && !editing ? true : (c.dataset.for ? !c.dataset.for.split(' ').includes(cfg.type) : false);
-      { const rm = popup.el.querySelector('#anim-remove'); if (rm) { const t = editing ? 'Delete this clip' : 'Remove all'; if (rm.title !== t) { rm.title = t; rm.setAttribute('aria-label', t); } } }
-      const tiles = q('.anim-types'); if (tiles) tiles.hidden = popup === ui.dock || editing;      // (the dock adds with the blue plus in its top bar, so it has no kind tiles)
-      const eh = q('#anim-edit-h');      // (the title that says what kind of animation these settings are for)
-      if (eh) { eh.hidden = !editing; if (editing) { const h = `<i data-lucide="${TYPES[cfg.type][1]}"></i><span>${TYPES[cfg.type][0]}${(() => { const n = selLids.size > 1 ? clipsSelected().filter(x => x.lay.type === cfg.type).length : 0; return n > 1 ? ' · ' + n + ' clips' : ''; })()}</span>`; if (eh.dataset.h !== h) { eh.dataset.h = h; eh.innerHTML = h; try { _lucide(); } catch (_) {} } } }      // (and the kind tiles: the clip's own settings are all that is listed)
-    }
-    updatePlaybar();
-    if (popup === ui.dock) renderKeyPanel();
-    const add = popup.el.querySelector('#anim-add'), rmAll = popup.el.querySelector('#anim-remove');
-    if (add) { const lbl = withType ? `Apply ${TYPES[cfg.type][0]} again` : `Add ${TYPES[cfg.type][0]}`; add.disabled = !ts.length; add.title = withType ? 'Restart this animation on the selection' : lbl; add.setAttribute('aria-label', lbl); }      // (a round plus: the words are its tooltip)
-    if (rmAll) rmAll.disabled = !on;
-    { const hb = popup.el.querySelector('#adk-add'), hm = popup.el.querySelector('#adk-addmore'); if (hb) { hb.disabled = hm.disabled = !ts.length; hb.title = ts.length ? `Add ${TYPES[cfg.type][0]} to the selection` : 'Select a part or a group first'; } }
-    // the loop points on the timeline, and the playhead on the layer of this kind that the selection has
-    const tr = q('#anim-tl-track');
-    if (tr) {
-      const lo = Math.min(cfg.loop.from, cfg.loop.to), hi = Math.max(cfg.loop.from, cfg.loop.to);
-      tr.style.setProperty('--f', lo + '%'); tr.style.setProperty('--t', hi + '%');
-      const fe = q('#anim-tl-f'), te = q('#anim-tl-t'); if (fe) fe.textContent = Math.round(lo) + '%'; if (te) te.textContent = Math.round(hi) + '%';
-      for (const h of tr.querySelectorAll('.anim-tl-h')) { const v = Math.round(h.dataset.h === 'from' ? lo : hi); h.style.left = v + '%'; h.setAttribute('aria-valuenow', v); }
-      const rec = recs.find(r => r && r.layers.some(l => l.type === cfg.type));
-      headLay = rec ? rec.layers.find(l => l.type === cfg.type) : null;
-    }
-    // the frame loop that moves the playbar's scrubber and time while it plays (it also moves the loop strip's playhead when there is one)
-    if (!headRaf) headRaf = requestAnimationFrame(headTick);
-    // every animated object in the scene, with all its properties
-    const listSigNow = ver + '#' + ts.map(t => t.key).join(',') + (paused ? '|paused' : '') + '|' + items.size + '|' + cfg.type;
-    if (force || listSigNow !== listSig) {
-      listSig = listSigNow;
-      if (popup === ui.dock) renderRows();
-      const box = q('#anim-list'), cnt = q('#anim-count');
-      if (cnt) cnt.textContent = items.size ? String(items.size) + (paused ? ' · paused' : '') : '';
-      if (box) {
-        const selKeys = new Set(ts.map(t => t.key));
-        box.innerHTML = items.size ? [...items.values()].map(r => `
-          <div class="anim-item${selKeys.has(r.key) ? ' is-sel' : ''}" data-key="${esc(r.key)}">
-            <button type="button" class="anim-item-b" data-pick="${esc(r.key)}" title="Select it">
-              <span class="anim-item-n"><i data-lucide="${r.kind === 'group' ? 'folder' : 'box'}"></i>${esc(r.label)}${r.kind === 'group' ? `<em>${r.members.length} parts</em>` : ''}</span>
-              ${r.layers.map(l => `<span class="anim-ln"><i data-lucide="${TYPES[l.type][1]}"></i>${esc(brief(l))}<b>${TYPES[l.type][0]}</b></span>`).join('')}
-            </button>
-            <button type="button" class="anim-x" data-rmkey="${esc(r.key)}" aria-label="Remove its animation"><i data-lucide="trash-2"></i></button>
-          </div>`).join('') : '<div class="anim-none">Nothing is animated in this scene.</div>';
-        try { _lucide(); } catch (_) {}
-      }
-    }
-  }
-  // The window follows the selection: an object that has animation shows its settings.
-  // a number for the selection that is cheap to work out (no list is made), to see that it has changed
-  const selKey = () => { let h = (state.selected ? state.selected.size : 0) * 7919; if (state.selected) for (const id of state.selected) h = (h * 31 + id) | 0; const g = state.selectedGroupIds; let k = ''; if (g && g.size) for (const x of g) k += x + ','; return h + '|' + k; };
-  // Names follow the scene: a part or group renamed in the tree is renamed in the timeline's list too.
-  function refreshLabels() {
-    let changed = false;
-    for (const r of items.values()) {
-      let nm = null;
-      try { if (r.kind === 'part') { const p = exists(r.partId); nm = p ? (p.name || ('Part ' + p.partId)) : null; } else { const g = groupInfo(String(r.gid)); nm = g ? g.label : null; } } catch (_) {}
-      if (nm && nm !== r.label) { r.label = nm; changed = true; }
-    }
-    return changed;
-  }
-  function follow() {
-    const key = selKey();
-    if (refreshLabels()) { listSig = ''; renderRows(); sync(true); }
-    if (key !== sig) {
-      sig = key;
-      for (const t of targets()) { const r = items.get(t.key); if (r && r.layers.length) { load(r.layers.find(l => l.type === cfg.type) || r.layers[0]); break; } }
-      sync();
-    }
-  }
-  let cfgSnap = null;      // (the settings as they were loaded or last applied: an edit of several clips changes only what differs from it)
-  const snapCfg = () => { cfgSnap = { type: cfg.type, p: JSON.parse(JSON.stringify(cfg[cfg.type] || {})), loop: JSON.parse(JSON.stringify(cfg.loop || {})) }; };
-  function load(lay) { selLid = lay.id; if (KEYED.has(lay.type)) return; cfg.type = lay.type; cfg[lay.type] = { ...lay.p }; cfg.loop = { ...lay.loop }; snapCfg(); }
-  function pick(key) {                                  // select what a row of the list is about
-    const rec = items.get(key); if (!rec) return;
-    if (rec.kind === 'part') { try { selectPart(rec.partId, 'single'); } catch (_) {} }
-    else {
-      // The row of a group in the tree may not be drawn (folded away, or out of view), so the selection is made here, as a click on the row does it.
-      const gid = String(rec.gid), gi = groupInfo(gid), ids = gi ? gi.members : rec.members;
-      state.selected.clear();
-      for (const id of ids) { const p = getPart(id); if (p && !p.deleted) state.selected.add(id); }
-      state.selectedGroupIds.clear(); state.selectedGroupIds.add(gid);
-      try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {}
-      try { const c = document.getElementById('del-sel-count'); if (c) c.textContent = state.selected.size; } catch (_) {}
-      try { revealSelectedInTree(); } catch (_) {}
-      requestRender();
-    }
-    sig = ''; follow();
-  }
-  function bodyMarkup(withList) {
-    const seg = (set, list) => `<div class="cmd-seg">${list.map(([v, label, icon]) => `<button type="button" data-set="${set}" data-val="${v}">${icon ? `<i data-lucide="${icon}"></i>` : ''}${label}</button>`).join('')}</div>`;
-    const rng = (path, label, min, max, step, unit) => `<div class="anim-row"><span class="anim-l">${label}</span><div class="anim-speed"><input type="range" data-p="${path}" min="${min}" max="${max}" step="${step}" value="${getP(path)}" aria-label="${label}"><span class="anim-v" data-v="${path}" data-u="${unit || ''}"></span></div></div>`;
-    const tog = (path) => `<div class="anim-togs">${['x', 'y', 'z'].map(c => `<button type="button" class="anim-tog" data-tog="${path}" data-val="${c}">${c.toUpperCase()}</button>`).join('')}</div>`;
-    // three sliders in one row (X, Y, Z), each with its value under it
-    const xyz = (keys, min, max, unit) => `<div class="anim-xyz">${['X', 'Y', 'Z'].map((c, i) => `<div class="anim-xyz-c"><span class="anim-l">${c}</span><input type="range" data-p="${keys[i]}" min="${min}" max="${max}" step="1" value="${getP(keys[i])}" aria-label="${c}"><span class="anim-v" data-v="${keys[i]}" data-u="${unit}"></span></div>`).join('')}</div>`;
-    const axisRow = (g) => `<div class="anim-row anim-row-bare" role="group" aria-label="Axis"><span class="anim-l">Axis</span>${seg(g + '.axis', [['X', 'X'], ['Y', 'Y'], ['Z', 'Z']])}</div>`;
-    const bodyHtml = `
-      <div class="anim-sel" id="anim-sel"></div>
-      <div class="anim-edit-h" id="anim-edit-h" hidden></div>
-      <div class="anim-types" role="tablist" aria-label="Kind of animation">${Object.entries(TYPES).filter(([k]) => !KEYED.has(k)).map(([k, [label, icon]]) => `<button type="button" role="tab" data-type="${k}"><i data-lucide="${icon}"></i><span>${label}</span></button>`).join('')}</div>
-      <div class="anim-card">
-        <div class="anim-props" data-for="spin">${axisRow('spin')}
-          <div class="anim-row anim-row-bare" role="group" aria-label="Direction"><span class="anim-l">Direction</span>${seg('spin.dir', [['-1', 'Clockwise', 'rotate-cw'], ['1', 'Counter', 'rotate-ccw']])}</div>
-          ${rng('spin.rpm', 'Speed', 1, 600, 1, ' rpm')}</div>
-        <div class="anim-props" data-for="swing">${axisRow('swing')}
-          ${rng('swing.amp', 'Angle', 1, 180, 1, '°')}${rng('swing.period', 'Time', 0.2, 20, 0.1, ' s')}</div>
-        <div class="anim-props" data-for="noise">
-          <div class="anim-row"><span class="anim-l">Type</span><select class="mac-sel" data-p="noise.type" aria-label="Kind of noise"><option value="wave">Wave</option><option value="random">Smooth random</option><option value="steps">Steps</option></select></div>
-          <div class="anim-sub">Amplitude</div>
-          ${rng('noise.pos', 'Position', 0, 50, 1, '%')}<div class="anim-row"><span class="anim-l">Axes</span>${tog('noise.sx')}</div>
-          ${rng('noise.rot', 'Rotation', 0, 90, 1, '°')}<div class="anim-row"><span class="anim-l">Axes</span>${tog('noise.rx')}</div>
-          <div class="anim-sub">Character</div>
-          ${rng('noise.speed', 'Frequency', 0.1, 5, 0.1, '×')}${rng('noise.detail', 'Detail', 1, 4, 1, '')}${rng('noise.rough', 'Roughness', 0, 100, 1, '%')}
-          <div class="anim-row"><span class="anim-l">Seed</span><div class="anim-speed"><input type="range" data-p="noise.seed" min="1" max="99" step="1" value="${getP('noise.seed')}" aria-label="Seed"><span class="anim-v" data-v="noise.seed" data-u=""></span><button type="button" class="anim-dice" data-act="reseed" aria-label="New random seed" title="New random seed"><i data-lucide="dices"></i></button></div></div></div>
-        <div class="anim-props" data-for="oscillate">
-          <div class="anim-row"><span class="anim-l">Wave</span><select class="mac-sel" data-p="oscillate.wave" aria-label="Wave"><option value="sine">Sine</option><option value="piston">Piston (crank and rod)</option><option value="eased">Eased</option><option value="triangle">Triangle</option></select></div>
-          <div class="anim-sub">Shift (% of the size)</div>
-          ${xyz(['oscillate.tx', 'oscillate.ty', 'oscillate.tz'], 0, 100, '%')}
-          <div class="anim-sub">Turn (degrees each way)</div>
-          ${xyz(['oscillate.ax', 'oscillate.ay', 'oscillate.az'], 0, 180, '°')}
-          <div class="anim-sub">Timing</div>
-          ${rng('oscillate.period', 'Time', 0.2, 20, 0.1, ' s')}${rng('oscillate.spread', 'Axis lag', 0, 360, 5, '°')}${rng('oscillate.lag', 'Turn lag', 0, 360, 5, '°')}${rng('oscillate.ratio', 'Rod ratio', 1.5, 8, 0.1, '')}</div>
-        <div class="anim-props" data-for="path">
-          <div class="anim-row"><span class="anim-l">Shape</span><select class="mac-sel" data-p="path.shape" aria-label="Shape of the path"><option value="circle">Circle</option><option value="figure8">Figure of eight</option><option value="square">Rounded square</option><option value="wave">Wave</option><option value="line">Line</option></select></div>
-          <div class="anim-row anim-row-bare" role="group" aria-label="Plane"><span class="anim-l">Plane</span>${seg('path.plane', [['XY', 'XY'], ['XZ', 'XZ'], ['YZ', 'YZ']])}</div>
-          ${rng('path.size', 'Size', 5, 200, 1, '%')}${rng('path.period', 'Time', 0.5, 60, 0.5, ' s')}</div>
-      </div>
-      <div class="anim-card" data-for="spin path">
-        <div class="anim-row anim-row-bare" role="group" aria-label="Loop"><span class="anim-l">Loop</span>${seg('loop.mode', [['loop', 'Loop'], ['pingpong', 'Ping-pong'], ['once', 'Once']])}</div>
-      </div>
-      ${withList ? '<div class="anim-h">In the scene <span id="anim-count" class="anim-badge"></span></div><div class="anim-list" id="anim-list"></div>' : ''}`;
-    return bodyHtml;
-  }
-  const footMarkup = '<button class="cq-btn cq-danger" id="anim-remove" type="button" title="Remove all" aria-label="Remove all"><i data-lucide="trash-2"></i></button><span class="cq-gap"></span><button class="cq-btn cq-primary" id="anim-add" type="button" title="Add" aria-label="Add"><i data-lucide="plus"></i></button>';
-  function buildMini() {
-    if (ui.mini) return ui.mini;
-    const bodyHtml = bodyMarkup(true);
-    const footHtml = `<button class="cq-btn cq-danger" id="anim-remove" type="button" title="Remove all" aria-label="Remove all"><i data-lucide="trash-2"></i></button><span class="cq-gap"></span><button class="cq-btn cq-primary" id="anim-add" type="button" title="Add" aria-label="Add"><i data-lucide="plus"></i></button>`;
-    const fresh = (() => { try { return !localStorage.getItem('_dlg-pos:_anim-dialog'); } catch (_) { return true; } })();      // (blocked storage: Animate still opens)
-    popup = _DraggablePopup.create({ id: '_anim-dialog', title: 'Animate', subtitle: '', iconName: '', width: 360, height: 700, minWidth: 320, minHeight: 420, bodyHtml, footHtml, bodyScroll: true,
-      onClose: () => { if (!switching) leave(); } });
-    popup.foot.classList.add('anim-foot');
-    popup.titleEl.insertAdjacentHTML('afterend', '<span class="anim-alpha" title="Alpha: Animate is a very early feature and can change">Alpha</span>');
-    // the playbar, always in view under the title bar
-    const bar = document.createElement('div');
-    bar.id = 'anim-pb'; bar.className = 'anim-pb is-off';
-    bar.innerHTML = `
-      <div class="anim-pb-tr">
-        <button type="button" class="anim-pb-b" id="anim-pb-rew" aria-label="Back to the start" title="Back to the start"><i data-lucide="skip-back"></i></button>
-        <button type="button" class="anim-pb-play" id="anim-pb-play" aria-label="Play"><i data-lucide="play"></i></button>
-      </div>
-      <div class="anim-pb-tc" title="Time"><span id="anim-pb-time">0:00.0</span></div>
-      <div class="anim-pb-scrub" id="anim-pb-scrub" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100"><div class="anim-pb-track"><div class="anim-pb-fill"></div></div><div class="anim-pb-knob"></div></div>
-      <span class="anim-pb-len" id="anim-pb-len" title="Length of the cycle"></span>
-      <button type="button" class="anim-pb-rate" id="anim-pb-rate" aria-label="Playback speed">1×</button>`;
-    popup.el.querySelector('.dlg-head').after(bar);
-    bar.addEventListener('click', (e) => {
-      if (e.target.closest('#anim-pb-rew')) { rewind(); return; }
-      if (e.target.closest('#anim-pb-rate')) { const R = [0.25, 0.5, 1, 2, 4]; rate = R[(R.indexOf(rate) + 1) % R.length]; updatePlaybar(); return; }
-      if (e.target.closest('#anim-pb-play')) { if (paused) play(); else pause(); }
-    });
-    // the scrubber: dragging pauses and puts everything at that time of the cycle; letting go plays on if it was playing
-    const sc = bar.querySelector('#anim-pb-scrub');
-    let scrub = null;
-    const at = (e) => { const r = sc.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width))) * durOf(); };
-    sc.addEventListener('pointerdown', (e) => { if (!items.size) return; scrub = { was: !paused }; if (scrub.was) { paused = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); } try { sc.setPointerCapture(e.pointerId); } catch (_) {} seekTo(at(e)); e.preventDefault(); });
-    sc.addEventListener('pointermove', (e) => { if (scrub) seekTo(at(e)); });
-    for (const t of ['pointerup', 'pointercancel']) sc.addEventListener(t, () => { if (!scrub) return; const was = scrub.was; scrub = null; if (was) play(); });
-    sc.addEventListener('keydown', (e) => {
-      if (!items.size) return;
-      const d = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
-      if (!d) return;
-      e.preventDefault(); seekTo(clock + d * (e.shiftKey ? 5 : 0.5));
-    });
-    popup.el.addEventListener('keydown', (e) => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input,select,textarea,button,[role="slider"],[contenteditable]')) return;
-      if (e.key === ' ' && items.size) { e.preventDefault(); if (paused) play(); else pause(); }
-      else if (e.key === 'Home' && items.size) { e.preventDefault(); rewind(); }
-    });
-    if (fresh) { popup.card.style.left = Math.max(8, window.innerWidth - 360 - 24) + 'px'; popup.card.style.top = '64px'; }
-    { // a button next to the close button: back to the timeline along the bottom
-      const x = popup.el.querySelector('.dlg-head .dlg-x');
-      if (x) {
-        const b = document.createElement('button');
-        b.type = 'button'; b.className = x.className; b.title = 'Dock the timeline along the bottom'; b.setAttribute('aria-label', b.title);
-        b.innerHTML = '<i data-lucide="panel-bottom"></i>';
-        b.addEventListener('click', (e) => { e.stopPropagation(); toDock(); });
-        x.parentNode.insertBefore(b, x);
-      }
-    }
-    wireInspector(popup.body, popup.el);
-    ui.mini = popup;
-    return popup;
-  }
-  // The settings of a motion (the kinds, the cards, Add and Remove all): the same in the small window and in the dock.
-  function wireInspector(body, root) {
-    body.addEventListener('click', (e) => {
-      const tg = e.target.closest('[data-tog]'), rs = e.target.closest('[data-act="reseed"]');
-      if (tg) { const cur = String(getP(tg.dataset.tog)), v = tg.dataset.val; setP(tg.dataset.tog, ['x', 'y', 'z'].filter(c => c === v ? !cur.includes(c) : cur.includes(c)).join('')); save(); retune(); sync(); return; }
-      if (rs) { cfg.noise.seed = 1 + Math.floor(Math.random() * 99); save(); retune(); sync(); return; }
-      const ty = e.target.closest('button[data-type]'), st = e.target.closest('[data-set]'), ly = e.target.closest('[data-layer]'), rl = e.target.closest('[data-rmlayer]'),
-        pk = e.target.closest('[data-pick]'), rk = e.target.closest('[data-rmkey]');
-      // the plus on the object's card: a menu of every kind, the one picked is added to this object (and becomes the chosen kind)
-      const ca = e.target.closest('[data-cardadd]'), cm = e.target.closest('.anim-sel-menu [data-addtype]');
-      if (ca) {
-        const m = ca.parentElement.querySelector('.anim-sel-menu'); if (!m) return;
-        if (!m.hidden) { m.hidden = true; ca.setAttribute('aria-expanded', 'false'); return; }
-        m.hidden = false; ca.setAttribute('aria-expanded', 'true');
-        // (fixed, so that the scrolling body of the window does not cut it off; the dock is moved by a transform, which makes fixed
-        // relative to the dock: the origin is read from where the menu lands at 0, 0 and taken off)
-        const r = ca.getBoundingClientRect(), mh = m.offsetHeight, mw = m.offsetWidth;
-        m.style.position = 'fixed'; m.style.right = 'auto'; m.style.bottom = 'auto'; m.style.left = '0px'; m.style.top = '0px';
-        const o = m.getBoundingClientRect();
-        const up = r.bottom + 6 + mh > window.innerHeight && r.top - 6 - mh > 0;
-        m.style.left = Math.max(4 - o.left, r.right - mw - o.left) + 'px';
-        m.style.top = ((up ? r.top - 6 - mh : r.bottom + 6) - o.top) + 'px';
-        return;
-      }
-      if (cm) { const m = cm.closest('.anim-sel-menu'); m.hidden = true; m.parentElement.querySelector('[data-cardadd]')?.setAttribute('aria-expanded', 'false'); cfg.type = cm.dataset.addtype; save(); sync(); addLayer(); return; }
-      if (ty) { cfg.type = ty.dataset.type; save(); sync(); return; }
-      if (ly && popup === ui.dock && ly.dataset.lid) { selectLayer(ly.dataset.okey, +ly.dataset.lid, false); return; }      // (in the dock the list of an object's animations picks the clip on the timeline)
-      if (ly) { const rec = targets().map(t => items.get(t.key)).find(r => r && r.layers.some(l => l.type === ly.dataset.layer)); if (rec) load(rec.layers.find(l => l.type === ly.dataset.layer)); save(); sync(); return; }
-      if (rl) { remove(targets().map(t => t.key), rl.dataset.rmlayer); return; }
-      if (rk) { remove([rk.dataset.rmkey]); return; }
-      if (pk) { pick(pk.dataset.pick); return; }
-      if (st) { const v = st.dataset.val; setP(st.dataset.set, st.dataset.set === 'spin.dir' ? +v : v); save(); retune(); sync(); }
-    });
-    const closeCardMenu = () => { for (const m of body.querySelectorAll('.anim-sel-menu:not([hidden])')) { m.hidden = true; m.parentElement.querySelector('[data-cardadd]')?.setAttribute('aria-expanded', 'false'); } };
-    (root || body).addEventListener('pointerdown', (e) => { if (!e.target.closest('.anim-sel-addwrap')) closeCardMenu(); }, true);
-    (root || body).addEventListener('keydown', (e) => { if (e.key === 'Escape' && body.querySelector('.anim-sel-menu:not([hidden])')) { closeCardMenu(); e.stopPropagation(); } }, true);
-    body.addEventListener('change', (e) => {      // Follows: what this object moves along with
-      const f = e.target.closest('[data-follow]'); if (!f) return;
-      const rec = items.get(f.dataset.follow); if (!rec) return;
-      rec.parent = f.value || null; ver++; applyAll(); try { requestRender(); } catch (_) {} sync(true); commit('Follow');
-    });
-    body.addEventListener('input', (e) => {
-      const el = e.target.closest('[data-p]'); if (!el) return;
-      const path = el.dataset.p, k = path.split('.')[1];
-      if (el.type === 'range' || el.type === 'number') { const v = clampKey(k, el.value); if (v == null) return; setP(path, v); }
-      else setP(path, el.value);
-      if (path === 'loop.from' && cfg.loop.from > cfg.loop.to) cfg.loop.to = cfg.loop.from;
-      if (path === 'loop.to' && cfg.loop.to < cfg.loop.from) cfg.loop.from = cfg.loop.to;
-      save(); retune(); sync();
-    });
-    cfg.loop.from = 0; cfg.loop.to = 100; cfg.loop.delay = 0;      // (the loop points have no controls any more: a loop is the whole length, shortened by dragging the clip on the timeline)
-    root.querySelector('#anim-add')?.addEventListener('click', () => addLayer());
-    root.querySelector('#anim-remove').addEventListener('click', () => {
-      // In the dock, with a clip (or a key) picked on the timeline, the trash deletes just that; otherwise it takes the animation off the selected objects
-      const clipPicked = popup === ui.dock && (selKeys.size || (selLids.size && targets().some(t => { const r = items.get(t.key); return r && r.layers.some(l => selLids.has(l.id)); })));
-      if (clipPicked) deleteSelection(); else remove();
-    });
-  }
-  // ---- undo, and the whole animation as plain data (for Undo, for the scene file) ----
-  // jsonRep leaves out what is only a cache or only a clock: the curve a path draws, and the time a layer is at (not a key's time).
-  const jsonRep = function (k, v) {
-    if (k && k[0] === '_') return undefined;
-    if (k === 'axisVec') return undefined;
-    if (k === 't' && this && this.type) return undefined;
-    return v;
-  };
-  const EMPTY = JSON.stringify({ recs: [], tracks: { explode: null, camera: null } });
-  // A part is found again by its id, then by its uid, then as the nth of the parts with its name: with several "Screw M6" the
-  // first of them used to get the animation of whichever one was animated.
-  const labelOf = (x) => x.name || ('Part ' + x.partId);
-  const nthOf = (pid, label) => { let i = 0; for (const x of state.parts || []) { if (x.deleted || labelOf(x) !== label) continue; if (x.partId === pid) return i; i++; } return undefined; };
-  const recData = (r) => ({ key: r.key, kind: r.kind, label: r.label, pid: r.partId, gid: r.gid, parent: r.parent || undefined, layers: r.layers,
-    uid: r.kind === 'part' ? ((getPart(r.partId) || {}).uid || undefined) : undefined, nth: r.kind === 'part' ? nthOf(r.partId, r.label) : undefined });
-  const snapStr = () => JSON.stringify({ recs: [...items.values()].map(recData), tracks }, jsonRep);
-  let base = EMPTY, restoring = false, cTimer = 0;
-  // Everything that changes the animation ends in commit(): the change since the last one becomes a step of Undo.
-  function commit(label) {
-    if (restoring) return;
-    clearTimeout(cTimer); cTimer = 0;
-    const now = snapStr();
-    if (now === base) return;
-    const op = { type: 'anim', label: label || 'Animate', before: base, after: now };
-    base = now;
-    try { pushUndo(op); } catch (_) {}
-  }
-  // …and a slider that is being dragged makes one step, not hundreds
-  function commitSoon(label) { clearTimeout(cTimer); cTimer = setTimeout(() => commit(label), 450); }
-  function targetOf(r) {
-    if (String(r.key).startsWith('g:')) {
-      const g = groupInfo(String(r.key).slice(2));
-      if (g && (!r.label || g.label === r.label)) return g;
-      for (const n of (state.treeNodes || [])) if (n.kind === 'group' && n.name === r.label) { const gi = groupInfo(String(n.id)); if (gi) return gi; }
-      for (const ug of (state.userGroups || [])) if (ug && ug.name === r.label) { const gi = groupInfo(String(ug.id)); if (gi) return gi; }
-      return g || null;
-    }
-    const id = r.pid != null ? r.pid : parseInt(String(r.key).slice(2), 10);
-    let p = exists(id);
-    if (!p || (r.label && labelOf(p) !== r.label)) {
-      const same = (state.parts || []).filter(x => !x.deleted && labelOf(x) === r.label && exists(x.partId));
-      const q = (r.uid && same.find(x => x.uid === r.uid)) || (Number.isInteger(r.nth) && same[r.nth]) || same[0];
-      if (q) p = q;
-    }
-    return p ? { key: 'p:' + p.partId, kind: 'part', partId: p.partId, p, label: p.name || ('Part ' + p.partId) } : null;
-  }
-  const withIds = (layers) => (layers || []).map(l => {
-    const o = { ...l, id: nid(), t: clock };
-    if (Array.isArray(l.keys)) o.keys = l.keys.map(k => ({ ...k, id: nid(), v: { ...k.v } }));
-    return o;
-  });
-  // Put the animation as `snap` says (an older or newer step of Undo).
-  function restoreSnap(snap) {
-    restoring = true;
-    try {
-      const want = new Map((snap.recs || []).map(r => [r.key, r]));
-      for (const [key, rec] of [...items]) if (!want.has(key)) { beginFrame(); dropRec(rec); items.delete(key); }
-      for (const r of (snap.recs || [])) {
-        let rec = items.get(r.key);
-        if (!rec) { const t = targetOf(r); rec = t && makeRec(t); if (!rec) continue; items.set(rec.key, rec); }
-        rec.layers = (r.layers || []).map(l => ({ ...l, t: clock }));
-        if (!rec.layers.length) { beginFrame(); dropRec(rec); items.delete(rec.key); }
-      }
-      for (const r of (snap.recs || [])) { const rec = items.get(r.key); if (rec) rec.parent = r.parent && items.has(r.parent) ? r.parent : null; }
-      tracks.explode = (snap.tracks && snap.tracks.explode) || null;
-      tracks.camera = (snap.tracks && snap.tracks.camera) || null;
-      selLids.clear(); selKeys.clear(); selLid = 0;
-      ver++; applyAll(); applyScene(clock, true, true);
-    } finally { restoring = false; }
-    try { requestRender(); } catch (_) {}
-    sync(true);
-  }
-  // The scene file: what is animated is found again by its name (the ids of parts can change when a file is opened).
-  function serialize() {
-    if (!items.size && !sceneN()) return undefined;
-    return JSON.parse(JSON.stringify({ v: 1, dur, recs: [...items.values()].map(recData), tracks }, jsonRep));
-  }
-  function deserialize(data) {
-    if (!data || !Array.isArray(data.recs)) return 0;
-    reset();
-    if (data.dur > 0) dur = Math.min(600, +data.dur); else dur = 0;
-    let n = 0; const keyMap = new Map();
-    for (const r of data.recs) {
-      const t = targetOf(r); const rec = t && makeRec(t); if (!rec || items.has(rec.key)) continue;
-      rec.layers = withIds(r.layers); items.set(rec.key, rec); keyMap.set(r.key, rec.key); n++;
-    }
-    for (const r of data.recs) { const rec = items.get(keyMap.get(r.key)); const pk = r.parent && keyMap.get(r.parent); if (rec) rec.parent = pk && pk !== rec.key ? pk : null; }
-    for (const nm of ['explode', 'camera']) { const tr = data.tracks && data.tracks[nm]; tracks[nm] = tr && Array.isArray(tr.keys) && tr.keys.length ? { keys: tr.keys.map(k => ({ ...k, id: nid(), v: { ...k.v } })), muted: !!tr.muted } : null; }
-    ver++; clock = 0; paused = true; dismissed = true;
-    beginFrame(); applyAll(); applyScene(0, true, true);
-    base = snapStr();
-    try { requestRender(); } catch (_) {}
-    sync(true);
-    return n;
-  }
-  _UndoOps.register('anim', {
-    undo(op) { clearTimeout(cTimer); cTimer = 0; restoreSnap(JSON.parse(op.before)); base = op.before; state.redo.push(op); _finalizeUndo(); },
-    redo(op) { clearTimeout(cTimer); cTimer = 0; restoreSnap(JSON.parse(op.after)); base = op.after; state.history.push(op); _finalizeUndo(); },
-  });
-
-  // ---- keys, clips: making, finding, cutting ----
-  const $id = (i) => document.getElementById(i);
-  const FRAME_SNAP = (t) => Math.round(t / FRAME) * FRAME;
-  const FINE = 0.1;      // Alt held while dragging: the pointer counts a tenth
-  const sortKeys = (list) => list.sort((a, b) => a.t - b.t);
-  function putKey(list, t, v, e) {      // a key at a time (one that is there already is replaced)
-    t = Math.max(0, Math.round(t * 1000) / 1000);
-    let k = list.find(x => Math.abs(x.t - t) < 0.0005);
-    if (k) k.v = v; else { k = { id: nid(), t, v, e: e || 'ease' }; list.push(k); sortKeys(list); }
-    return k;
-  }
-  const POSE0 = () => ({ mx: 0, my: 0, mz: 0, rx: 0, ry: 0, rz: 0 });
-  const LOOK0 = () => ({ o: 1, tm: 0, c: '#4f9dff' });
-  const valueNow = (lay, t) => { const v = lay.keys.length ? keyEval(lay.keys, t, lay.type === 'look' ? mixLook : mixNum) : null; return v ? { ...v } : (lay.type === 'look' ? LOOK0() : POSE0()); };
-  const explodeNow = () => { const e = state.explode || {}; return { x: +e.x || 0, y: +e.y || 0, z: +e.z || 0 }; };
-  const camNow = () => ({ px: camera.position.x, py: camera.position.y, pz: camera.position.z, tx: controls.target.x, ty: controls.target.y, tz: controls.target.z, fov: camera.fov || 45 });
-  function locateKey(id) {
-    for (const rec of items.values()) for (const lay of rec.layers) if (lay.keys) { const k = lay.keys.find(x => x.id === id); if (k) return { rec, lay, key: k, kind: lay.type === 'look' ? 'look' : 'pose', list: lay.keys }; }
-    for (const nm of ['explode', 'camera']) { const tr = tracks[nm]; if (tr) { const k = tr.keys.find(x => x.id === id); if (k) return { track: tr, name: nm, key: k, kind: nm, list: tr.keys }; } }
-    return null;
-  }
-  const newKeyLayer = (type) => ({ id: nid(), type, p: {}, loop: { ...DEFAULTS.loop }, t: clock, keys: [] });
-  // A key at the playhead on what is selected: a pose (move and turn) or a look (see-through and tint). Its value is what the object has there now.
-  function addObjectKey(type) {
-    const ts = targets();
-    if (!ts.length) { toast('Animate', 'Select a part or a group first', 'warn', 3000); return; }
-    if (!items.size && !sceneN()) clock = 0;
-    let last = null, locked = 0;
-    for (const t of ts) {
-      let rec = items.get(t.key);
-      if (!rec) {
-        if (t.kind === 'part' && t.p.locked) { locked++; continue; }
-        rec = makeRec(t); if (!rec) { locked++; continue; }
-        items.set(t.key, rec);
-      }
-      let lay = rec.layers.find(l => l.type === type);
-      if (!lay) { lay = newKeyLayer(type); rec.layers.push(lay); }
-      last = putKey(lay.keys, clock, valueNow(lay, clock));
-      selLid = lay.id; selLids.clear(); selLids.add(lay.id);
-    }
-    if (!last) { if (locked) toast('Animate', 'Those parts are locked: unlock them to animate', 'warn', 3000); return; }
-    selKeys.clear(); selKeys.add(last.id);
-    dismissed = false; ver++; applyAll(); try { requestRender(); } catch (_) {}
-    sync(true); commit('Add key');
-  }
-  function addSceneKey(nm, at) {
-    if (nm === 'camera' && !(camera && controls)) return;
-    const tr = tracks[nm] || (tracks[nm] = { keys: [], muted: false });
-    const t = at == null ? clock : at;
-    const v = at != null && tr.keys.length ? { ...keyEval(tr.keys, t, nm === 'camera' ? mixCam : mixNum) } : (nm === 'camera' ? camNow() : explodeNow());
-    const k = putKey(tr.keys, t, v);
-    selKeys.clear(); selKeys.add(k.id); selLids.clear();
-    dismissed = false; ver++; sync(true); commit('Add key');
-  }
-  // a double-click on the lane of a row with keys: a key there
-  function addKeyAt(row, t) {
-    t = Math.max(0, Math.min(durOf(), FRAME_SNAP(t)));
-    if (row.dataset.scene) { addSceneKey(row.dataset.scene, t); return; }
-    const rec = items.get(row.dataset.key), lay = rec && rec.layers.find(l => l.id === +row.dataset.lid);
-    if (!lay || !lay.keys) return;
-    const k = putKey(lay.keys, t, valueNow(lay, t));
-    selLid = lay.id; selLids.clear(); selLids.add(lay.id); selKeys.clear(); selKeys.add(k.id);
-    ver++; applyAll(); sync(true); commit('Add key');
-  }
-  function deleteSelection() {
-    let n = 0;
-    if (selKeys.size) {
-      for (const id of [...selKeys]) {
-        const loc = locateKey(id); if (!loc) continue;
-        loc.list.splice(loc.list.indexOf(loc.key), 1); n++;
-        if (!loc.list.length) { if (loc.track) tracks[loc.name] = null; else { loc.rec.layers.splice(loc.rec.layers.indexOf(loc.lay), 1); } }
-      }
-      selKeys.clear();
-    } else {
-      const ids = selLids.size ? new Set(selLids) : (selLid ? new Set([selLid]) : new Set());
-      for (const rec of [...items.values()]) {
-        const before = rec.layers.length;
-        rec.layers = rec.layers.filter(l => !ids.has(l.id));
-        n += before - rec.layers.length;
-      }
-      selLids.clear();
-    }
-    if (!n) return;
-    for (const [key, rec] of [...items]) if (!rec.layers.length) { beginFrame(); dropRec(rec); items.delete(key); }
-    ver++; applyAll(); try { requestRender(); } catch (_) {}
-    sync(true); commit('Delete');
-  }
-  const clipsSelected = () => {
-    const ids = selLids.size ? selLids : (selLid ? new Set([selLid]) : new Set()), out = [];
-    for (const rec of items.values()) for (const lay of rec.layers) if (ids.has(lay.id)) out.push({ rec, lay });
-    return out;
-  };
-  // Cut the selected clips (or the motions of the selected objects) at the playhead: the second half is a clip of its own, carrying on from where the first stopped.
-  function splitAtPlayhead() {
-    const T = clock, D = durOf();
-    let list = clipsSelected();
-    if (!list.length) for (const t of targets()) { const rec = items.get(t.key); if (rec) for (const lay of rec.layers) list.push({ rec, lay }); }
-    let n = 0;
-    for (const { rec, lay } of list) {
-      if (lay.keys) continue;
-      const g = barGeom(lay, D), start = lay.loop.delay || 0;
-      if (!(T > start + 0.02 && T < g.end - 0.02)) continue;
-      const B = JSON.parse(JSON.stringify(lay, jsonRep));
-      B.id = nid(); B.t = clock; B.loop.delay = T; B.skip = (lay.skip || 0) + (T - start);
-      if (lay.end != null) B.end = lay.end; else delete B.end;
-      lay.end = T;
-      rec.layers.splice(rec.layers.indexOf(lay) + 1, 0, B);
-      selLids.add(B.id); n++;
-    }
-    if (!n) { toast('Animate', 'Put the playhead inside a clip to cut it there', 'info', 2200); return; }
-    ver++; applyAll(); sync(true); commit('Cut clip');
-  }
-  function duplicateClips() {
-    const list = clipsSelected().filter(x => !x.lay.keys); let n = 0;
-    for (const { rec, lay } of list) {
-      const g = barGeom(lay, durOf()), B = JSON.parse(JSON.stringify(lay, jsonRep)), at = g.inf ? clock : g.end, shift = at - (lay.loop.delay || 0);
-      B.id = nid(); B.t = clock; B.loop.delay = Math.max(0, at); if (lay.end != null) B.end = lay.end + shift;
-      rec.layers.splice(rec.layers.indexOf(lay) + 1, 0, B); selLids.add(B.id); n++;
-    }
-    if (!n) return;
-    ver++; applyAll(); sync(true); commit('Duplicate clip');
-  }
-  const FPS = { e: 0, at: 0 };
-  function fpsNote(ms) { if (ms > 1 && ms < 500) FPS.e = FPS.e ? FPS.e * 0.9 + ms * 0.1 : ms; }
-  let draft = tlp.draft === true;
-  // Draft: a lower resolution while it plays (a full one again when it stops)
-  function applyDraft() {
-    try {
-      if (!renderer) return;
-      const playing = anyAnim() && !paused && !suspended && !held && !!(ui.dock && ui.dock.root.classList.contains('show'));
-      const rest = (typeof _MotionPerf !== 'undefined' && _MotionPerf.dprNow) ? _MotionPerf.dprNow() : (state._restDpr || 1);
-      const want = draft && playing ? Math.max(0.5, rest * 0.6) : rest;
-      if (Math.abs((renderer.getPixelRatio ? renderer.getPixelRatio() : 1) - want) > 0.01) { renderer.setPixelRatio(want); onResize(); requestRender(); }
-    } catch (_) {}
-  }
-
-  // ---- the timeline dock: a drawer along the bottom of the viewport (#vp-animate-pop) ----
-  // Rows: the scene's own tracks (Explode, Camera) and each animated object with a row for each of its motions. A motion is a clip, a
-  // bar that starts at its delay and runs to the end of its repeats (or to the end of the timeline, faded, when it goes on for ever);
-  // the marks inside it are the cycles. Drag a clip to move it, its edges to trim it. Pose, Look, Explode and Camera are made of keys,
-  // the diamonds: drag one to move it in time, press the ruler to scrub.
-  const HWF = 210, HWN = 44;      // the width of the column of names: full, or just the icons when the left panel is folded
-  let HW = showL ? HWF : HWN;
-  const fmtTC = (t) => { t = Math.max(0, t); const m = Math.floor(t / 60); return m + ':' + (t - m * 60).toFixed(2).padStart(5, '0'); };
-  const parseTC = (s) => { s = String(s).trim(); if (!s) return null; let v = 0; for (const x of s.split(':')) { const n = parseFloat(x); if (!Number.isFinite(n)) return null; v = v * 60 + n; } return v; };
-  const stepBy = (d) => { if (!paused) pause(); seekTo(FRAME_SNAP(clock) + d); };
-  const TRACK_NAMES = { explode: ['Explode', 'scaling'], camera: ['Camera', 'video'] };
-
-  function barGeom(l, D) {
-    const cyc = cycleOf(l), dl = Math.min(D, (l.loop && l.loop.delay) || 0), cy = l.type === 'spin' || l.type === 'path', sk = l.skip || 0;
-    let end = D, inf = true;
-    if (cy) {
-      if (l.loop.mode === 'once') { end = dl + Math.max(0, cyc - sk); inf = false; }
-      else if (l.loop.repeat > 0) { end = dl + Math.max(0, l.loop.repeat * cyc - sk); inf = false; }
-    }
-    if (l.end != null && l.end < end) { end = l.end; inf = false; }
-    if (end > D) { end = D; inf = true; }
-    end = Math.max(end, dl + 0.05);
-    return { l: dl * pps, w: Math.max(6, (end - dl) * pps), inf, cy, start: dl, end, cyc: l.type === 'noise' ? 99999 : Math.max(3, cyc * pps) };
-  }
-  function layoutPps() {
-    const d = ui.dock, D = durOf();
-    pps = Math.max(8, Math.max(200, d.scroll.clientWidth - HW - 1) / D * zoom);      // (the timeline runs to the right edge: no gap after the last second; it is fitted again when the width changes, a vertical bar coming or going included)
-    d.scroll.style.overflowX = zoom <= 1 ? 'hidden' : '';      // (fully zoomed out the whole timeline fits: nothing to scroll sideways)
-    d.inner.style.setProperty('--tw', (D * pps).toFixed(1) + 'px');
-  }
-  // The playhead line (and the snap line) is not drawn while it is scrolled away to the left of the timeline, under the object column.
-  function lineVis(d, x) {
-    const hide = x < d.scroll.scrollLeft - 1;
-    if (d._lineHid !== hide) { d._lineHid = hide; d.ph.style.visibility = hide ? 'hidden' : ''; d.snap.style.visibility = hide ? 'hidden' : ''; }
-  }
-  function placeHead() {
-    const d = ui.dock; if (!d || !d.hd) return;
-    const x = Math.min(clock, durOf()) * pps, tr = 'translateX(' + x.toFixed(2) + 'px)';
-    lineVis(d, x);
-    if (d.last.x !== tr) {
-      d.last.x = tr; d.ph.style.transform = tr; d.hd.style.transform = tr;
-      if (!paused && !d.scrub && zoom > 1) {      // (playing: the view follows the playhead when it runs out of it; fully zoomed out the whole timeline is in view and must not move)
-        const sc = d.scroll, vx = HW + x;
-        if (vx > sc.scrollLeft + sc.clientWidth - 24 || vx < sc.scrollLeft + HW) sc.scrollLeft = Math.max(0, vx - HW - sc.clientWidth * 0.2);
-      }
-    }
-  }
-  function renderRuler() {
-    const d = ui.dock, D = durOf();
-    const STEPS = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
-    const step = STEPS.find(s => s * pps >= 72) || 600, sub = step * pps >= 150 ? 10 : 5;
-    const lab = (t) => t < 60 ? (Number.isInteger(t) ? t : +t.toFixed(2)) + 's' : Math.floor(t / 60) + ':' + String(Math.round(t % 60)).padStart(2, '0');
-    let h = '';
-    for (let i = 0; i < 3000; i++) {
-      const t = i * step / sub; if (!(t <= D + 1e-9)) break;
-      const M = i % sub === 0, x = (t * pps).toFixed(1);
-      h += '<i class="adk-tk' + (M ? ' M' : '') + '" style="left:' + x + 'px"></i>';
-      if (M) h += '<span class="adk-tlab" style="left:' + x + 'px">' + lab(t) + '</span>';
-    }
-    d.rl.innerHTML = h + '<i class="adk-hd"></i>';
-    d.hd = d.rl.querySelector('.adk-hd'); d.last.x = '';
-    d.inner.style.setProperty('--gs', (step * pps).toFixed(1) + 'px');
-  }
-  const kfHtml = (list, kid) => list.map(k => `<i class="adk-kf${selKeys.has(k.id) ? ' is-sel' : ''}${k.e === 'hold' ? ' is-hold' : ''}" data-kid="${k.id}" style="left:${(k.t * pps).toFixed(1)}px" title="${fmtTC(k.t)} · ${(EASES[k.e] || EASES.ease)[0]}"></i>`).join('');
-  const spanHtml = (list) => list.length > 1 ? `<i class="adk-kspan" style="left:${(list[0].t * pps).toFixed(1)}px;width:${((list[list.length - 1].t - list[0].t) * pps).toFixed(1)}px"></i>` : '';
-  function renderRows() {
-    const d = ui.dock; if (!d || dragBar || !d.root.classList.contains('show')) return;
-    layoutPps(); renderRuler();
-    const D = durOf(), sel = new Set(targets().map(t => t.key)), out = [];
-    const btn = (attrs, title, icon) => `<button type="button" class="adk-b" ${attrs} title="${title}" aria-label="${title}"><i data-lucide="${icon}"></i></button>`;
-    // the scene's own tracks
-    const names = Object.keys(TRACK_NAMES).filter(nm => tracks[nm] && tracks[nm].keys.length);
-    if (names.length) {
-      out.push(`<div class="adk-row adk-obj adk-scn-h"><div class="adk-rh"><i data-lucide="tv-minimal-play" class="adk-ico"></i><span class="adk-n">Scene</span><em></em></div><div class="adk-rl"></div></div>`);
-      for (const nm of names) {
-        const tr = tracks[nm], T = TRACK_NAMES[nm];
-        out.push(`<div class="adk-row adk-lay adk-keys${tr.muted ? ' is-muted' : ''}" data-scene="${nm}"><div class="adk-rh" data-scenehead="${nm}"><i data-lucide="${T[1]}" class="adk-ico"></i><span class="adk-n">${T[0]}</span><em>${tr.keys.length} keys</em><span class="adk-act">${btn('data-smute="' + nm + '"', tr.muted ? 'Switch it on' : 'Switch it off', tr.muted ? 'eye-off' : 'eye')}${btn('data-srm="' + nm + '"', 'Remove this track', 'x')}</span></div><div class="adk-rl" data-kr="1">${spanHtml(tr.keys)}${kfHtml(tr.keys)}</div></div>`);
-      }
-    }
-    for (const r of items.values()) {
-      const s = sel.has(r.key), k = esc(r.key);
-      out.push(`<div class="adk-row adk-obj${s ? ' is-sel' : ''}" data-key="${k}"><div class="adk-rh" data-pick="${k}">${r.layers.length ? `<button type="button" class="adk-fold" data-fold="${k}" aria-expanded="${!folded.has(r.key)}" aria-label="${folded.has(r.key) ? 'Show' : 'Hide'} its animations" title="${folded.has(r.key) ? 'Show' : 'Hide'} its animations"><i data-lucide="${folded.has(r.key) ? 'chevron-right' : 'chevron-down'}"></i></button>` : ''}<i data-lucide="${r.kind === 'group' ? 'folder' : 'box'}" class="adk-ico"></i><span class="adk-n">${esc(r.label)}</span><em>${r.parent && items.get(r.parent) ? esc('follows ' + items.get(r.parent).label) : (r.kind === 'group' ? r.members.length + ' parts' : '')}</em><span class="adk-act">${btn('data-rmkey="' + k + '"', 'Remove all its animation', 'trash-2')}</span></div><div class="adk-rl"></div></div>`);
-      for (const l of (folded.has(r.key) ? [] : r.layers)) {
-        const act = selLids.size ? selLids.has(l.id) : l.id === selLid, T = TYPES[l.type], mute = btn('data-mute="' + l.id + '"', l.muted ? 'Switch it on' : 'Switch it off', l.muted ? 'eye-off' : 'eye'), rm = btn('data-rmlay="' + l.id + '"', 'Remove this motion', 'x');
-        if (l.keys) {
-          out.push(`<div class="adk-row adk-lay adk-keys${act ? ' is-active' : ''}${l.muted ? ' is-muted' : ''}${s ? ' is-sel' : ''}" data-key="${k}" data-lid="${l.id}" data-type="${l.type}"><div class="adk-rh" data-lidhead="${l.id}"><i data-lucide="${T[1]}" class="adk-ico"></i><span class="adk-n">${T[0]}</span><em>${l.keys.length} keys</em><span class="adk-act">${mute}${rm}</span></div><div class="adk-rl" data-kr="1">${spanHtml(l.keys)}${kfHtml(l.keys)}</div></div>`);
-          continue;
-        }
-        const g = barGeom(l, D);
-        out.push(`<div class="adk-row adk-lay${act ? ' is-active' : ''}${l.muted ? ' is-muted' : ''}${s ? ' is-sel' : ''}" data-key="${k}" data-lid="${l.id}" data-type="${l.type}"><div class="adk-rh" data-lidhead="${l.id}"><i data-lucide="${T[1]}" class="adk-ico"></i><span class="adk-n">${T[0]}</span><em></em><span class="adk-act">${mute}${rm}</span></div><div class="adk-rl"><div class="adk-bar${g.inf ? ' is-inf' : ''}${act ? ' is-active' : ''}" data-key="${k}" data-lid="${l.id}" data-type="${l.type}" style="left:${g.l.toFixed(1)}px;width:${g.w.toFixed(1)}px;--cyc:${g.cyc.toFixed(1)}px"><i class="adk-bl"></i><span class="adk-bt">${esc(brief(l))}</span><i class="adk-be"></i></div></div></div>`);
-      }
-    }
-    d.rows.innerHTML = out.length ? out.join('') : '<div class="adk-empty"><div class="adk-rh adk-empty-rh"></div><div class="adk-empty-msg">Empty timeline</div></div>';
-    try { _lucide(); } catch (_) {}
-    placeHead();
-  }
-
-  // ---- what is selected on the timeline: clips and keys ----
-  function selectLayer(key, lid, add) {
-    folded.delete(key);
-    const rec = items.get(key), lay = rec && rec.layers.find(l => l.id === lid);
-    if (add) { if (selLids.has(lid)) selLids.delete(lid); else selLids.add(lid); }
-    else { selLids.clear(); selLids.add(lid); }
-    selKeys.clear();
-    pick(key);
-    if (lay) { load(lay); if (!KEYED.has(lay.type)) save(); }
-    sig = ''; sync(true);
-  }
-  function selectKey(id, add) {
-    if (add) { if (selKeys.has(id)) selKeys.delete(id); else selKeys.add(id); } else { selKeys.clear(); selKeys.add(id); }
-    const loc = locateKey(id);
-    if (loc && loc.lay) { selLids.clear(); selLids.add(loc.lay.id); selLid = loc.lay.id; if (!add) pick(loc.rec.key); } else selLids.clear();
-    sig = ''; sync(true);
-  }
-  // The panel of the key that is selected (its time, its easing, what it holds), made once per key and kept up to date after.
-  const EASE_OPTS = () => Object.entries(EASES).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('');
-  function kpHtml(loc) {
-    const rg = (kv, label, min, max, step, unit) => `<div class="anim-row"><span class="anim-l">${label}</span><div class="anim-speed"><input type="range" data-kv="${kv}" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="anim-v" data-kl="${kv}" data-u="${unit || ''}"></span></div></div>`;
-    const TITLE = { pose: 'Pose key', look: 'Look key', explode: 'Explode key', camera: 'Camera key' }[loc.kind];
-    let rows = '';
-    if (loc.kind === 'pose') rows = '<div class="anim-sub">Move, % of its size</div>' + rg('mx', 'X', -100, 100, 0.5, '%') + rg('my', 'Y', -100, 100, 0.5, '%') + rg('mz', 'Z', -100, 100, 0.5, '%')
-      + '<div class="anim-sub">Turn</div>' + rg('rx', 'X', -720, 720, 1, '°') + rg('ry', 'Y', -720, 720, 1, '°') + rg('rz', 'Z', -720, 720, 1, '°');
-    else if (loc.kind === 'look') rows = rg('o', 'Opacity', 0, 1, 0.01, '%') + rg('tm', 'Tint', 0, 1, 0.01, '%') + '<div class="anim-row"><span class="anim-l">Colour</span><div class="anim-speed"><input type="color" class="adk-col" data-kv="c" aria-label="Tint colour"></div></div>';
-    else if (loc.kind === 'explode') rows = rg('x', 'X', 0, 300, 1, '%') + rg('y', 'Y', 0, 300, 1, '%') + rg('z', 'Z', 0, 300, 1, '%') + '<div class="anim-row"><span class="anim-l"></span><button type="button" class="cq-btn adk-kbtn" data-kact="capture">Use the explode of the view</button></div>';
-    else rows = rg('fov', 'Field of view', 10, 100, 1, '°') + '<div class="anim-row"><span class="anim-l"></span><button type="button" class="cq-btn adk-kbtn" data-kact="capture">Use the view as it is now</button></div><div class="anim-row"><span class="anim-l"></span><button type="button" class="cq-btn adk-kbtn" data-kact="show">Go to this view</button></div>';
-    return `<div class="adk-kp-h"><i data-lucide="diamond"></i><b>${TITLE}</b><span class="adk-kp-s">${loc.rec ? esc(loc.rec.label) : 'Scene'}</span><button type="button" class="adk-b" data-kact="del" title="Delete this key" aria-label="Delete this key"><i data-lucide="trash-2"></i></button></div>
-      <div class="anim-card"><div class="anim-row"><span class="anim-l">Time</span><div class="anim-speed"><input type="number" class="adk-in adk-num" data-kv="t" min="0" max="600" step="0.05"><span class="adk-unit">s</span><button type="button" class="adk-b" data-kact="goto" title="Put the playhead on this key" aria-label="Go to this key"><i data-lucide="locate-fixed"></i></button></div></div>
-      <div class="anim-row"><span class="anim-l">Into the next</span><select class="mac-sel" data-kv="e" aria-label="Easing into the next key">${EASE_OPTS()}</select></div></div>
-      <div class="anim-card">${rows}</div>`;
-  }
-  function renderKeyPanel() {
-    const d = ui.dock; if (!d) return;
-    const id = selKeys.size === 1 ? [...selKeys][0] : 0, loc = id ? locateKey(id) : null;
-    d.body.dataset.kmode = loc ? 'key' : '';
-    d.kp.hidden = !loc;
-    if (!loc) { d.kpSig = ''; return; }
-    if (d.kpSig !== id + '|' + loc.kind) { d.kpSig = id + '|' + loc.kind; d.kp.innerHTML = kpHtml(loc); try { _lucide(); } catch (_) {} }
-    for (const el of d.kp.querySelectorAll('[data-kv]')) {
-      const k = el.dataset.kv, v = k === 't' ? loc.key.t : k === 'e' ? (loc.key.e || 'ease') : loc.key.v[k];
-      if (v == null) continue;
-      if (document.activeElement !== el && String(el.value) !== String(v)) el.value = v;
-      const lab = d.kp.querySelector('[data-kl="' + k + '"]');
-      if (lab) lab.textContent = (lab.dataset.u === '%' && (k === 'o' || k === 'tm') ? Math.round(v * 100) : (Math.round(v * 10) / 10)) + (lab.dataset.u || '');
-    }
-  }
-  function keyEdit(el) {
-    const id = [...selKeys][0], loc = locateKey(id); if (!loc) return;
-    const k = el.dataset.kv;
-    if (k === 't') {
-      const t = parseFloat(el.value); if (!Number.isFinite(t)) return;
-      loc.key.t = Math.max(0, Math.min(600, t)); sortKeys(loc.list);
-    } else if (k === 'e') loc.key.e = el.value;
-    else if (k === 'c') loc.key.v.c = el.value;
-    else { const n = parseFloat(el.value); if (!Number.isFinite(n)) return; loc.key.v[k] = n; }
-    ver++;
-    if (loc.track) applyScene(clock, true, true); else applyAll();
-    try { requestRender(); } catch (_) {}
-    renderRows(); sync(); commitSoon('Edit key');
-  }
-  function keyAction(act) {
-    const id = [...selKeys][0], loc = locateKey(id); if (!loc) return;
-    if (act === 'del') { deleteSelection(); return; }
-    if (act === 'goto') { if (!paused) pause(); seekTo(loc.key.t); return; }
-    if (act === 'capture') {
-      if (loc.kind === 'explode') loc.key.v = explodeNow(); else if (loc.kind === 'camera' && camera && controls) loc.key.v = camNow();
-      ver++; ui.dock.kpSig = ''; sync(true); commit('Update key');
-    } else if (act === 'show') { applyCamKey(loc.key.v); }
-  }
-
-  // ---- snapping, and dragging clips and keys ----
-  function snapPoints(skipL, skipK) {
-    const D = durOf(), pts = [0, D, clock];
-    for (const rec of items.values()) for (const l of rec.layers) {
-      if (l.keys) { for (const k of l.keys) if (!skipK.has(k.id)) pts.push(k.t); continue; }
-      if (skipL.has(l.id)) continue;
-      const g = barGeom(l, D); pts.push(g.start); if (!g.inf) pts.push(g.end);
-    }
-    for (const nm of ['explode', 'camera']) if (tracks[nm]) for (const k of tracks[nm].keys) if (!skipK.has(k.id)) pts.push(k.t);
-    return pts;
-  }
-  // The shift (seconds) that puts one of `ts` on the nearest point, within 8 pixels (0: nothing is near)
-  function snapShift(ts, pts) {
-    const lim = 8 / pps; let best = 0, bd = lim, at = null;
-    for (const t of ts) for (const p of pts) { const dd = Math.abs(p - t); if (dd < bd) { bd = dd; best = p - t; at = p; } }
-    return { shift: best, at };
-  }
-  function showSnap(t) {
-    const d = ui.dock; if (!d || !d.snap) return;
-    if (t == null) { d.snap.hidden = true; return; }
-    d.snap.hidden = false; d.snap.style.transform = 'translateX(' + (t * pps).toFixed(1) + 'px)';
-  }
-  // Press on a clip: move it (all the selected ones go with it), or trim one edge of it.
-  function barPress(e, bar) {
-    const key = bar.dataset.key, lid = +bar.dataset.lid, rec = items.get(key), lay = rec && rec.layers.find(l => l.id === lid);
-    if (!lay) return;
-    e.preventDefault();
-    const mode = e.target.closest('.adk-bl') ? 'left' : e.target.closest('.adk-be') ? 'right' : 'move';
-    const add = e.shiftKey;
-    if (!selLids.has(lid) && !add) { selLids.clear(); selLids.add(lid); }
-    const group = mode === 'move' ? clipsSelected().filter(x => x.lay.id === lid || selLids.has(x.lay.id)) : [{ rec, lay }];
-    if (!group.some(x => x.lay === lay)) group.push({ rec, lay });
-    const D0 = durOf();
-    const orig = group.map(x => ({ lay: x.lay, delay: x.lay.loop.delay || 0, skip: x.lay.skip || 0, end: x.lay.end, g: barGeom(x.lay, D0) }));
-    const o0 = orig.find(o => o.lay === lay), skipL = new Set(group.map(x => x.lay.id));
-    const pts = snapPoints(skipL, new Set());
-    const st = { x: e.clientX, last: e.clientX, acc: 0, moved: false };      // (acc: how far the pointer has gone, a tenth as far for each step taken with Alt held)
-    dragBar = true; bar.classList.add('is-drag');
-    try { bar.setPointerCapture(e.pointerId); } catch (_) {}
-    const move = (ev) => {
-      st.acc += (ev.clientX - st.last) * (ev.altKey ? FINE : 1); st.last = ev.clientX;
-      if (!st.moved && Math.abs(ev.clientX - st.x) < 3) return;
-      st.moved = true;
-      let dt = st.acc / pps, snapAt = null;
-      if (ev.shiftKey && !ev.altKey) {      // (snapping only while Shift is held)
-        if (mode === 'move') { const s = snapShift([o0.g.start + dt, o0.g.end + dt], pts); dt += s.shift; snapAt = s.at; }
-        else if (mode === 'left') { const s = snapShift([o0.g.start + dt], pts); dt += s.shift; snapAt = s.at; }
-        else { const s = snapShift([o0.g.end + dt], pts); dt += s.shift; snapAt = s.at; }
-      }
-      showSnap(snapAt);
-      for (const o of orig) {
-        const L = o.lay;
-        if (mode === 'move') {
-          const nd = Math.max(0, Math.min(60, Math.round((o.delay + dt) * 200) / 200));
-          L.loop.delay = nd; if (o.end != null) L.end = o.end + (nd - o.delay);
-        } else if (mode === 'left') {
-          let d = Math.max(-o.delay, Math.min(dt, (o.g.end - 0.05) - o.delay));
-          d = Math.round(d * 200) / 200;
-          const fromSkip = Math.min(o.skip, Math.max(0, -d));      // (dragging back first gives back what was trimmed)
-          if (d >= 0) { L.skip = o.skip + d; } else { L.skip = o.skip - fromSkip; }
-          L.loop.delay = o.delay + d;
-        } else {
-          const ne = Math.max(o.delay + 0.05, o.g.end + dt);
-          if (ne >= D0 - 1e-6 && o.end == null) delete L.end; else L.end = ne >= D0 - 1e-6 ? undefined : Math.round(ne * 200) / 200;
-          if (L.end === undefined) delete L.end;
-        }
-        const el = ui.dock.rows.querySelector('.adk-bar[data-lid="' + L.id + '"]');
-        if (el) { const g = barGeom(L, D0); el.style.left = g.l.toFixed(1) + 'px'; el.style.width = g.w.toFixed(1) + 'px'; el.classList.toggle('is-inf', g.inf); }
-      }
-      applyAll(); try { requestRender(); } catch (_) {}
-    };
-    const up = () => {
-      bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up);
-      dragBar = false; bar.classList.remove('is-drag'); showSnap(null);
-      if (st.moved) { ver++; selectLayer(key, lid, false); for (const o of orig) selLids.add(o.lay.id); if (mode === 'move') sync(true); commit(mode === 'move' ? 'Move clip' : 'Trim clip'); }
-      else selectLayer(key, lid, add);
-    };
-    bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
-  }
-  // Press on a key: select it, drag it (the selected keys go together), or, on the line between the keys, move them all.
-  function keyPress(e, el) {
-    e.preventDefault();
-    const row = el.closest('.adk-row'), line = el.classList.contains('adk-kspan');
-    const lid = row.dataset.lid ? +row.dataset.lid : 0, nm = row.dataset.scene || '';
-    let lay = null, list = null;
-    if (nm) list = tracks[nm].keys; else { const rec = items.get(row.dataset.key); lay = rec && rec.layers.find(l => l.id === lid); list = lay && lay.keys; }
-    if (!list) return;
-    const kid = line ? 0 : +el.dataset.kid, add = e.shiftKey;
-    if (line) { selKeys.clear(); for (const k of list) selKeys.add(k.id); }
-    else if (!selKeys.has(kid)) { if (add) selKeys.add(kid); else { selKeys.clear(); selKeys.add(kid); } }
-    else if (add) { selKeys.delete(kid); }
-    const moving = [];
-    for (const id of selKeys) { const loc = locateKey(id); if (loc) moving.push({ loc, t0: loc.key.t }); }
-    const lead = moving.find(m => m.loc.key.id === kid) || moving[0];
-    if (!lead) return;
-    const pts = snapPoints(new Set(), new Set(selKeys));
-    const st = { x: e.clientX, last: e.clientX, acc: 0, moved: false };
-    dragBar = true;
-    try { el.setPointerCapture(e.pointerId); } catch (_) {}
-    const minT = Math.min(...moving.map(m => m.t0));
-    const move = (ev) => {
-      st.acc += (ev.clientX - st.last) * (ev.altKey ? FINE : 1); st.last = ev.clientX;
-      if (!st.moved && Math.abs(ev.clientX - st.x) < 3) return;
-      st.moved = true;
-      let dt = st.acc / pps, at = null;
-      if (ev.shiftKey && !ev.altKey) { const s = snapShift([lead.t0 + dt], pts); dt += s.shift; at = s.at; }      // (snapping only while Shift is held)
-      dt = Math.max(-minT, Math.round(dt * 200) / 200);
-      showSnap(at);
-      for (const m of moving) m.loc.key.t = Math.round((m.t0 + dt) * 1000) / 1000;
-      const kel = ui.dock.rows;
-      for (const m of moving) { const k = kel.querySelector('.adk-kf[data-kid="' + m.loc.key.id + '"]'); if (k) k.style.left = (m.loc.key.t * pps).toFixed(1) + 'px'; }
-      for (const m of moving) sortKeys(m.loc.list);
-      ver++;
-      if (moving.some(m => m.loc.track)) applyScene(clock, true, false);
-      applyAll(); try { requestRender(); } catch (_) {}
-    };
-    const up = () => {
-      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
-      dragBar = false; showSnap(null);
-      if (st.moved) { ver++; commit('Move keys'); }
-      if (lay) { selLids.clear(); selLids.add(lay.id); selLid = lay.id; }
-      sig = ''; sync(true);
-    };
-    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
-  }
-
-  const RATES = [0.25, 0.5, 1, 2, 4];
-  function updateDockBar() {
-    const d = ui.dock; if (!d) return;
-    const any = anyAnim(), D = durOf(), L = d.last;
-    if (L.off !== !any) { L.off = !any; d.root.classList.toggle('is-off', !any); d.play.disabled = !any; }
-    const t = fmtTC(Math.min(clock, D));
-    if (L.t !== t) { L.t = t; if (document.activeElement !== d.time) d.time.value = t; }
-    const ln = fmtTC(D); if (L.len !== ln) { L.len = ln; d.len.textContent = ln; }
-    const st = !any ? 'off' : paused ? 'play' : 'pause';
-    if (L.st !== st) {
-      L.st = st;
-      d.play.innerHTML = '<i data-lucide="' + (st === 'pause' ? 'pause' : 'play') + '"></i>';
-      d.play.title = !any ? 'Nothing is animated yet' : st === 'play' ? 'Play (Space)' : 'Pause (Space)'; d.play.setAttribute('aria-label', st === 'pause' ? 'Pause' : 'Play');
-      try { _lucide(); } catch (_) {}
-    }
-    const rv = rate + '×'; if (L.rate !== rv) { L.rate = rv; d.rate.textContent = rv; }
-    if (L.loop !== playLoop) { L.loop = playLoop; d.loop.classList.toggle('active', playLoop); d.loop.setAttribute('aria-pressed', playLoop); d.loop.title = playLoop ? 'Playing wraps round to the start (on)' : 'Playing stops at the end (loop is off)'; }
-    if (L.draft !== draft) { L.draft = draft; d.draftB.classList.toggle('active', draft); d.draftB.setAttribute('aria-pressed', draft); }
-    const dv = dur > 0 ? String(dur) : ''; if (L.dur !== dv + '|' + D && document.activeElement !== d.dur) { L.dur = dv + '|' + D; d.dur.value = dv; d.dur.placeholder = String(D); }
-    const now = performance.now();
-    if (now - FPS.at > 350) {
-      FPS.at = now;
-      const playing = st === 'pause', f = FPS.e ? Math.round(1000 / FPS.e) : 0;
-      const txt = playing && f ? f + ' fps' + (stats.ms ? ' · ' + stats.ms.toFixed(1) + ' ms' : '') : (any ? 'paused' : '');
-      if (L.fps !== txt) { L.fps = txt; d.fps.textContent = txt; }
-      d.fps.classList.toggle('is-slow', playing && f > 0 && f < 24);
-    }
-    placeHead();
-  }
-  function buildDock() {
-    if (ui.dock) return ui.dock;
-    const root = document.createElement('div');
-    root.id = 'vp-animate-pop'; root.setAttribute('role', 'region'); root.setAttribute('aria-label', 'Animate timeline'); root.tabIndex = -1;
-    const B = (id, icon, title, cls) => `<button type="button" class="adk-b${cls ? ' ' + cls : ''}" id="${id}" title="${title}" aria-label="${title}"><i data-lucide="${icon}"></i></button>`;
-    root.innerHTML = `
-      <div class="adk-grip" id="adk-grip" title="Drag to resize · double-click to reset"></div>
-      <div class="lc-h mat-dock-h adk-h">
-        <div class="lc-title">Animate</div><span class="anim-alpha" title="Alpha: Animate is a very early feature and can change">Alpha</span>
-        <div class="lc-spacer"></div>
-        <div class="adk-menuwrap adk-addwrap"><span class="adk-split">
-          <button type="button" class="adk-addb" id="adk-add" title="Add the animation to the selection" aria-label="Add the animation to the selection"><i data-lucide="plus"></i></button>
-          <button type="button" class="adk-addb adk-addmore" id="adk-addmore" title="Choose what to add" aria-haspopup="menu" aria-expanded="false" aria-label="Choose what to add"><i data-lucide="chevron-down"></i></button></span>
-          <div class="adk-menu adk-addmenu" id="adk-addmenu" hidden role="menu">${Object.entries(TYPES).filter(([k]) => !KEYED.has(k)).map(([k, [label, icon]]) => `<button type="button" role="menuitem" data-addtype="${k}"><i data-lucide="${icon}"></i><span>${label}</span></button>`).join('')}</div></div>
-        ${B('adk-render', 'film', 'Render the timeline as a video')}
-        ${B('adk-tr2', 'panel-right', 'Show or hide the settings')}${B('adk-pop', 'picture-in-picture-2', 'Pop out as a small window')}${B('adk-close', 'x', 'Close (Shift+A)')}
-      </div>
-      <div class="adk-body">
-        <div class="adk-main">
-        <div class="adk-scroll" id="adk-scroll"><div class="adk-inner" id="adk-inner">
-          <div class="adk-ruler"><div class="adk-rh">${B('adk-tl', 'panel-left', 'Show or hide the list of objects')}<span id="adk-count"></span></div><div class="adk-rl" id="adk-rl"></div></div>
-          <div id="adk-rows"></div>
-          <div class="adk-ph" id="adk-ph"></div>
-          <div class="adk-snap" id="adk-snap" hidden></div>
-        </div></div>
-        <div class="adk-pb" role="toolbar" aria-label="Playback">
-        <div class="adk-tr">
-          ${B('adk-rew', 'skip-back', 'Back to the start (Home)')}${B('adk-prev', 'chevron-left', 'One frame back (Left)')}${B('adk-play', 'play', 'Play (Space)', 'adk-play')}${B('adk-next', 'chevron-right', 'One frame on (Right)')}${B('adk-end', 'skip-forward', 'To the end (End)')}
-        </div>
-        <input class="adk-in adk-time" id="adk-time" value="0:00.00" spellcheck="false" autocomplete="off" aria-label="Time" title="Time: type one to go there">
-        <span class="adk-len" id="adk-len"></span>
-        ${B('adk-loop', 'repeat', 'Loop')}
-        <button type="button" class="adk-b adk-rate" id="adk-rate" title="Playback speed (click for the next)">1×</button>
-        <div class="adk-sep"></div>
-        <div class="adk-menuwrap">${B('adk-key', 'diamond', 'Add a key at the playhead (K)')}
-          <div class="adk-menu" id="adk-keymenu" hidden role="menu">
-            <button type="button" role="menuitem" data-add="keys"><i data-lucide="move-3d"></i><span>Pose key<em>Move and turn the selection</em></span></button>
-            <button type="button" role="menuitem" data-add="look"><i data-lucide="eye"></i><span>Look key<em>See-through and tint</em></span></button>
-            <button type="button" role="menuitem" data-add="explode"><i data-lucide="scaling"></i><span>Explode key<em>The explode of the view as it is</em></span></button>
-            <button type="button" role="menuitem" data-add="camera"><i data-lucide="video"></i><span>Camera key<em>The view as it is</em></span></button>
-          </div></div>
-        ${B('adk-cut', 'scissors', 'Cut the clip at the playhead (S)')}${B('adk-dup', 'copy', 'Duplicate the clip (Ctrl+D)')}
-        <div class="lc-spacer"></div>
-        <span class="adk-fps" id="adk-fps" title="How fast the picture is drawn while it plays"></span>
-        ${B('adk-draft', 'gauge', 'Draft: draw at a lower resolution while it plays')}
-        <label class="adk-lab" title="Frames per second of the project; clips export at this rate">FPS<select class="adk-in" id="adk-pfps" aria-label="Project frames per second"><option value="24">24</option><option value="30">30</option><option value="60">60</option></select></label>
-        <label class="adk-lab" title="Timeline length; empty: as long as the longest motion">Length<input class="adk-in" id="adk-dur" inputmode="decimal" spellcheck="false" autocomplete="off" placeholder="auto">s</label>
-        <div class="adk-zoom"><i data-lucide="zoom-out"></i><input type="range" id="adk-zoom" min="1" max="16" step="0.25" value="1" aria-label="Zoom"><i data-lucide="zoom-in"></i></div>
-        ${B('adk-fit', 'maximize-2', 'Fit the timeline to the window')}
-        </div>
-        </div>
-        <aside class="adk-insp"><div class="dlg-body" id="adk-insp-body"><div class="adk-keypanel" id="adk-kp" hidden></div>${bodyMarkup(false)}</div><div class="dlg-foot anim-foot">${footMarkup.replace(/<span class="cq-gap"><\/span><button[^>]*id="anim-add"[\s\S]*?<\/button>/, '')}</div></aside>
-      </div>`;
-    document.body.appendChild(root);
-    const g = (i) => root.querySelector('#' + i);
-    const d = ui.dock = {
-      root, el: root, body: g('adk-insp-body'), kp: g('adk-kp'), scroll: g('adk-scroll'), inner: g('adk-inner'), rl: g('adk-rl'), rows: g('adk-rows'), ph: g('adk-ph'), snap: g('adk-snap'), hd: null,
-      play: g('adk-play'), time: g('adk-time'), len: g('adk-len'), loop: g('adk-loop'), rate: g('adk-rate'), dur: g('adk-dur'), zoom: g('adk-zoom'), fps: g('adk-fps'), draftB: g('adk-draft'), menu: g('adk-keymenu'),
-      last: { x: '', off: null, t: '', len: '', st: '', rate: '', loop: null, dur: '', fps: '', draft: null }, scrub: null, kpSig: '',
-      show() { openDock(); }, hide() { closeDock(); },
-    };
-    wireInspector(d.body, root);
-    // transport
-    g('adk-rew').addEventListener('click', () => rewind());
-    g('adk-end').addEventListener('click', () => { if (!paused) pause(); seekTo(durOf()); });
-    const pf = g('adk-pfps');
-    if (pf) {
-      pf.value = String(projFps);
-      pf.addEventListener('change', () => {
-        projFps = [24, 30, 60].includes(+pf.value) ? +pf.value : 30; FRAME = 1 / projFps; saveTl();
-        try { seekTo(FRAME_SNAP(clock)); } catch (_) {}
-        toast('Project frame rate', projFps + ' frames per second', 'info', 2500);
-      });
-    }
-    g('adk-prev').addEventListener('click', () => stepBy(-FRAME));
-    g('adk-next').addEventListener('click', () => stepBy(FRAME));
-    d.play.addEventListener('click', () => { if (!anyAnim()) return; if (paused) play(); else pause(); });
-    d.loop.addEventListener('click', () => { playLoop = !playLoop; if (!playLoop) { pingpong = false; bounce = 1; } saveTl(); updateDockBar(); });
-    d.rate.addEventListener('click', () => { rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length]; updateDockBar(); });
-    d.time.addEventListener('change', () => { const v = parseTC(d.time.value); if (v != null) { if (!paused) pause(); seekTo(v); } d.last.t = ''; updateDockBar(); });
-    d.time.addEventListener('keydown', (e) => { if (e.key === 'Enter') d.time.blur(); e.stopPropagation(); });
-    d.dur.addEventListener('keydown', (e) => { if (e.key === 'Enter') d.dur.blur(); e.stopPropagation(); });
-    d.dur.addEventListener('change', () => {
-      const v = parseTC(d.dur.value);
-      dur = v != null && v > 0 ? Math.min(600, Math.max(1, v)) : 0;
-      saveTl(); d.last.dur = ''; cycVer = -1;
-      if (clock > durOf()) seekTo(durOf());
-      renderRows(); updateDockBar();
-    });
-    d.draftB.addEventListener('click', () => { draft = !draft; saveTl(); applyDraft(); updateDockBar(); });
-    // keys, cutting, duplicating
-    const closeMenu = () => { d.menu.hidden = true; };
-    g('adk-key').addEventListener('click', (e) => { e.stopPropagation(); d.menu.hidden = !d.menu.hidden; });
-    d.menu.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-add]'); if (!b) return; closeMenu();
-      const a = b.dataset.add; if (a === 'keys' || a === 'look') addObjectKey(a); else addSceneKey(a);
-    });
-    root.addEventListener('pointerdown', (e) => { if (!e.target.closest('.adk-menuwrap')) closeMenu(); }, true);
-    // the blue plus: adds the kind that is chosen to what is selected; its arrow lists the kinds to choose from
-    { const am = g('adk-addmenu'), ab = g('adk-addmore');
-      const closeAdd = () => { am.hidden = true; ab.setAttribute('aria-expanded', 'false'); };
-      g('adk-add').addEventListener('click', () => { closeAdd(); addLayer(); });
-      ab.addEventListener('click', (e) => { e.stopPropagation(); closeMenu(); am.hidden = !am.hidden; ab.setAttribute('aria-expanded', String(!am.hidden)); });
-      am.addEventListener('click', (e) => { const b = e.target.closest('[data-addtype]'); if (!b) return; closeAdd(); cfg.type = b.dataset.addtype; save(); sync(); addLayer(); });
-      root.addEventListener('pointerdown', (e) => { if (!e.target.closest('.adk-addwrap')) closeAdd(); }, true);
-      root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !am.hidden) { closeAdd(); e.stopPropagation(); } }, true); }
-    g('adk-cut').addEventListener('click', () => splitAtPlayhead());
-    g('adk-dup').addEventListener('click', () => duplicateClips());
-    g('adk-render').addEventListener('click', () => { if (!paused) pause(); try { _openTurntableDialog({ timeline: true, seconds: durOf() }); } catch (err) { console.warn('[animate] render', err); } });
-    const setZoom = (z) => { zoom = Math.max(1, Math.min(16, z)); d.zoom.value = zoom; renderRows(); };
-    d.zoom.addEventListener('input', () => setZoom(+d.zoom.value));
-    g('adk-fit').addEventListener('click', () => { setZoom(1); d.scroll.scrollLeft = 0; });
-    d.scroll.addEventListener('scroll', () => { lineVis(d, Math.min(clock, durOf()) * pps); }, { passive: true });
-    try { let rw = 0; new ResizeObserver(() => { const w = d.scroll.clientWidth; if (w && w !== rw) { rw = w; renderRows(); } }).observe(d.scroll); } catch (_) {}      // (fitted again when the width changes)
-    d.scroll.addEventListener('wheel', (e) => {      // Ctrl + wheel zooms about the pointer; a plain wheel scrolls (Shift: sideways)
-      if (!(e.ctrlKey || e.metaKey)) return;
-      e.preventDefault();
-      const r = d.scroll.getBoundingClientRect(), at = e.clientX - r.left + d.scroll.scrollLeft - HW, sec = Math.max(0, at / pps);
-      setZoom(zoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
-      d.scroll.scrollLeft = Math.max(0, sec * pps + HW - (e.clientX - r.left));
-    }, { passive: false });
-    // Pan the timeline with the hand: a middle-button drag anywhere, or Alt + drag on empty space (not on a clip, a key or the ruler).
-    // The hand shows while Alt is held over it and closes while it drags.
-    { let pan = null;
-      const sc = d.scroll;
-      const free = (t) => !t.closest('.adk-bar,.adk-kf,.adk-kspan,.adk-rl,.adk-b,input,select,textarea,button');
-      sc.addEventListener('pointerdown', (e) => {
-        if (!(e.button === 1 || (e.button === 0 && e.altKey && free(e.target)))) return;
-        e.preventDefault(); e.stopPropagation();      // (no auto-scroll circle of the browser, and no clip or key picks it up)
-        pan = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: sc.scrollLeft, st: sc.scrollTop };
-        try { sc.setPointerCapture(e.pointerId); } catch (_) {}
-        sc.classList.add('is-panning');
-      }, true);
-      sc.addEventListener('pointermove', (e) => {
-        if (!pan || e.pointerId !== pan.id) return;
-        sc.scrollLeft = pan.sl - (e.clientX - pan.x); sc.scrollTop = pan.st - (e.clientY - pan.y);
-      });
-      const end = (e) => { if (!pan || (e && e.pointerId !== pan.id)) return; pan = null; sc.classList.remove('is-panning'); };
-      for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) sc.addEventListener(t, end);
-      sc.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }, true);
-      sc.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
-      const alt = (e) => sc.classList.toggle('alt-hand', e.altKey);
-      root.addEventListener('keydown', alt); root.addEventListener('keyup', alt); window.addEventListener('blur', () => sc.classList.remove('alt-hand'));
-    }
-    // the ruler: press to put the playhead there, drag to scrub
-    const tAt = (e) => Math.max(0, Math.min(durOf(), FRAME_SNAP((e.clientX - d.rl.getBoundingClientRect().left) / pps)));
-    // With Alt held the playhead moves a tenth as far as the pointer, and not by whole frames: for putting it exactly where it should be
-    const fineAt = (e) => { const sc = d.scrub; sc.pos += (e.clientX - sc.last) * (e.altKey ? FINE : 1); sc.last = e.clientX; const t = Math.max(0, Math.min(durOf(), sc.pos / pps)); return e.altKey ? Math.round(t * 1000) / 1000 : FRAME_SNAP(t); };
-    d.rl.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      d.scrub = { was: !paused && anyAnim(), last: e.clientX, pos: 0 };
-      if (d.scrub.was) { paused = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); }
-      try { d.rl.setPointerCapture(e.pointerId); } catch (_) {}
-      d.scrub.pos = (e.clientX - d.rl.getBoundingClientRect().left);      // (where the pointer is on the ruler; the playhead goes there at once)
-      seekTo(tAt(e)); e.preventDefault();
-    });
-    d.rl.addEventListener('pointermove', (e) => { if (d.scrub) seekTo(fineAt(e)); });
-    for (const t of ['pointerup', 'pointercancel']) d.rl.addEventListener(t, () => { if (!d.scrub) return; const was = d.scrub.was; d.scrub = null; if (was) play(); });
-    // the rows
-    d.rows.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      const kf = e.target.closest('.adk-kf, .adk-kspan'); if (kf) { keyPress(e, kf); return; }
-      const bar = e.target.closest('.adk-bar'); if (bar) barPress(e, bar);
-    });
-    d.rows.addEventListener('dblclick', (e) => {
-      const lane = e.target.closest('.adk-rl[data-kr]'); if (!lane || e.target.closest('.adk-kf')) return;
-      addKeyAt(lane.closest('.adk-row'), (e.clientX - lane.getBoundingClientRect().left) / pps);
-    });
-    // Moving the rows up and down: drag the name of an object to change the order of the objects, the name of one of its animations to change
-    // the order of that object's animations (they are drawn in that order). A line shows where it goes; the click that ends a drag is not a click.
-    { let drag = null, ended = false;
-      const rowsOf = (dr) => dr.isObj ? [...d.rows.querySelectorAll('.adk-obj[data-key]')] : [...d.rows.querySelectorAll('.adk-lay[data-lid]')].filter(r => r.dataset.key === dr.key);
-      const mark = (cls, el) => { for (const r of d.rows.querySelectorAll('.adk-drop-before, .adk-drop-after')) r.classList.remove('adk-drop-before', 'adk-drop-after'); if (el) el.classList.add(cls); };
-      const place = (dr, y) => {
-        const others = rowsOf(dr).filter(r => r !== dr.row), idx = others.filter(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 < y; }).length;
-        dr.others = others; dr.idx = idx;
-        if (idx < others.length) mark('adk-drop-before', others[idx]);
-        else { const last = others[others.length - 1]; const tail = last && dr.isObj ? [...d.rows.querySelectorAll('.adk-row[data-key]')].filter(r => r.dataset.key === last.dataset.key).pop() : last; mark('adk-drop-after', tail); }
-      };
-      const onMove = (e) => {
-        if (!drag) return;
-        if (!drag.on) { if (Math.abs(e.clientY - drag.y0) < 5) return; drag.on = true; d.rows.classList.add('is-reordering'); for (const r of d.rows.querySelectorAll('.adk-row[data-key]')) if (drag.isObj ? r.dataset.key === drag.key : r === drag.row) r.classList.add('adk-dragging'); }
-        place(drag, e.clientY);
-      };
-      const onUp = () => {
-        document.removeEventListener('pointermove', onMove, true); document.removeEventListener('pointerup', onUp, true); document.removeEventListener('pointercancel', onUp, true);
-        const dr = drag; drag = null; if (!dr) return;
-        d.rows.classList.remove('is-reordering'); mark('', null); for (const r of d.rows.querySelectorAll('.adk-dragging')) r.classList.remove('adk-dragging');
-        if (!dr.on || dr.idx == null || !dr.others) return;
-        ended = true; setTimeout(() => { ended = false; }, 0);
-        if (dr.isObj) {
-          const keys = dr.others.map(r => r.dataset.key); keys.splice(dr.idx, 0, dr.key);
-          const was = [...items.keys()]; if (keys.join('|') === was.join('|')) return;
-          const all = new Map(items); items.clear();
-          for (const k of keys) if (all.has(k)) items.set(k, all.get(k));
-          for (const [k, v] of all) if (!items.has(k)) items.set(k, v);
-        } else {
-          const rec = items.get(dr.key); if (!rec) return;
-          const ids = dr.others.map(r => +r.dataset.lid); ids.splice(dr.idx, 0, dr.lid);
-          const next = ids.map(id => rec.layers.find(l => l.id === id)).filter(Boolean);
-          if (next.length !== rec.layers.length || next.every((l, i) => l === rec.layers[i])) return;
-          rec.layers = next;
-        }
-        ver++; applyAll(); try { requestRender(); } catch (_) {}
-        sig = ''; renderRows(); sync(true); commit('Reorder');
-      };
-      d.rows.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0 || e.target.closest('button, input, select, .adk-bar, .adk-kf, .adk-kspan')) return;
-        const rh = e.target.closest('.adk-rh'), row = rh && rh.closest('.adk-row[data-key]');
-        if (!row || row.dataset.scene || !row.dataset.key) return;
-        drag = { row, key: row.dataset.key, isObj: row.classList.contains('adk-obj'), lid: +row.dataset.lid || 0, y0: e.clientY, on: false, idx: null, others: null };
-        document.addEventListener('pointermove', onMove, true); document.addEventListener('pointerup', onUp, true); document.addEventListener('pointercancel', onUp, true);
-      });
-      d.rows.addEventListener('click', (e) => { if (ended) { ended = false; e.stopPropagation(); e.preventDefault(); } }, true);
-    }
-    d.rows.addEventListener('click', (e) => {
-      const row = e.target.closest('.adk-row'); if (!row) return;
-      const key = row.dataset.key, b = e.target.closest('button');
-      if (b) {
-        if (b.dataset.fold) { const fk = b.dataset.fold; if (folded.has(fk)) folded.delete(fk); else folded.add(fk); renderRows(); }
-        else if (b.dataset.rmkey) remove([b.dataset.rmkey]);
-        else if (b.dataset.rmlay) { const rec = items.get(key); if (rec) { rec.layers = rec.layers.filter(l => l.id !== +b.dataset.rmlay); if (!rec.layers.length) remove([key]); else { ver++; applyAll(); sync(true); commit('Remove'); } } }
-        else if (b.dataset.mute) {
-          const rec = items.get(key), lay = rec && rec.layers.find(l => l.id === +b.dataset.mute);
-          if (lay) { lay.muted = !lay.muted; ver++; applyAll(); try { requestRender(); } catch (_) {} sync(true); commit('Switch'); }
-        }
-        else if (b.dataset.smute) { const tr = tracks[b.dataset.smute]; if (tr) { tr.muted = !tr.muted; ver++; sync(true); commit('Switch'); } }
-        else if (b.dataset.srm) { tracks[b.dataset.srm] = null; selKeys.clear(); ver++; sync(true); commit('Remove'); }
-        return;
-      }
-      if (e.target.closest('.adk-bar, .adk-kf, .adk-kspan')) return;      // (handled as they are let go of)
-      if (row.dataset.scene) { const tr = tracks[row.dataset.scene]; if (tr && tr.keys.length) selectKey(tr.keys[0].id, false); return; }
-      if (row.classList.contains('adk-lay')) selectLayer(key, +row.dataset.lid, e.shiftKey); else { selLids.clear(); selKeys.clear(); pick(key); sig = ''; sync(true); }      // (the object itself: the usual animation menu on the right, no clip)
-    });
-    // the panel of a key
-    d.kp.addEventListener('input', (e) => { const el = e.target.closest('[data-kv]'); if (el) keyEdit(el); });
-    d.kp.addEventListener('change', (e) => { const el = e.target.closest('[data-kv]'); if (el) { keyEdit(el); commit('Edit key'); } });
-    d.kp.addEventListener('click', (e) => { const b = e.target.closest('[data-kact]'); if (b) keyAction(b.dataset.kact); });
-    // keys, while the dock is where the work is
-    root.addEventListener('pointerdown', (e) => { if (!e.target.closest('input,select,textarea')) { try { root.focus({ preventScroll: true }); } catch (_) {} } }, true);
-    root.addEventListener('mousedown', (e) => { if (e.target.closest('button.adk-b')) e.preventDefault(); });
-    root.addEventListener('keydown', (e) => {
-      if (e.target.closest('input,select,textarea,[role="slider"]')) return;
-      const k = e.key; let hit = true;
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'd' || k === 'D')) duplicateClips();
-      else if (e.ctrlKey || e.metaKey || e.altKey) hit = false;
-      else if (k === ' ') { if (anyAnim()) { if (paused) play(); else pause(); } }
-      else if (k === 'Home') rewind();
-      else if (k === 'End') { if (!paused) pause(); seekTo(durOf()); }
-      else if (k === 'ArrowLeft') stepBy(e.shiftKey ? -1 : -FRAME);
-      else if (k === 'ArrowRight') stepBy(e.shiftKey ? 1 : FRAME);
-      else if (k === 'Delete' || k === 'Backspace') deleteSelection();
-      else if (k === 's' || k === 'S') splitAtPlayhead();
-      else if (k === 'k' || k === 'K') addObjectKey('keys');
-      else if (k === 'Escape') { if (!d.menu.hidden) closeMenu(); else if (selKeys.size) { selKeys.clear(); sig = ''; sync(true); } else hit = false; }
-      else hit = false;
-      if (hit) { e.preventDefault(); e.stopPropagation(); }
-    });
-    // the two side panels: the list of objects on the left (it folds to its icons) and the settings on the right
-    // Narrow (a dock between two wide sidebars): the list folds to its icons, and the settings leave the row and come over the timeline
-    // when asked for (the button), instead of squeezing the timeline to nothing. Wide again: they are back where they were.
-    const narrow = () => root.clientWidth > 0 && root.clientWidth <= 820;
-    const paintSides = () => {
-      const w = root.clientWidth, tight = w > 0 && w <= 640;
-      HW = showL && !tight ? HWF : HWN;
-      const inspOn = narrow() ? root.classList.contains('insp-force') : showR;
-      root.classList.toggle('no-left', HW === HWN); root.classList.toggle('no-insp', !showR);
-      g('adk-tl').classList.toggle('active', HW === HWF); g('adk-tr2').classList.toggle('active', inspOn);
-      g('adk-tl').setAttribute('aria-pressed', HW === HWF); g('adk-tr2').setAttribute('aria-pressed', inspOn);
-      root.style.setProperty('--adk-hw', HW + 'px');
-    };
-    g('adk-tl').addEventListener('click', () => { showL = !showL; saveTl(); paintSides(); renderRows(); });
-    g('adk-tr2').addEventListener('click', () => {
-      if (narrow()) root.classList.toggle('insp-force'); else { showR = !showR; saveTl(); }
-      paintSides(); renderRows();
-    });
-    paintSides();
-    g('adk-close').addEventListener('click', () => closeDock());
-    g('adk-pop').addEventListener('click', () => toMini());
-    // the height: the top edge
-    {
-      const grip = g('adk-grip'), vp = $id('viewport'), rootEl = document.documentElement, KEY = () => (window.__moDockHeightKey ? window.__moDockHeightKey('anim') : 'stepopt-dock-h');
-      try { const v = parseInt(localStorage.getItem(KEY()), 10); if (v > 0) rootEl.style.setProperty('--dock-h', v + 'px'); } catch (_) {} try { window.__moDockHeightSync && window.__moDockHeightSync(); } catch (_) {}
-      let from = null, want = '', fr = 0;
-      const apply = () => { fr = 0; if (!want) return; root.style.height = 'min(' + want + ', 80vh)'; if (vp) vp.style.setProperty('--dock-h', want); };
-      grip.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; from = { y: e.clientY, h: root.getBoundingClientRect().height }; try { grip.setPointerCapture(e.pointerId); } catch (_) {} grip.classList.add('dragging'); document.body.classList.add('dock-resizing'); e.preventDefault(); });
-      grip.addEventListener('pointermove', (e) => { if (!from) return; want = Math.round(Math.max(170, Math.min(window.innerHeight * 0.8, from.h + from.y - e.clientY))) + 'px'; if (!fr) fr = requestAnimationFrame(apply); });
-      const up = () => {
-        if (!from) return;
-        if (fr) { cancelAnimationFrame(fr); apply(); }
-        from = null;
-        if (want) { rootEl.style.setProperty('--dock-h', want); root.style.height = ''; if (vp) vp.style.removeProperty('--dock-h'); try { localStorage.setItem(KEY(), String(parseInt(want, 10))); } catch (_) {} }
-        want = ''; grip.classList.remove('dragging'); document.body.classList.remove('dock-resizing');
-        window.dispatchEvent(new Event('resize'));
-      };
-      grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
-      grip.addEventListener('dblclick', () => { rootEl.style.removeProperty('--dock-h'); try { localStorage.removeItem(KEY()); } catch (_) {} window.dispatchEvent(new Event('resize')); });
-    }
-    // a new width of the view: the scale of the timeline is worked out again
-    let rz = 0, lastW = 0;
-    if (window.ResizeObserver) {
-      const ro = new ResizeObserver(() => {
-        if (!root.classList.contains('show')) return;
-        paintSides();
-        const w = d.scroll.clientWidth; if (w === lastW) return;
-        lastW = w; if (!rz) rz = requestAnimationFrame(() => { rz = 0; renderRows(); });
-      });
-      ro.observe(d.scroll); ro.observe(root);
-    }
-    // one drawer at a time: when the materials, the library or the console open, this one gives way
-    for (const id of ['vp-materials-pop', 'vp-library-pop', 'log-console']) {
-      const other = $id(id);
-      if (other) new MutationObserver(() => { if (other.classList.contains('show') && !other.classList.contains('is-float') && root.classList.contains('show')) closeDock(); }).observe(other, { attributes: true, attributeFilter: ['class'] });
-    }
-    try { _lucide(); } catch (_) {}
-    return d;
-  }
-  function closeOtherDrawers() {
-    const mp = $id('vp-materials-pop'), lib = $id('vp-library-pop'), con = $id('log-console');
-    if (mp && mp.classList.contains('show') && !mp.classList.contains('is-float')) $id('mat-dock-close')?.click();
-    if (lib && lib.classList.contains('show') && !lib.classList.contains('is-float')) { try { _libShow(false); } catch (_) {} }
-    if (con && con.classList.contains('show')) $id('lc-close')?.click();
-  }
-  // Edit mesh goes off while Animate is open (its buttons are hidden: .anim-mode), and so does the gizmo.
-  function enter() {
-    try { _Elements.api.mode('model'); } catch (_) {}
-    state._animMode = true; document.body.classList.add('anim-mode'); $id('tg-animate')?.classList.add('active'); updateTag(); try { updateGizmo(); } catch (_) {}
-    if (!poll) poll = setInterval(() => { if (!popup || !popup.el.classList.contains('show')) { clearInterval(poll); poll = 0; return; } follow(); }, 200);
-  }
-  function leave() { clearInterval(poll); poll = 0; state._animMode = false; document.body.classList.remove('anim-mode'); $id('tg-animate')?.classList.remove('active'); updateTag(); applyDraft(); try { updateGizmo(); } catch (_) {} }
-  function openDock() {
-    const d = buildDock();
-    closeOtherDrawers();
-    popup = d; resetPB(); sig = ''; listSig = ''; d.last.dur = ''; d.last.st = ''; d.last.loop = null; d.last.draft = null; d.kpSig = '';
-    d.root.classList.add('show'); document.body.classList.add('anim-dock-open'); $id('tg-animate')?.classList.add('active');
-    enter(); follow(); sync(true); updatePlaybar(); applyDraft();
-    try { _lucide(); } catch (_) {}
-  }
-  function closeDock() {
-    const d = ui.dock; if (!d || !d.root.classList.contains('show')) return;
-    d.root.classList.remove('show'); document.body.classList.remove('anim-dock-open'); $id('tg-animate')?.classList.remove('active');
-    if (!switching) leave();
-  }
-  function openMini() {
-    const p = buildMini();
-    popup = p; resetPB(); sig = ''; listSig = '';
-    enter(); p.show(); follow(); sync(true);
-    try { _lucide(); } catch (_) {}
-  }
-  function toMini() { switching = true; try { closeDock(); mode = 'mini'; saveTl(); openMini(); } finally { switching = false; } }
-  function toDock() { switching = true; try { if (ui.mini) ui.mini.hide(); mode = 'dock'; saveTl(); openDock(); } finally { switching = false; } }
-  const shown = () => !!((ui.dock && ui.dock.root.classList.contains('show')) || (ui.mini && ui.mini.el.classList.contains('show')));
-  function open() { if (mode === 'mini') openMini(); else openDock(); }
-  function closeAll() { try { if (ui.dock && ui.dock.root.classList.contains('show')) closeDock(); if (ui.mini && ui.mini.el.classList.contains('show')) ui.mini.hide(); } catch (_) {} }      // (back to normal on a refresh and when a file opens)
-  function toggle() { if (!shown()) open(); else if (ui.dock && ui.dock.root.classList.contains('show')) closeDock(); else ui.mini.hide(); }
-  // the button on the bottom toolbar and Shift+A
-  { const b = $id('tg-animate'); if (b) b.addEventListener('click', (e) => { e.stopPropagation(); toggle(); }); }
-  // ---- for Claude (the animate_parts tool): which parts or groups move in the video, and how ----
-  const num = (v, k, d) => { const x = clampKey(k, v); return x == null ? d : x; };
-  const pickEnum = (v, list, d) => { const x = String(v == null ? '' : v).toLowerCase(); return list.find(e => e.toLowerCase() === x) || d; };
-  function fromArgs(a) {
-    const type = pickEnum(a.type, Object.keys(TYPES).filter(k => !KEYED.has(k)), 'spin');
-    const D = DEFAULTS, p = { ...D[type] };
-    if (type === 'spin' || type === 'swing') p.axis = pickEnum(a.axis, ['X', 'Y', 'Z'], D[type].axis).toUpperCase();
-    if (type === 'spin') { p.dir = /^(counter|ccw|anti)/i.test(String(a.direction || '')) ? 1 : /^(clock|cw)/i.test(String(a.direction || '')) ? -1 : D.spin.dir; p.rpm = num(a.rpm, 'rpm', D.spin.rpm); }
-    if (type === 'swing') { p.amp = num(a.angle_degrees, 'amp', D.swing.amp); p.period = num(a.seconds, 'period', D.swing.period); }
-    if (type === 'noise') {
-      p.type = pickEnum(a.noise_type, ['wave', 'random', 'steps'], D.noise.type);
-      p.pos = num(a.shift_percent, 'pos', D.noise.pos); p.rot = num(a.turn_degrees, 'rot', D.noise.rot); p.speed = num(a.speed, 'speed', D.noise.speed);
-      p.seed = Math.round(num(a.seed, 'seed', D.noise.seed)); p.detail = Math.round(num(a.detail, 'detail', D.noise.detail)); p.rough = num(a.roughness_percent, 'rough', D.noise.rough);
-      const axes = (v, d) => v == null ? d : ['x', 'y', 'z'].filter(c => String(v).toLowerCase().includes(c)).join('');
-      p.sx = axes(a.shift_axes, D.noise.sx); p.rx = axes(a.turn_axes, D.noise.rx);
-    }
-    if (type === 'oscillate') {
-      p.wave = pickEnum(a.wave, ['sine', 'piston', 'eased', 'triangle'], D.oscillate.wave); p.period = num(a.seconds, 'period', D.oscillate.period);
-      const sh = Array.isArray(a.shift_xyz_percent) ? a.shift_xyz_percent : null, tr = Array.isArray(a.turn_xyz_degrees) ? a.turn_xyz_degrees : null;
-      if (sh) { p.tx = num(sh[0], 'tx', 0); p.ty = num(sh[1], 'ty', 0); p.tz = num(sh[2], 'tz', 0); } else if (!tr) { p.tx = D.oscillate.tx; p.ty = D.oscillate.ty; p.tz = D.oscillate.tz; } else { p.tx = p.ty = p.tz = 0; }
-      if (tr) { p.ax = num(tr[0], 'ax', 0); p.ay = num(tr[1], 'ay', 0); p.az = num(tr[2], 'az', 0); } else { p.ax = p.ay = p.az = 0; }
-      p.spread = num(a.axis_lag_degrees, 'spread', D.oscillate.spread); p.lag = num(a.turn_lag_degrees, 'lag', D.oscillate.lag); p.ratio = num(a.rod_ratio, 'ratio', D.oscillate.ratio);
-    }
-    if (type === 'path') { p.shape = pickEnum(a.shape, Object.keys(SHAPES), D.path.shape); p.plane = pickEnum(a.plane, ['XY', 'XZ', 'YZ'], D.path.plane).toUpperCase(); p.size = num(a.size_percent, 'size', D.path.size); p.period = num(a.seconds, 'period', D.path.period); }
-    const L = { ...D.loop };
-    L.mode = pickEnum(a.loop_mode, ['loop', 'pingpong', 'once'], L.mode);
-    L.repeat = Math.round(num(a.repeats, 'repeat', L.repeat)); L.delay = num(a.delay_seconds, 'delay', L.delay);
-    L.from = num(a.loop_from_percent, 'from', L.from); L.to = num(a.loop_to_percent, 'to', L.to);
-    return { type, p, loop: L };
-  }
-  // The parts (by id) and groups (by a piece of the name) a call means.
-  function namedTargets(ids, groupNames) {
-    const out = [];
-    for (const id of ids || []) { const p = exists(id); if (p) out.push({ key: 'p:' + p.partId, kind: 'part', partId: p.partId, p, label: p.name || ('Part ' + p.partId) }); }
-    for (const q of (groupNames || []).map(x => String(x).trim().toLowerCase()).filter(Boolean)) {
-      for (const n of (state.treeNodes || [])) if (n.kind === 'group' && String(n.name || '').toLowerCase().includes(q)) { const g = groupInfo(String(n.id)); if (g && !out.some(o => o.key === g.key)) out.push(g); }
-      for (const ug of (state.userGroups || [])) if (ug && ug.ref && String(ug.name || '').toLowerCase().includes(q)) { const g = groupInfo(String(ug.id)); if (g && !out.some(o => o.key === g.key)) out.push(g); }
-    }
-    return out;
-  }
-  const api = {
-    add(args) {
-      const ts = namedTargets(args.ids, args.groups);
-      if (!ts.length) throw new Error('Nothing to animate: give ids or groups that exist.');
-      const { type, p, loop: L } = fromArgs(args);
-      const r = addTo(ts, type, p, L);
-      return { animated: r.n, locked: r.locked, type, settings: p, loop: ['spin', 'path'].includes(type) ? L : undefined };
-    },
-    remove(args) {
-      const ts = namedTargets(args.ids, args.groups);
-      const keys = ts.map(t => t.key).filter(k => items.has(k));
-      const type = args.type && TYPES[String(args.type).toLowerCase()] ? String(args.type).toLowerCase() : undefined;
-      remove(keys, type);
-      return { removed_from: keys.length };
-    },
-    clear() { const n = items.size; remove([...items.keys()]); return { removed_from: n }; },
-    stats() { return { animated: items.size, parts_moved_per_frame: stats.parts, ms_per_frame: Math.round(stats.ms * 100) / 100, playing: items.size > 0 && !paused, speed: rate }; },
-    list() {
-      return [...items.values()].map(r => ({
-        kind: r.kind === 'group' ? 'group' : 'part', name: r.label, id: r.kind === 'part' ? r.partId : undefined, parts: r.kind === 'group' ? r.members.length : undefined,
-        layers: r.layers.map(l => ({ type: l.type, ...l.p, ...(['spin', 'path'].includes(l.type) ? { loop: l.loop } : {}), summary: summary(l) })),
-      }));
-    },
-  };
-  window.__moAnimStats = () => api.stats();
-  window.__moAnimPlay = () => ctl.toggle();      // (tests/e2e-animate.mjs: Play is the user's, adding never starts it)
-  window.__moAnimData = { save: () => serialize(), load: (d) => deserialize(d), snap: () => snapStr() };      // (tests/e2e-animate.mjs)      // (tests/e2e-animate.mjs)
-  // What the Animation card of the right sidebar reads and does (the same things as the timeline's own buttons).
-  const ctl = {
-    info: () => ({ n: anyAnim() ? items.size + sceneN() : 0, playing: anyAnim() && !paused && !suspended, clock, dur: durOf(), rate, loop: playLoop, reverse, mode: !playLoop ? 'once' : pingpong ? 'pingpong' : 'loop', ver, open: shown() }),
-    setMode: (m) => { playLoop = m !== 'once'; pingpong = m === 'pingpong'; bounce = 1; saveTl(); try { updatePlaybar(); } catch (_) {} },
-    // the clips as spans of the timeline, for the card's miniature: [{ a, b, type, muted }]
-    clips: () => { const D = durOf(), out = []; for (const rec of items.values()) for (const l of rec.layers) { if (l.keys) { if (!l.keys.length) continue; out.push({ a: l.keys[0].t, b: Math.max(l.keys[0].t + 0.05, l.keys[l.keys.length - 1].t), type: l.type, muted: !!l.muted }); continue; } const g = barGeom(l, D); out.push({ a: g.start, b: Math.min(D, g.end), type: l.type, muted: !!l.muted }); } return out; },
-    setReverse: (b) => { reverse = !!b; if (!paused) { last = performance.now(); } try { updatePlaybar(); } catch (_) {} },
-    toEnd: () => { if (!paused) pause(); seekTo(durOf()); },
-    // the camera: keys of the view are on the timeline like any others; the switch lets them play or not
-    sceneKeys: () => { const out = []; for (const nm of ['camera', 'explode']) { const tr = tracks[nm]; if (tr) for (const k of tr.keys) out.push({ t: k.t, name: nm, muted: !!tr.muted }); } return out; },
-    camera: () => { const tr = tracks.camera, has = !!(tr && tr.keys.length); return { has, on: has && !tr.muted, keys: has ? tr.keys.length : 0 }; },
-    setCamera: (on) => { const tr = tracks.camera; if (!tr || !tr.keys.length) return; tr.muted = !on; ver++; sync(true); commit('Switch'); },
-    addCameraKey: () => { addSceneKey('camera'); const tr = tracks.camera; if (tr && tr.muted) { tr.muted = false; ver++; sync(true); } },
-    toggle: () => { if (!anyAnim()) return; if (paused) play(); else pause(); },
-    rewind: () => rewind(),
-    seek: (sec) => { if (!paused) pause(); seekTo(sec); },
-    setRate: (r) => { rate = r; try { updatePlaybar(); } catch (_) {} },
-    setLoop: (b) => { playLoop = !!b; saveTl(); try { updatePlaybar(); } catch (_) {} },
-    openTimeline: () => { if (!shown()) open(); },
-    fmt: (t) => fmtTC(t),
-    rates: RATES,
-  };
-  return { ctl, open, closeAll, toggle, suspend, resume, reset, run, bake, remove, hold, seek, pause, play, exit, rewind, refresh, api, serialize, deserialize, hasScene: () => sceneN() > 0, count: () => items.size + sceneN(), isPlaying: () => anyAnim() && !paused, fps: () => projFps };
-})();
+// Section view: one plane through the whole scene (section-plane.js). The frame loop draws through it while it is on.
+const _Section = installSectionPlane({
+  state, get renderer() { return renderer; }, get scene() { return scene; }, clearSelection: (...a) => clearSelection(...a),
+  initScrubber: (...a) => initScrubber(...a), requestRender: (...a) => requestRender(...a), toast: (...a) => toast(...a), _lucide: (...a) => _lucide(...a),
+});
+window.__moSectionPlane = _Section;      // (not __moSection: that is the folding of the sidebar's cards)
 
 // ── The Animation card of the right sidebar: play, pause, rewind, a scrubber, speed and loop, and a way to open the timeline. It is there while
 // something is animated. Nothing runs while it is paused: a frame loop is started only while it plays and the card is on the screen.
@@ -49476,9 +45743,9 @@ function _findStackedCopies(tolPct, near) {
 function _wireStacked() {
   const info = $('stk-info'), after = $('stk-after');
   initScrubber({
-    el: 'stk-tol-scrub', label: 'Same place within', maxSteps: 50,
+    el: 'stk-tol-scrub', label: 'Same place within, of the part', maxSteps: 50,
     stepToVal: (st) => st / 10, valToStep: (v) => Math.max(0, Math.min(50, Math.round(v * 10))),
-    format: (v) => ({ value: v.toFixed(1), unit: '% of the part' }), initialValue: _stkTol,
+    format: (v) => ({ value: v.toFixed(1), unit: '%' }), initialValue: _stkTol,      // (the rest of the unit is in the name: every number box is one width)
     promptTitle: 'Same place within', promptUnit: '%',
     onChange: (v) => { _stkTol = Math.max(0, Math.min(5, v)); try { localStorage.setItem('stepopt-stk-tol', String(_stkTol)); } catch (_) {} },
   });
@@ -57855,19 +54122,20 @@ setTimeout(() => _dndDecorateTree(), 0);
       const st = document.createElement('style');
       st.id = 'qr-style';
       st.textContent = `
-.qr{position:fixed;z-index:var(--z-quick-ring);width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:var(--surface-shadow);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
+.qr{position:fixed;z-index:var(--z-quick-ring);width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:10px;background:var(--gz-bg);border:0;box-shadow:0 0 0 1px var(--gz-line),0 10px 28px rgba(0,0,0,.4);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
 .qr.is-in{opacity:1;transform:none}
 .qr.is-out{opacity:0;transform:scale(.92);transition:opacity 90ms ease,transform 90ms ease}
-.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac);box-shadow:0 4px 14px color-mix(in srgb, var(--ac) 40%, transparent);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
-.qr.is-first .qr-thumb{background:var(--s5,rgba(255,255,255,.1));box-shadow:none}
-.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--tx3);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
-.qr-i.is-near{color:var(--tx2)}
-.qr-i.is-hot{color:var(--white);transform:scale(1.06)}
-.qr.is-first .qr-i.is-hot{color:var(--tx)}
-.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:var(--surface-shadow-bar);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;transition:transform 220ms cubic-bezier(.3,1.2,.5,1)}      /* (it slides to the level with a small spring, nothing more) */
+.qr-blob{position:absolute;inset:0;display:block;border-radius:6px;background:var(--gz-hot)}
+.qr-blob::before{content:'';position:absolute;left:7px;top:50%;width:2px;height:12px;margin-top:-6px;border-radius:1px;background:var(--gz-mark)}
+.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--gz-tx);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-i.is-near{color:var(--gz-tx-2)}
+.qr-i.is-hot{color:var(--gz-tx-hot);transform:scale(1.06)}
+.qr.is-first .qr-i.is-hot{color:var(--gz-tx-hot)}
+.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:6px;background:var(--gz-bg);border:0;box-shadow:0 0 0 1px var(--gz-line),0 10px 28px rgba(0,0,0,.4);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--gz-tx-2);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr.is-left .qr-tip{left:auto;right:calc(100% + 10px)}
-.qr-tip b{font-weight:var(--fw-regular,400);color:var(--tx)}
-.qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--ac);opacity:0;transition:opacity 120ms ease}
+.qr-tip b{font-weight:var(--fw-regular,400);color:var(--gz-tx-hot)}
+.qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--gz-mark);opacity:0;transition:opacity 120ms ease}
 .qr.is-busy .qr-tip i{opacity:1;animation:qr-pulse .7s ease-in-out infinite alternate}
 @keyframes qr-pulse{from{transform:scale(.6);opacity:.45}to{transform:scale(1.15);opacity:1}}
 @media (prefers-reduced-motion:reduce){.qr,.qr-thumb,.qr-i,.qr-tip{transition:none!important}.qr.is-busy .qr-tip i{animation:none}}`;
@@ -57966,6 +54234,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       i = Math.max(0, Math.min(LEVELS.length - 1, i));
       if (i === sess.level) return;
       sess.level = i;
+      _UiSound.tick();      // (a tick for each level the pill goes to)
       const y = 'translateY(' + i * ITEM + 'px)';
       sess.el.querySelector('.qr-thumb').style.transform = y;
       sess.el.querySelector('.qr-tip').style.transform = y;
@@ -58090,7 +54359,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const el = document.createElement('div');
       el.className = 'qr is-first';
       el.setAttribute('role', 'listbox'); el.setAttribute('aria-label', 'Quick remesh: the share of triangles to keep');
-      el.innerHTML = '<div class="qr-thumb"></div>' + LEVELS.map((k, i) => '<div class="qr-i' + (i === 0 ? ' is-hot' : i === 1 ? ' is-near' : '') + '" role="option" aria-label="' + pctOf(k) + ' percent">' + pctOf(k) + '</div>').join('') + '<div class="qr-tip"><i></i><b></b><span></span></div>';
+      el.innerHTML = '<div class="qr-thumb"><i class="qr-blob"></i></div>' + LEVELS.map((k, i) => '<div class="qr-i' + (i === 0 ? ' is-hot' : i === 1 ? ' is-near' : '') + '" role="option" aria-label="' + pctOf(k) + ' percent">' + pctOf(k) + '</div>').join('') + '<div class="qr-tip"><i></i><b></b><span></span></div>';
       document.body.appendChild(el);
       const H = PAD * 2 + ITEM * LEVELS.length;
       const x = last.seen ? last.x : innerWidth / 2, y = last.seen ? last.y : innerHeight / 2;
@@ -58108,6 +54377,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       hush(sess);
       listen(true);
       void el.offsetWidth; el.classList.add('is-in');
+      _UiSound.pop(true);
       // the levels next to the top are worked out ahead while the hand is on its way (a small selection: all of them)
       sess.ready.then(() => { if (S !== sess) return; const ahead = sess.tris0 <= 400000 ? LEVELS.slice(1) : LEVELS.slice(1, 3); for (const k of ahead) for (const p of sess.parts) levelOf(sess, p, k); });
     }
@@ -58143,6 +54413,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (i === 0) { cancel(); return; }
       if (sess.committing) return;
       sess.committing = true;
+      _UiSound.click();      // (a level kept)
       sess.el.classList.add('is-busy');
       try { await Promise.all(sess.parts.map(p => levelOf(sess, p, keep))); } catch (_) {}
       if (S !== sess) return;
@@ -58292,7 +54563,9 @@ setTimeout(() => _dndDecorateTree(), 0);
       convexPieces: { title: 'Convex pieces', done: 'Convex pieces made', params: [{ key: 'maxPieces', label: 'Pieces at most', min: 1, max: 32, step: 1, def: 8 }, { key: 'concavity', label: 'Cut while emptier than', kind: 'pct', min: 1, max: 50, step: 1, def: 10, help: "A piece is cut in two while more than this share of its hull is empty." }, { key: 'maxPoints', label: 'Points per piece', min: 8, max: 255, step: 1, def: 64 }], sum: (r) => r.pieces + ' pieces' },
       mergeBodies: { title: 'Merge bodies', done: 'Bodies merged', params: [], sum: (r) => r.merged + ' of ' + r.bodies + ' bodies merged' + (r.notClosed ? ' · ' + r.notClosed + ' not closed, left as they were' : '') },
       // fewer facets on the round faces of a part that still has its CAD faces (roundfaces.js): the deviation is a share of the part's size
-      roundFaces: { title: 'Simplify round faces', done: 'Round faces simplified', whole: true, params: [{ key: 'tolerance', label: 'Deviation up to', kind: 'size%', min: 0.005, max: 2, step: 0.005, def: 0.05, help: "How far the surface may move from the true round face, as a share of the part's size. Looser: fewer facets." }, { key: 'segments', label: 'Segments per turn, at least', min: 6, max: 96, step: 1, def: 12, help: 'A full turn keeps at least this many facets, however loose the deviation.' }], sum: (r) => { const n = +(r.collapsed ?? r.dissolved) || 0; return fmtNum(n) + (n === 1 ? ' point' : ' points') + ' dissolved · ' + fmtNum(+r.before || 0) + ' → ' + fmtNum(+r.after || 0) + ' triangles' + (r.left ? ' · ' + fmtNum(+r.left) + ' kept' : '') + (r.why && !n ? ' · ' + r.why : ''); } },
+      // a thin-walled part made one surface (thickness.js): the outside of a pipe, one face of a sheet, or the middle of the wall
+      removeThickness: { title: 'Remove thickness', done: 'Thickness removed', whole: true, params: [{ key: 'maxThickness', label: 'Thickness up to', kind: 'size%', min: 0.01, max: 10, step: 0.01, def: 0.5, help: "Walls up to this thick, as a share of the part's size, become one surface: a pipe its outside, a sheet one face." }, { key: 'inset', label: 'Move into the wall', kind: 'pct', min: 0, max: 100, step: 5, def: 0, allowZero: true, help: '0 % leaves the side that stays where it is; 50 % puts the surface in the middle of the wall.' }], sum: (r) => fmtNum(+r.removed || 0) + ' triangles of the other side and the edges taken away · walls ' + (+r.thickness || 0) + ' thick · ' + fmtNum(+r.before || 0) + ' → ' + fmtNum(+r.after || 0) + ' triangles' + (r.why ? ' · ' + r.why : '') },
+      roundFaces: { title: 'Simplify round faces', done: 'Round faces simplified', whole: true, params: [{ key: 'tolerance', label: 'Deviation up to', kind: 'size%', min: 0.005, max: 2, step: 0.005, def: 0.05, help: "How far the surface may move from the true round face, as a share of the part's size. Looser: fewer facets." }, { key: 'segments', label: 'Segments per turn, at least', min: 6, max: 96, step: 1, def: 12, help: 'A full turn keeps at least this many facets, however loose the deviation.' }], sum: (r) => { const n = +(r.collapsed ?? r.dissolved) || 0, rg = +r.rings || 0, ln = +r.lines || 0; return (rg || ln ? (rg ? fmtNum(rg) + (rg === 1 ? ' ring' : ' rings') : '') + (rg && ln ? ' and ' : '') + (ln ? fmtNum(ln) + (ln === 1 ? ' line' : ' lines') : '') + ' taken out of the pipes · ' : '') + (n || !(rg || ln) ? fmtNum(n) + (n === 1 ? ' point' : ' points') + ' dissolved · ' : '') + fmtNum(+r.before || 0) + ' → ' + fmtNum(+r.after || 0) + ' triangles' + (r.left ? ' · ' + fmtNum(+r.left) + ' kept' : '') + (r.why && !n && !rg && !ln ? ' · ' + r.why : ''); } },
       // fillets and chamfers off a part that still has its CAD faces (defeature.js); the limits are shares of the part's size, 0 switches a kind off
       // whole CAD faces out (picked in Edit mesh with CAD faces on), the gap patched and the triangles round it made even (cadcut.js)
       // (their settings are in Edit mesh's CAD edit card, so they open no card here)
@@ -58305,7 +54578,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const $i = (id) => document.getElementById(id);
     const say = (t) => { const el = $i('mop-info'); if (el) el.textContent = cur && cur.name === 'removeBlends' ? '' : t; };      // (not for Remove fillets and chamfers: its two sliders need no line of numbers under them)
     const alive = () => cur && state.history[state.history.length - 1] === cur.op;
-    const source = (geom) => { const pa = geom.attributes.position, P = new Float32Array(pa.count * 3); for (let v = 0; v < pa.count; v++) { P[3 * v] = pa.getX(v); P[3 * v + 1] = pa.getY(v); P[3 * v + 2] = pa.getZ(v); } return { P, UV: _uvSetsOf(geom), I: geom.index ? Uint32Array.from(geom.index.array) : Uint32Array.from({ length: pa.count }, (_, i) => i) }; };
+    const source = (geom) => { const pa = geom.attributes.position, P = new Float32Array(pa.count * 3); for (let v = 0; v < pa.count; v++) { P[3 * v] = pa.getX(v); P[3 * v + 1] = pa.getY(v); P[3 * v + 2] = pa.getZ(v); } const na = geom.attributes.normal; let N = null; if (na && na.count === pa.count) { N = new Float32Array(pa.count * 3); for (let v = 0; v < pa.count; v++) { N[3 * v] = na.getX(v); N[3 * v + 1] = na.getY(v); N[3 * v + 2] = na.getZ(v); } } return { P, N, UV: _uvSetsOf(geom), I: geom.index ? Uint32Array.from(geom.index.array) : Uint32Array.from({ length: pa.count }, (_, i) => i) }; };      // (N: the part's own normals, kept by a tool that only takes triangles away: keepNormals in meshops.js)
     const diag = (P) => { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], P[i + k]); hi[k] = Math.max(hi[k], P[i + k]); } return Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1; };
     const prefKey = (name, key) => 'meshop.' + name + '.' + key;
     const settings = (name, o) => { const s = {}; for (const p of OPS[name].params) { const v = !o.quiet ? _Prefs.get(prefKey(name, p.key)) : undefined; s[p.key] = Number.isFinite(v) ? v : p.def; } return s; };
@@ -58343,7 +54616,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       // (the faces with their kinds and radii, the edges and their points go along too: Remove fillets and chamfers reads them)
       return { faceOf, smooth, faces: rec.faces, rows: rec.rows || [], pts: rec.pts ? rec.pts.slice() : new Float32Array(0) };
     };
-    const runOne = (name, it, opts) => { const o = { ...opts, ...(it.extra || {}), ...(it.cad ? { cad: it.cad } : {}), ...(it.src.UV ? { uv: it.src.UV } : {}) }; return compute({ op: 'meshop', name, positions: it.src.P.slice(), index: it.src.I.slice(), opts: o }, () => runMeshOp(name, it.src.P, it.src.I, o)); };
+    const runOne = (name, it, opts) => { const o = { ...opts, ...(it.extra || {}), ...(it.cad ? { cad: it.cad } : {}), ...(it.src.UV ? { uv: it.src.UV } : {}), ...(it.src.N ? { normals: it.src.N } : {}) }; return compute({ op: 'meshop', name, positions: it.src.P.slice(), index: it.src.I.slice(), opts: o }, () => runMeshOp(name, it.src.P, it.src.I, o)); };
     function swap(p, r, mat) {
       const out = _roundGeom(r, mat, p.mesh.geometry), old = p.mesh.geometry, oldHash = p.hash, hash = 'mo_' + (state._decSeq = (state._decSeq | 0) + 1);
       try { _getEdgesGeom(out); } catch (_) {}
@@ -58486,7 +54759,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (!cur) return;
       if (busy) { again = true; return; }
       if (!alive()) { say('This step is no longer the last one (undo or redo moved past it), so the sliders do nothing now.'); return; }
-      busy = true; again = false; say('Working&');
+      busy = true; again = false; say('Working…');
       const freed = []; let last = null;
       try {
         for (const it of cur.items) {
@@ -58517,7 +54790,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       cur.s[key] = v; _Prefs.set(prefKey(cur.name, key), v);
       if (!fromSlider && sc[key]) sc[key].setValue(v);
       clearTimeout(timer);
-      if (fromSlider) { say('Let go to rebuild&'); timer = setTimeout(redo, 350); return null; }
+      if (fromSlider) { say('Let go to rebuild…'); timer = setTimeout(redo, 350); return null; }
       return redo();
     }
     function wire() {
@@ -58634,7 +54907,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   // ── Profile: clean outline ──────────────────────────────────────────────
   // The card is in profile-card.js (the work on the cross-section in profile.js). It is handed what it uses from here: the objects as
   // they are, the functions as forwarders. window.__moAgent.cleanProfile(o) opens it (o: see open() there).
-  installProfileCard({
+  _selFollowers.push(installProfileCard({
     state, _Prefs, _CmdCards,
     initScrubber: (...a) => initScrubber(...a),
     toast: (...a) => toast(...a),
@@ -58663,10 +54936,10 @@ setTimeout(() => _dndDecorateTree(), 0);
       try { _buildBVHsForAllGeoms(); } catch (_) {}
       requestRender();
     },
-  });
+  }));
   // The Round part card (round-card.js): the Profile card's twin for turned parts and belts, the same objects handed to it.
   // window.__moAgent.roundCard(o) opens it; window.__moAgent.fillGrooves stays the quiet way in for Claude and scripts.
-  installRoundCard({
+  _selFollowers.push(installRoundCard({
     state, _Prefs, _CmdCards,
     setViewMode: (...a) => setViewMode(...a),
     _wireLimit: (...a) => _wireLimit(...a),
@@ -58697,7 +54970,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       try { _buildBVHsForAllGeoms(); } catch (_) {}
       requestRender();
     },
-  });
+  }));
 
   // ── Voxel remesh ─────────────────────────────────────────────────────────
   // voxel.js rebuilds each part on a voxel grid: one closed, even surface, its sharp edges kept to the size of a voxel, bodies that
@@ -58801,7 +55074,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (!cur) return;
       if (busy) { again = true; return; }
       if (!alive()) { say('This step is no longer the last one (undo or redo moved past it), so the sliders do nothing now.'); return; }
-      busy = true; again = false; say('Working&');
+      busy = true; again = false; say('Working…');
       const freed = [];
       try {
         for (const it of cur.items) {
@@ -58825,7 +55098,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const vox = it ? (it.L / cur.set.cells * it.scale) : 0;
       say(fmtNum(tris) + ' triangles' + (cur.items.length > 1 ? ' in ' + cur.items.length + ' parts' : '') + ' · voxel ' + vox.toFixed(2) + ' mm' + (cur.set.gap > 0 && it ? ' · gaps up to ' + (cur.set.gap * it.L * it.scale).toFixed(1) + ' mm closed' : '') + '. Ctrl+Z takes the whole step back.');
     }
-    const soon = () => { clearTimeout(timer); say('Let go to rebuild&'); timer = setTimeout(redo, 350); };
+    const soon = () => { clearTimeout(timer); say('Let go to rebuild…'); timer = setTimeout(redo, 350); };
     // k: 'cells' | 'adapt' | 'smooth' | 'gap'; from the sliders, or from the tests
     const PREF = { cells: 'voxelCells', adapt: 'voxelAdapt', smooth: 'voxelSmooth', gap: 'voxelGap' };
     function set(k, v, fromSlider) {
@@ -62030,14 +58303,16 @@ setTimeout(() => _dndDecorateTree(), 0);
         try { window._clayRefresh && window._clayRefresh(); } catch (_) {}
         try { recomputeStats(); rebuildTree(); applySelectionColors(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {}
         requestRender();
-        seen = state.selected.size;      // (the selection changed because of this merge: keep the report)
+        seen = selSig();      // (the selection changed because of this merge: keep the report)
         msg = merged ? `${shortCount(partsIn)} parts merged into ${shortCount(merged)} ${merged === 1 ? 'mesh' : 'meshes'}${stopped ? ' (stopped early)' : ''}. Ctrl+Z takes it all back.` : 'Nothing was merged.';
         toast(merged ? 'Merged' : 'Merge', msg, merged ? 'success' : 'info', 6000);
         show();
       }
       $id('mb-run')?.addEventListener('click', run);
       root.addEventListener('cmd-open', () => { msg = ''; show(); });
-      let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
+      // (which parts, not only how many: another selection of the same size merges other parts)
+      const selSig = () => o.scope === 'sel' ? [...state.selected].join('|') : '';
+      let seen = null; setInterval(() => { if (document.hidden || root.hidden) return; const n = selSig(); if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
       show();
     })();
 
@@ -62428,6 +58703,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
   try { if (!localStorage.getItem('stepopt-dock-h')) { const old = ['stepopt-mat-dock-h', 'stepopt-lib-dock-h', 'stepopt-anim-dock-h'].map(k => parseInt(localStorage.getItem(k), 10)).find(v => v > 0); if (old) localStorage.setItem('stepopt-dock-h', String(old)); } } catch (_) {}
   const drag = (el, prop, keyArg, vertical, read, lo, hi) => {
     if (!el) return;
+    window.__moDockDrag = drag;      // (for a dock built later: the Animate dock's settings pane)
     const K = () => typeof keyArg === 'function' ? keyArg() : keyArg;
     try { const v = parseInt(localStorage.getItem(K()), 10); if (v > 0) root.style.setProperty(prop, v + 'px'); } catch (_) {}
     let from = null, want = '', raf = 0;
@@ -65124,11 +61400,18 @@ const _Elements = (() => {
   // (DOT_DEPTH_ORDER, see dotLayer) keeps the lines out of every disc: no line goes over a dot, a point being the smallest mark and
   // the one most often aimed at. (All of these are transparent materials, so the orders hold between them.)
   const DOT_DEPTH_ORDER = 14;
-  const DOT = {      // diameter in CSS pixels, the middle's colour, the ring's, the order in which they are drawn
-    all:  { px: 6, core: 0x000000, ring: 0x000000, order: 11 },
-    pick: { px: 9, core: PICK_HEX, ring: PICK_HEX, order: 12 },      // (the colour of the picked edges, all through: no dark ring)
-    hot:  { px: 10, core: 0xffffff, ring: 0x05080d, order: 13 },
+  // (The dots are drawn last, after the blue lines and the picked and hovered edges (15 to 17): zoomed out, a dot is narrower than the
+  // depth pass below can keep a line out of, and the lines were drawn over the dots and hid them. Whether a dot is behind a part is
+  // decided in its own shader, so drawing it last shows nothing that is covered.)
+  const DOT = {      // diameter in CSS pixels, the least it shrinks to, the middle's colour, the ring's, the order in which they are drawn
+    all:  { px: 6, min: 3.5, core: 0x000000, ring: 0x000000, order: 18 },
+    pick: { px: 6, min: 3.5, core: PICK_HEX, ring: PICK_HEX, order: 19 },      // (as big as the others, only orange: the colour of the picked edges, all through, no dark ring)
+    hot:  { px: 10, min: 5, core: 0xffffff, ring: 0x05080d, order: 20 },
   };
+  // A dot fills at most this share of the gap between its point and the nearest other point, as that gap is on the screen: zoomed out,
+  // close points come together and dots of a fixed size ran into a dark crust over the mesh (the picked ones into an orange one). Each
+  // dot is sized by its own point's gap, so the crowded ones (a fillet, a thread) shrink while a lone corner keeps its full size.
+  const DOT_GAP_SHARE = { all: 0.6, pick: 0.6, hot: 0.8 };
   // The cap on the slope a dot's disc is raised for (tan 87°), and the one for Edit mesh's lines (tan 85°): higher than the Wireframe's
   // 80.5°, because at a sharp corner the steepest face meeting there is nearly edge-on, and under the cap the corner's own faces cut the
   // dots and lines that stand on it. (A line is pulled whole, so one that stands on such a face can show through a part just in front
@@ -65205,6 +61488,7 @@ const _Elements = (() => {
     const S = DOT[name], T = THREE.TSL, cap = Math.max(256, Math.ceil(n * 1.5));
     const pos = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
     const nrm = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);      // the surface normal at each point, in the world, and how far its faces turn from it (w, radians)
+    const gapA = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);         // how far the nearest other point is, in the world (pointGaps)
     // the size: set by dotSizes() at each paint (a sprite of fixed size is scale × its depth wide; uRadP / uRadO: the dot's reach, its
     // radius and the smoothing beyond it, in the world, per unit of distance for a perspective camera or as it is for an orthographic one)
     const uScale = T.uniform(0.01), uRadP = T.uniform(0.005), uRadO = T.uniform(0.0);
@@ -65232,7 +61516,11 @@ const _Elements = (() => {
     // uScale × 4 / P11 for an orthographic one, along the camera's right and up.
     const zAt = T.cameraViewMatrix.mul(T.vec4(wp, 1.0)).z.negate();
     const p11 = T.cameraProjectionMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).y;
-    const wide = uScale.mul(T.mix(T.float(4.0).div(T.max(p11.abs(), 1e-9)), zAt, persp));
+    const wideFull = uScale.mul(T.mix(T.float(4.0).div(T.max(p11.abs(), 1e-9)), zAt, persp));      // (the dot at its full size, in the world)
+    // its size now: the share of its gap on the screen that it may fill, between its least and its full size (a share of the full one)
+    const gapW = T.instancedDynamicBufferAttribute(gapA);
+    const fit = T.clamp(gapW.div(T.max(wideFull, 1e-12)).mul(S.px * DOT_GAP_SHARE[name] / S.px), S.min / S.px, 1.0);
+    const wide = wideFull.mul(fit);
     const camR = T.cameraWorldMatrix.mul(T.vec4(1.0, 0.0, 0.0, 0.0)).xyz, camU = T.cameraWorldMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).xyz;
     const off2 = T.uv().sub(0.5).mul(wide);
     const off = camR.mul(off2.x).add(camU.mul(off2.y));
@@ -65252,7 +61540,7 @@ const _Elements = (() => {
     // farther, by the slope, whichever way the face points; capped, or a dot an edge-on face away behind a cover showed through it)
     const aAbs = T.acos(T.clamp(T.abs(T.dot(wn, view)), 0.0, 1.0));
     const slopeC = T.tan(T.min(aAbs.add(spread), Math.atan(4)));
-    const eps = wide.div(S.px).mul(slopeC.add(1.0)).add(zAt.mul(1.5e-3));      // (the last: half floats hold three figures or so)
+    const eps = wideFull.div(S.px).mul(slopeC.add(1.0)).add(zAt.mul(1.5e-3));      // (the last: half floats hold three figures or so)
     const vis = T.step(zAt, distS.add(eps));      // 1: seen; 0: something stands in front of it
     void off;
     // A point on the far side of a thin part (its surface looks away from the camera) is not drawn at all: the far side is nearer
@@ -65261,12 +61549,12 @@ const _Elements = (() => {
     // side only. The parts' depth hides the far side of a closed part now, and a sheet's points show from both sides.)
     const seen = T.float(1.0); void best;
     const r = T.uv().sub(0.5).length().mul(2.0), fw = T.max(r.fwidth(), 1e-4);      // 0 in the middle, 1 at the disc's edge
-    const inner = Math.max(0.2, 1 - 2 * DOT_RING / S.px);
-    const ring = T.smoothstep(T.float(inner).sub(fw), T.float(inner), r);
+    const inner = T.max(T.float(0.2), T.float(1).sub(T.float(2 * DOT_RING / S.px).div(fit)));      // (the ring stays a pixel wide however small the dot)
+    const ring = T.smoothstep(inner.sub(fw), inner, r);
     const alpha = T.smoothstep(T.float(1).sub(fw), T.float(1), r).oneMinus().mul(seen).mul(vis);
     // (THREE.Color: the hex in sRGB, turned into the linear values the shader works in, as a material's colour is; raw numbers came out lighter)
     mat.colorNode = T.vec4(T.mix(T.color(new THREE.Color(S.core)), T.color(new THREE.Color(S.ring)), ring), alpha);
-    mat.scaleNode = _fixedSpriteScale(uScale);
+    mat.scaleNode = _fixedSpriteScale(uScale.mul(fit));
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = S.order; sprite.frustumCulled = false; sprite.count = 0; sprite.visible = false; sprite.raycast = () => {};
     // The same dots once more, drawing no colour: this pass writes depth only, with the whole disc lifted for the steepest face as the
@@ -65277,13 +61565,13 @@ const _Elements = (() => {
     dm.depthFunc = THREE.AlwaysDepth;      // (passes everywhere and still writes: WebGL writes no depth with the test switched off)
     dm.alphaTest = 0.02;      // (a dot fading out past the silhouette of its part still keeps the lines out of its disc)
     // (by the slope whichever way the face points: a dot on a face seen from behind, a sheet's, had no lift and its lines came over it)
-    const liftAll = T.mix(uRadO, d.mul(uRadP), persp).mul(T.tan(T.min(aAbs.add(spread), Math.atan(DOT_TAN_MAX))));
+    const liftAll = T.mix(uRadO, d.mul(uRadP), persp).mul(fit).mul(T.tan(T.min(aAbs.add(spread), Math.atan(DOT_TAN_MAX))));
     dm.positionNode = wp.add(view.mul(pull.add(liftAll)));
     dm.opacityNode = alpha;
-    dm.scaleNode = _fixedSpriteScale(uScale);
+    dm.scaleNode = _fixedSpriteScale(uScale.mul(fit));
     const depth = new THREE.Sprite(dm);
     depth.renderOrder = DOT_DEPTH_ORDER; depth.frustumCulled = false; depth.count = 0; depth.visible = false; depth.raycast = () => {}; depth.userData.depthPass = true;
-    L = dotLayers[name] = { sprite, depth, pos, nrm, cap, n: 0, uScale, uRadP, uRadO };
+    L = dotLayers[name] = { sprite, depth, pos, nrm, gapA, cap, n: 0, uScale, uRadP, uRadO };
     dotSizes(lastH);
     return L;
   }
@@ -65308,6 +61596,39 @@ const _Elements = (() => {
     if (!a) pointNormalCache.set(topo.normal, a = MEDIT.vertexNormals(topo));
     return a;
   }
+  // How far each (welded) point is from the nearest other point, in the part's own space: points put in cells of a grid about as wide as
+  // the points are apart on average, each looking in its own cell and the 26 round it (farther than that: three cells, the dot keeps its
+  // full size anyway). Made once per mesh; for 100,000 points some tens of milliseconds.
+  const pointGapCache = new WeakMap();
+  function pointGaps(topo) {
+    let g = pointGapCache.get(topo.normal);
+    if (g) return g;
+    const n = topo.nVert, P = new Float32Array(n * 3), Q = [0, 0, 0];
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let v = 0; v < n; v++) {
+      MEDIT.pointPosition(topo, v, Q); const x = P[v * 3] = Q[0], y = P[v * 3 + 1] = Q[1], z = P[v * 3 + 2] = Q[2];
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    const diag = Math.hypot(x1 - x0, y1 - y0, z1 - z0) || 1, cell = Math.max(diag / Math.sqrt(Math.max(1, n)), diag * 1e-6), far = cell * 3;
+    const key = (i, j, k) => (i * 73856093) ^ (j * 19349663) ^ (k * 83492791);
+    const grid = new Map();
+    for (let v = 0; v < n; v++) {
+      const k = key(Math.floor((P[v * 3] - x0) / cell), Math.floor((P[v * 3 + 1] - y0) / cell), Math.floor((P[v * 3 + 2] - z0) / cell));
+      let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(v);
+    }
+    g = new Float32Array(n);
+    for (let v = 0; v < n; v++) {
+      const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2], ci = Math.floor((x - x0) / cell), cj = Math.floor((y - y0) / cell), ck = Math.floor((z - z0) / cell);
+      let best = far * far;
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) for (let dk = -1; dk <= 1; dk++) {
+        const a = grid.get(key(ci + di, cj + dj, ck + dk)); if (!a) continue;
+        for (const u of a) { if (u === v) continue; const dx = P[u * 3] - x, dy = P[u * 3 + 1] - y, dz = P[u * 3 + 2] - z, d2 = dx * dx + dy * dy + dz * dz; if (d2 < best) best = d2; }
+      }
+      g[v] = Math.sqrt(best);
+    }
+    pointGapCache.set(topo.normal, g);
+    return g;
+  }
   // items: [{ p, topo, list }] (list: a Set of the points to show, or null for all of them). Returns true when something on screen changed.
   // key: what the items are, when the caller can say it cheaply; the same key as last time leaves the buffers as they are. (The places
   // are in the world and do not depend on the camera, whose part is done in the shader: turning the view sends nothing again.)
@@ -65317,21 +61638,22 @@ const _Elements = (() => {
     const had = dotLayers[name];
     if (!n) { if (had) had.key = null; if (had && had.sprite.visible) { had.sprite.visible = false; had.sprite.count = 0; had.depth.visible = false; had.depth.count = 0; return true; } return false; }
     if (key && had && had.key === key && had.sprite.visible && n <= had.cap) return false;
-    const L = dotLayer(name, n), a = L.pos.array, na = L.nrm.array, P3 = [0, 0, 0];
+    const L = dotLayer(name, n), a = L.pos.array, na = L.nrm.array, ga = L.gapA.array, P3 = [0, 0, 0];
     L.key = key;
     let k = 0;
     for (const it of items) {
       it.p.mesh.updateWorldMatrix(true, false);
-      const M = it.p.mesh.matrixWorld, vn = pointNormals(it.topo);
+      const M = it.p.mesh.matrixWorld, vn = pointNormals(it.topo), gp = pointGaps(it.topo), sc = M.getMaxScaleOnAxis();
       _nm.getNormalMatrix(M);
       const put = (v) => {
+        ga[k] = gp[v] * sc;
         MEDIT.pointPosition(it.topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); a[k * 3] = _w.x; a[k * 3 + 1] = _w.y; a[k * 3 + 2] = _w.z;
         _n.set(vn[v * 4], vn[v * 4 + 1], vn[v * 4 + 2]).applyMatrix3(_nm).normalize(); na[k * 4] = _n.x; na[k * 4 + 1] = _n.y; na[k * 4 + 2] = _n.z; na[k * 4 + 3] = vn[v * 4 + 3];
         k++;
       };
       if (it.list) { let c = 0; const cap = it.cap || DRAW_MAX; for (const v of it.list) { if (++c > cap) break; put(v); } } else for (let v = 0; v < it.topo.nVert; v++) put(v);
     }
-    L.pos.needsUpdate = true; L.nrm.needsUpdate = true; L.sprite.count = k; L.sprite.visible = true; L.depth.count = k; L.depth.visible = true;
+    L.pos.needsUpdate = true; L.nrm.needsUpdate = true; L.gapA.needsUpdate = true; L.sprite.count = k; L.sprite.visible = true; L.depth.count = k; L.depth.visible = true;
     if (group && L.sprite.parent !== group) group.add(L.sprite);
     if (group && L.depth.parent !== group) group.add(L.depth);
     return true;
@@ -65725,6 +62047,22 @@ const _Elements = (() => {
     // what is drawn in the scene now: dots (sprites), wide lines (their count), fills (meshes) (tests/e2e-edit-marks.mjs)
     marks: () => {
       const out = { dots: 0, wide: 0, fills: 0, stale: 0, lines: 0, picked: total() };
+      out.dotPx = {};      // (the diameter the middle dot of each kind in the view is drawn at now, in CSS pixels: tests/e2e-edit-dot-size.mjs)
+      out.dotFull = Object.fromEntries(Object.entries(DOT).map(([k, D]) => [k, [D.px, D.min, DOT_GAP_SHARE[k]]]));      // (each kind's full size, least size and share of the gap)
+      for (const [k, L] of Object.entries(dotLayers)) {
+        if (!L.sprite.visible || !L.sprite.count) { out.dotPx[k] = null; continue; }
+        const D = DOT[k], h = lastH, p11 = Math.abs(camera.projectionMatrix.elements[5]) || 1, ortho = !!camera._isOrtho, vals = [];
+        const step = Math.max(1, Math.floor(L.sprite.count / 4000)), v3 = new THREE.Vector3();
+        for (let i = 0; i < L.sprite.count; i += step) {
+          v3.set(L.pos.array[i * 3], L.pos.array[i * 3 + 1], L.pos.array[i * 3 + 2]);
+          const c = v3.clone().project(camera); if (Math.abs(c.x) > 1 || Math.abs(c.y) > 1 || c.z > 1) continue;      // (only those in the view)
+          v3.applyMatrix4(camera.matrixWorldInverse);
+          const ppu = ortho ? h * p11 / 2 : h * p11 / (2 * Math.max(1e-9, -v3.z));
+          vals.push(Math.max(D.min, Math.min(D.px, L.gapA.array[i] * ppu * DOT_GAP_SHARE[k])));
+        }
+        vals.sort((a, b) => a - b); out.dotPx[k] = vals.length ? Math.round(vals[vals.length >> 1] * 100) / 100 : null;
+        (out.dotPxMax ||= {})[k] = vals.length ? Math.round(vals[vals.length - 1] * 100) / 100 : null;      // (the largest: a point with no other near it)
+      }
       for (const w of wires.values()) if (w.obj && w.obj.visible && w.obj.parent) out.lines++;      // (parts with their blue lines drawn)
       if (group) for (const o of group.children) {
         if (!o.visible) continue;

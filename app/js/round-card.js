@@ -14,7 +14,7 @@
 // the card puts the view back as it was, unless it was changed by hand meanwhile.
 import { fillRoundGrooves, outlineRevolve, sweepBelt, revolveLoops, sweepLoops } from './revolve.js?v=9';
 import { withUvs } from './meshops.js?v=19';
-import { sectionView } from './section-view.js?v=7';
+import { sectionView } from './section-view.js?v=8';      // (round-card: mirror toggle)
 
 export function installRoundCard(app) {
   const {
@@ -25,7 +25,7 @@ export function installRoundCard(app) {
   const DEF = { mode: 'exact', widthShare: 0.15, segments: 0, smooth: 30 };           // (segments 0: the part's own, or 64 for Make solid)
   const $i = (id) => document.getElementById(id);
   const pref = (k) => { const v = _Prefs.get('round.' + k); return v === undefined || v === null ? DEF[k] : v; };
-  let cur = null, timer = 0, busy = false, again = false, wired = false, view = null, scanSeq = 0;
+  let cur = null, timer = 0, busy = false, again = false, wired = false, view = null, scanSeq = 0, selTimer = 0, selTried = '';
   const sc = {};
 
   const sourceOf = (p) => {
@@ -72,6 +72,7 @@ export function installRoundCard(app) {
   // ── the preview ──
   const viewOf = () => view || (view = sectionView($i('rc-svg'), {
     clampY: 0,
+    mirrorY: () => (cur && cur.mode !== 'belt' && _Prefs.get('round.mirror') !== false ? 0 : null),      // (the other half of the part, drawn and not edited: a bolt reads as a bolt; the corner button switches it off)
     onEdit(shapes, fast, crossed) {
       const it = itNow(); if (!it) return;
       it.shapes = shapes || null; it.crossed = !!(shapes && crossed); preview(fast);
@@ -111,6 +112,7 @@ export function installRoundCard(app) {
   const axisName = (a) => (!a ? 'tilted' : Math.abs(Math.abs(a[0]) - 1) < 1e-9 ? 'X' : Math.abs(Math.abs(a[1]) - 1) < 1e-9 ? 'Y' : Math.abs(Math.abs(a[2]) - 1) < 1e-9 ? 'Z' : 'tilted');
   function marks() {
     const it = itNow(), on = !!(it && it.shapes), ed = !!(view && view.editing);
+    { const mb = $i('rc-mirror'); if (mb && cur) { const m = _Prefs.get('round.mirror') !== false; mb.hidden = cur.mode === 'belt'; mb.classList.toggle('is-on', m); mb.setAttribute('aria-pressed', String(m)); } }
     const r = $i('rc-edit-reset'); if (r) r.hidden = !on;
     const h = $i('rc-edit-hint'); if (h) h.textContent = on ? 'Built from the profile as edited by hand.' : '';      // (how to edit: the view's label)
     const b = $i('rc-edit'); if (b) b.classList.toggle('is-on', ed);
@@ -203,7 +205,7 @@ export function installRoundCard(app) {
     if (!cur || cur.mode === m || cur.op) return;
     cur.mode = m; _Prefs.set('round.mode', m);
     for (const it of cur.items) { it.shapes = null; it.before = null; it.crossed = false; }
-    viewOf().reset(null); cur.fit = true; preview();
+    viewOf().reset(null); cur.fit = true; preview(); marks();      // (marks: the mirror button goes for a belt)
   }
 
   const niceStep = (x) => { const e = Math.pow(10, Math.floor(Math.log10(x))), f = x / e; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * e; };
@@ -227,13 +229,20 @@ export function installRoundCard(app) {
     $i('rc-prev')?.addEventListener('click', () => step(-1));
     $i('rc-next')?.addEventListener('click', () => step(1));
     $i('rc-edit')?.addEventListener('click', () => { if (!cur) return; viewOf().setEdit(!view.editing); marks(); });
+    // the other half on or off (remembered); the view fits again, the points as they are
+    $i('rc-mirror')?.addEventListener('click', (e) => { e.currentTarget.blur(); if (!cur) return; _Prefs.set('round.mirror', _Prefs.get('round.mirror') === false); viewOf().fit(); marks(); });
     $i('rc-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.crossed = false; viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
     sec?.addEventListener('cmd-close', () => {
-      clearTimeout(timer); scanSeq++;
-      try { _wireLimit(null); } catch (_) {}
-      if (cur && cur.viewBefore && state.viewMode === 'wire') { try { setViewMode(cur.viewBefore); } catch (_) {} }
+      clearTimeout(timer); clearTimeout(selTimer); scanSeq++;
+      viewBack();
       cur = null;
     });
+  }
+
+  // the view as it was before Apply turned it to Wireframe (closing the card, or moving on to another part)
+  function viewBack() {
+    try { _wireLimit(null); } catch (_) {}
+    if (cur && cur.viewBefore && state.viewMode === 'wire') { try { setViewMode(cur.viewBefore); } catch (_) {} }
   }
 
   // ── open ──
@@ -261,9 +270,11 @@ export function installRoundCard(app) {
     }
     if (!items.length) { if (!o.quiet) toast(NAMES[mode], (skipped.length === 1 ? skipped[0].name + ' was left as it was: ' : 'None of the ' + skipped.length + ' parts fits: ') + (skipped[0].why || 'it could not be done'), 'warn', 7000); return { ok: false, why: skipped[0].why, skipped }; }
     clearTimeout(timer);
+    if (!o.quiet) viewBack();
+    selTried = '';
     const lead = items[0], wMax = lead.sizeMm * 0.5, wStep = niceStep(wMax / 250);
     cur = {
-      items, skipped, whole, mode, at: 0, op: null, fit: true,
+      items, skipped, whole, mode, sel: selKey(whole ? [] : picked), at: 0, op: null, fit: true,
       o: {
         width: o.width_mm >= 0 ? o.width_mm : round(pref('widthShare') * lead.sizeMm, wStep),
         axis: ['x', 'y', 'z'].includes(o.axis) ? o.axis : 'auto',
@@ -290,6 +301,25 @@ export function installRoundCard(app) {
     if (o.quiet) cur = null;
     return res;
   }
+  // The card is open and another part is selected (before or after Apply): it moves to the new selection, as if opened there, in
+  // the same mode. A step already applied stays as it is (its own undo); the view goes back from Wireframe; the new part starts at
+  // Apply again. Nothing selected keeps the card where it is; a selection that does not fit is said once and the card stays.
+  const selKey = (ids) => ids.map(String).sort().join('|');
+  function follow() {
+    if (!cur || !_CmdCards.isOpen('round')) return;
+    const ids = [...state.selected], key = selKey(ids);
+    if (!ids.length || key === cur.sel || key === selTried) return;
+    clearTimeout(selTimer);
+    selTimer = setTimeout(async () => {
+      if (!cur || !_CmdCards.isOpen('round')) return;
+      if (busy) { follow(); return; }
+      const now = [...state.selected], k = selKey(now);
+      if (!now.length || k === cur.sel || k === selTried) return;
+      selTried = k;
+      clearTimeout(timer);
+      await open({ ids: now, mode: cur.mode });
+    }, 120);
+  }
   function summary() {
     const it = itNow(), r = it && it.last; if (!r || !r.ok) return null;
     return { mode: cur.mode, axis: cur.mode === 'outline' ? (cur.o.axis || 'auto') : undefined, parts: cur.items.length, left_out: cur.skipped.length, name: it.name, grooves: r.grooves || 0, segments: r.N, edited: !!it.shapes,
@@ -302,5 +332,5 @@ export function installRoundCard(app) {
     roundCardState: () => (cur ? { mode: cur.mode, options: { ...cur.o }, applied: !!cur.op, edit: !!(view && view.editing), summary: summary() } : null),
     roundCardSection: () => { const it = itNow(); return it && it.last && it.last.ok ? it.last.after : null; },
   });
-  return { open };
+  return { open, follow };
 }

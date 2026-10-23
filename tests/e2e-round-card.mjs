@@ -73,18 +73,33 @@ try {
   const o = await evalJS(`window.__moAgent.roundCard({ ids: [${pid}], mode: 'exact', width_mm: 7 })`);
   await sleep(400);
   check('the card opens on Remove ridges', o && o.ok && await evalJS("!document.querySelector('.section-cmd[data-cmd=\"round\"]').hidden") && /remove ridges/.test(await evalJS("document.getElementById('rc-title').textContent")), o);
-  check('the preview draws the profile before and after', await evalJS("document.querySelectorAll('#rc-svg path:not(.pf-grid)').length === 3 && !!document.querySelector('#rc-svg .pf-grid') && document.querySelector('#rc-svg .pf-was').getAttribute('d').length > 20 && document.querySelector('#rc-svg .pf-now').getAttribute('d').length > 20"));
+  check('the preview draws the profile before and after', await evalJS("document.querySelectorAll('#rc-svg path:not(.pf-grid):not(.pf-mirror):not(.pf-axis)').length === 3 && !!document.querySelector('#rc-svg .pf-grid') && document.querySelector('#rc-svg .pf-was:not(.pf-mirror)').getAttribute('d').length > 20 && document.querySelector('#rc-svg .pf-now:not(.pf-mirror)').getAttribute('d').length > 20"));
+  // the other half of the part, mirrored across the axis: drawn (lighter), with nothing on it to pick, and the axis between the halves
+  const mir = await evalJS(`(() => { const svg = document.getElementById('rc-svg'), a = svg.querySelector('.pf-now:not(.pf-mirror)'), b = svg.querySelector('.pf-now.pf-mirror');
+    const ys = (el) => [...el.getAttribute('d').matchAll(/[ML]([-0-9.e]+) ([-0-9.e]+)/g)].map(m => +m[2]);
+    const ya = ys(a), yb = ys(b);
+    return { has: !!b && !!svg.querySelector('.pf-axis'), same: ya.length === yb.length && ya.every((y, i) => Math.abs(y + yb[i]) < 1e-3), inert: getComputedStyle(b).pointerEvents === 'none', light: +getComputedStyle(b).opacity < 0.6 }; })()`);
+  check('the other half is drawn mirrored across the axis, lighter, and cannot be picked', mir.has && mir.same && mir.inert && mir.light, mir);
+  // the button in the corner switches the other half off and on again (remembered)
+  const mBtn = () => evalJS("(() => { const b = document.getElementById('rc-mirror'); return { shown: !!b && !b.hidden && b.offsetWidth > 0, on: !!b && b.classList.contains('is-on'), paths: document.querySelectorAll('#rc-svg .pf-mirror, #rc-svg .pf-axis').length }; })()");
+  const m0 = await mBtn();
+  await evalJS("document.getElementById('rc-mirror').click(); true"); await sleep(200);
+  const m1 = await mBtn();
+  await evalJS("document.getElementById('rc-mirror').click(); true"); await sleep(200);
+  const m2 = await mBtn();
+  check('the corner button switches the other half off and back on', m0.shown && m0.on && m0.paths === 4 && !m1.on && m1.paths === 0 && m2.on && m2.paths === 4, { m0, m1, m2 });
+  if (process.env.PREVIEW_SHOT) { const c = await evalJS("(() => { const r = document.getElementById('rc-svg').parentElement.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height, scale: 2 }; })()"); fs.writeFileSync(process.env.PREVIEW_SHOT, Buffer.from((await send('Page.captureScreenshot', { format: 'png', clip: c })).data, 'base64')); }      // (PREVIEW_SHOT=file.png: a picture of the preview)
   const txt = await evalJS("document.getElementById('rc-stats').textContent");
   check('the readout: the axis, the grooves filled, the segments it had', /Axis[XYZ]/.test(txt) && /Grooves filled[4-6]/.test(txt) && /the part had 48/.test(txt), txt);
   check('nothing changed before Apply', (await sum()).triangles === s0.triangles);
   // Make solid and back: the preview changes and comes back
-  const dEx = await evalJS("document.querySelector('#rc-svg .pf-now').getAttribute('d')");
+  const dEx = await evalJS("document.querySelector('#rc-svg .pf-now:not(.pf-mirror)').getAttribute('d')");
   await evalJS("document.querySelector('#rc-mode button[data-m=\"outline\"]').click()"); await sleep(300);
-  const dSo = await evalJS("document.querySelector('#rc-svg .pf-now').getAttribute('d')");
+  const dSo = await evalJS("document.querySelector('#rc-svg .pf-now:not(.pf-mirror)').getAttribute('d')");
   check('Solid: the title and the preview change', dSo !== dEx && /make solid/.test(await evalJS("document.getElementById('rc-title').textContent")));
   // Make solid's axis: shown in Solid only; another axis is another profile; Auto gives the first one back
   const axis = await evalJS(`(async () => {
-    const wait = () => new Promise(r => setTimeout(r, 250)), d = () => document.querySelector('#rc-svg .pf-now').getAttribute('d');
+    const wait = () => new Promise(r => setTimeout(r, 250)), d = () => document.querySelector('#rc-svg .pf-now:not(.pf-mirror)').getAttribute('d');
     const shown = !document.getElementById('rc-axis-row').hidden, auto = d(), out = {};
     for (const a of ['x', 'y', 'z']) { document.querySelector('#rc-axis button[data-a="' + a + '"]').click(); await wait(); out[a] = { d: d(), on: document.querySelector('#rc-axis button.active').dataset.a, st: window.__moAgent.roundCardState() }; }
     document.querySelector('#rc-axis button[data-a="auto"]').click(); await wait();
@@ -92,7 +107,7 @@ try {
   })()`);
   check('Solid: the axis row shows, each axis is picked and changes the profile, and Auto gives it back', axis.shown && axis.active && axis.differ && axis.autoBack && axis.axes.join() === 'x,y,z', axis);
   await evalJS("document.querySelector('#rc-mode button[data-m=\"exact\"]').click()"); await sleep(300);
-  check('and back to Ridges', (await evalJS("document.querySelector('#rc-svg .pf-now').getAttribute('d')")) === dEx && await evalJS("document.getElementById('rc-axis-row').hidden"));
+  check('and back to Ridges', (await evalJS("document.querySelector('#rc-svg .pf-now:not(.pf-mirror)').getAttribute('d')")) === dEx && await evalJS("document.getElementById('rc-axis-row').hidden"));
   // Segments around: 16 and the estimate drops
   const est48 = (await evalJS('window.__moAgent.roundCardState().summary')).triangles_after;
   await evalJS("window.__moAgent.roundCardSet('segments', 16)"); await sleep(200);
@@ -100,8 +115,9 @@ try {
   check('Segments around 16: fewer triangles in the estimate', est16 < est48 && est16 > 0, { est48, est16 });
   // the editor: a handle dragged to 3 px from a corner of the profile as it was lands on it
   await evalJS("document.getElementById('rc-edit').click()"); await sleep(200);
+  check('Edit points: the points are on the edited half only (none on the mirrored one)', await evalJS("(() => { const c = [...document.querySelectorAll('#rc-svg .pf-pt')]; return c.length > 0 && c.every(e => +e.getAttribute('cy') <= 1e-6); })()"));
   // a corner of the profile as it was: the first point of the grey outline as drawn (x, −y)
-  const corner = await evalJS("(() => { const m = document.querySelector('#rc-svg .pf-was').getAttribute('d').match(/M([-0-9.e]+) ([-0-9.e]+)/); return [+m[1], -m[2]]; })()");
+  const corner = await evalJS("(() => { const m = document.querySelector('#rc-svg .pf-was:not(.pf-mirror)').getAttribute('d').match(/M([-0-9.e]+) ([-0-9.e]+)/); return [+m[1], -m[2]]; })()");
   const drag = await evalJS(`(async () => {
     const svg = document.getElementById('rc-svg'), c = svg.querySelector('.pf-pt'), M = svg.getScreenCTM();
     const at = (x, y) => { const p = svg.createSVGPoint(); p.x = x; p.y = -y; const q = p.matrixTransform(M); return [q.x, q.y]; };
