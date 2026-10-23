@@ -5086,7 +5086,7 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 #vp-animate-pill.has-play,#vp-notes-pill.has-play{padding-right:var(--space-md)}
 #vp-notes-pill[hidden],#vp-notes-pill [hidden]{display:none}
 #vp-notes-pill.is-paused .anim-pill-dot{animation:none;opacity:.55}
-body.anim-mode #vp-mode-bar{display:none}
+body.anim-mode #vp-mode-bar,body.photo-mode #vp-mode-bar{display:none}      /* (no Edit mesh in Animate or Photo mode) */
 #vp-animate-pill[hidden],#vp-animate-pill [hidden]{display:none}
 .anim-pill-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:currentColor;animation:anim-pill-pulse 1.4s ease-in-out infinite}
 #vp-animate-pill.is-paused .anim-pill-dot{animation:none;opacity:.55}
@@ -5582,7 +5582,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .section-cmd[data-cmd="elements"] #el-weld-row[hidden]{display:none}
 /* Edit mesh's bar: one column at the right edge under the view cube, in the same dark pill as the toolbar on the left. The brush size,
    the weld distance and the count of what is picked do not fit in it: they stand out to its left, beside the button they go with. */
-.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:0;padding:var(--space-sm);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:var(--surface-shadow-bar),var(--surface-ring)}
+.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:0;padding:var(--space-xs);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:var(--surface-shadow-bar),var(--surface-ring)}
 .vpc.el-bar[hidden]{display:none}
 .vpc.el-bar{transition:opacity 220ms var(--ease-out),translate 260ms cubic-bezier(.2,.9,.3,1)}
 .vpc.el-bar.is-out{opacity:0;translate:14px 0;pointer-events:none}
@@ -5592,8 +5592,8 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .vpc.el-bar:not(.is-out):not([hidden])>*:nth-child(n+4){animation-delay:120ms}
 @keyframes el-bar-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.vpc.el-bar{transition:none}.vpc.el-bar:not(.is-out):not([hidden])>*{animation:none}}
-.el-bar .el-row{display:grid;grid-template-columns:30px;gap:var(--space-xs)}
-.el-bar .vpb-sep{flex:0 0 1px;height:1px;width:18px;margin:var(--space-md) auto;background:var(--bar-sep)}      /* (the same room above a divider as below it, and between the buttons of a group) */
+.el-bar .el-row{display:grid;grid-template-columns:30px;gap:var(--space-2xs)}      /* (the padding, gaps and dividers of the left bar, .vp-bar-col: the two bars match) */
+.el-bar .vpb-sep{flex:0 0 1px;height:1px;width:18px;margin:var(--space-xs) auto;background:var(--bar-sep)}
 .el-bar .el-row>button,.el-ibtn{position:relative;width:30px;height:30px;display:grid;place-items:center;padding:0;background:transparent;border:0;border-radius:var(--r-sm);color:var(--icon-fg-float);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
 .el-bar .el-row>button>span,.el-ibtn>span{display:none}
 .el-bar .el-row [data-lucide],.el-bar .el-row .lucide,.el-bar .el-row svg{width:var(--icon-btn-float);height:var(--icon-btn-float);display:block}
@@ -7929,6 +7929,10 @@ window.moSplash = function (msg, pct) {
         <div class="prim-row" title="Studio: the HDRI and the sun as they are. Product, Dramatic and Soft add a rim light behind the model and a fill beside the camera, which follow the view">
           <label class="prim-label" for="photo-lights">Lights</label>
           <select id="photo-lights" class="mac-sel"><option value="studio">Studio</option><option value="product" selected>Product</option><option value="dramatic">Dramatic</option><option value="soft">Soft</option></select>
+        </div>
+        <div class="prim-row" title="Bright studio panels in the reflections: metal and gloss show clean light streaks instead of a dim blur">
+          <label class="prim-label" for="photo-softbox">Softboxes</label>
+          <label class="prim-toggle"><input type="checkbox" id="photo-softbox" checked><span></span></label>
         </div>
         <div class="prim-row" title="Edge smoothness, samples for occlusion and glow, and how many frames a still view is refined over">
           <label class="prim-label" for="photo-quality">Quality</label>

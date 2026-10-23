@@ -77,6 +77,10 @@ try {
   await call('set_camera_view', { view: 'perspective' });
 
   // — Photo mode —
+  const emActive = () => evalJS("document.getElementById('el-bar') ? !document.getElementById('el-bar').hidden : false");
+  await evalJS("(() => { const p = window.state.parts.find(p => p && !p.deleted && p.mesh); window.state.selected = new Set([p.partId]); return true; })()");
+  await evalJS("window.__moElements.mode('faces')"); await sleep(800);
+  const emWas = await emActive();
   check('a value it does not know is refused', !(await call('photo_mode', { lights: 'disco' })).ok);
   check('and Photo mode was not switched on for it', !(await evalJS("document.body.classList.contains('photo-mode')")));
   check('an effect out of range is refused', !(await call('photo_mode', { effects: { dof: 300 } })).ok);
@@ -85,6 +89,17 @@ try {
   const edgesShown = () => evalJS("(() => { let n = 0, v = 0; window._appFns.camera.parent.traverse(o => { if (o.userData && o.userData.cadEdge) { n++; if (o.material && o.material.visible !== false && o.visible !== false) v++; } }); return [n, v]; })()");
   { const e = await edgesShown(); console.log('edge lines (all, drawn):', e); check('no edge lines are drawn in Photo mode', e[0] > 0 && e[1] === 0, e); }
   check('photo_mode switches Photo mode on', r.ok && r.j && r.j.on === true && await evalJS("document.body.classList.contains('photo-mode')"), r);
+  check('Photo mode leaves Edit mesh', emWas && !(await emActive()), { emWas });
+  await evalJS("window.__moElements.mode('faces')"); await sleep(600);
+  check('and Edit mesh cannot be opened in it', !(await emActive()));
+  check('the softboxes are on by default', r.j.softboxes === true, r.j);
+  const envId = () => evalJS('window._appFns.camera.parent.environment ? window._appFns.camera.parent.environment.uuid : null');
+  const e1 = await envId();
+  let rs = await call('photo_mode', { softboxes: false });
+  const e2 = await envId();
+  check('softboxes false puts the plain studio back as the environment', rs.ok && rs.j.softboxes === false && e2 && e2 !== e1 && (await el('photo-softbox', 'checked')) === false, { e1, e2 });
+  rs = await call('photo_mode', { softboxes: true });
+  check('and true makes them again', rs.ok && rs.j.softboxes === true && (await envId()) !== e2);
   check('the card shows the lights, backdrop, finish and quality', (await el('photo-lights')) === 'dramatic' && (await el('photo-backdrop')) === 'dark' && (await el('photo-look')) === 'aces' && (await el('photo-quality')) === 'draft');
   check('depth of field is on at 70', (await el('photo-fx-dof', 'checked')) === true && Number(await el('photo-dof')) === 70 && r.j.effects.dof === 70, r.j && r.j.effects);
   check('grain is off, vignette 40, occlusion 50', (await el('photo-fx-grain', 'checked')) === false && r.j.effects.grain === 0 && r.j.effects.vignette === 40 && r.j.effects.ao === 50, r.j && r.j.effects);

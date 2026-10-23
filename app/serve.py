@@ -1038,6 +1038,7 @@ MCP_TOOLS += [
                           "look": {"type": "string", "enum": ["neutral", "agx", "aces"], "description": "The tone curve: neutral, agx (soft) or aces (contrast)."},
                           "quality": {"type": "string", "enum": ["draft", "good", "best", "max"], "description": "Samples per picture: draft is quickest, max the smoothest."},
                           "floor": {"type": "boolean", "description": "The floor disc under the model."},
+                          "softboxes": {"type": "boolean", "description": "Bright studio panels in the reflections (default on): metal and gloss show clean light streaks. Off: the plain studio, darker and with more contrast on shiny flat surfaces."},
                           "effects": {"type": "object", "description": "Strength of each effect, 0 to 100 (0 or false switches it off): contact (shadow where the model touches the floor), refl (reflection in the floor), ao (ambient occlusion), glow, fringe (colour split at the corners), vignette, grain, dof (depth of field: how soft what is out of focus gets).",
                                       "properties": {k: {"type": ["number", "boolean"]} for k in ["contact", "refl", "ao", "glow", "fringe", "vignette", "grain", "dof"]}},
                           "focus": {"type": "string", "enum": ["pivot", "centre"], "description": "Where the depth of field is sharp: the camera's pivot, or the model under the middle of the view."},

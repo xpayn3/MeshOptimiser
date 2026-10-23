@@ -13075,6 +13075,7 @@ const _ClaudeBridge = (() => {
       const pick = (id, v) => { const s = el(id); if (v != null && s && s.value !== v) { s.value = v; fire(s, 'change'); } };
       pick('photo-lights', a.lights); pick('photo-backdrop', a.backdrop); pick('photo-look', a.look); pick('photo-quality', a.quality);
       if (typeof a.floor === 'boolean') { const c = el('photo-stage'); if (c && c.checked !== a.floor) { c.checked = a.floor; fire(c, 'change'); } }
+      if (typeof a.softboxes === 'boolean') { const c = el('photo-softbox'); if (c && c.checked !== a.softboxes) { c.checked = a.softboxes; fire(c, 'change'); } }
       for (const k of Object.keys(fx)) {
         const v = fx[k], want = v === true ? true : v !== false && Number(v) > 0;
         const sw = el('photo-fx-' + k); if (sw && sw.checked !== want) { sw.checked = want; fire(sw, 'change'); }
@@ -13102,7 +13103,7 @@ const _ClaudeBridge = (() => {
       for (const k of FX) effects[k] = el('photo-fx-' + k)?.checked ? Number(val('photo-' + k)) || 0 : 0;
       const f = _Photo.focus;
       return text({ on: _Photo.on, lights: val('photo-lights'), backdrop: val('photo-backdrop'), look: val('photo-look'), quality: val('photo-quality'),
-        floor: !!el('photo-stage')?.checked, effects, focus: f ? (f.name || 'a picked point') : 'orbit pivot', ...(focusMiss ? { focus_note: focusMiss } : {}),
+        floor: !!el('photo-stage')?.checked, softboxes: !!el('photo-softbox')?.checked, effects, focus: f ? (f.name || 'a picked point') : 'orbit pivot', ...(focusMiss ? { focus_note: focusMiss } : {}),
         note: 'Take a screenshot or render_image now (with photo_mode true it keeps these settings). photo_mode with on false leaves Photo mode.' });
     },
     async undo(a) {
@@ -16832,6 +16833,41 @@ const _Photo = (() => {
     soft:     { env: 1.25, key: 0.45, rim: 0.5, fill: 0.55 },
   };
   let lightsKind = 'product', rim = null, fillLight = null;
+  // Softboxes in the reflections. A polished or metal surface shows the room it reflects, and the loft studio, made into an environment
+  // 256 px a side, reflected as a dim grey blur. Photo mode makes its own environment: the loft as it is, with four bright panels in it as
+  // a product photographer hangs them (a large key box above and in front, a long strip overhead, two tall strips behind on either side),
+  // at 512 px a side, so metal shows clean bright shapes and streaks along its curves. Made once per visit (about 20 ms), put back on
+  // leaving. The Softboxes switch of the card leaves them out (the loft as it is).
+  let softEnv = null, softOn = true;
+  function softApply() {
+    if (!on || !scene || !kept) return;
+    if (softOn && !softEnv && kept.env) {
+      try { softEnv = softboxEnv(kept.env); scene.environment = softEnv; } catch (e) { softEnv = null; console.warn('[photo] the softboxes could not be made:', e); }
+    } else if (!softOn && softEnv) {
+      if (scene.environment === softEnv) scene.environment = kept.env;
+      try { softEnv.dispose(); } catch (_) {}
+      softEnv = null;
+    }
+    lib.restart(); requestRender();
+  }
+  function softboxEnv(base) {
+    const s = new THREE.Scene();
+    s.background = base;
+    s.backgroundIntensity = 0.75;      // (the room a little darker round the panels: the light the panels add, taken back from it)
+    // (the environment's own axes: +Y is up, the camera's side of a model is not known here, so the key is in front of +Z)
+    const box = (w, h, k, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k, k * 0.97), side: THREE.DoubleSide }));
+      m.position.set(x, y, z); m.lookAt(0, 0, 0); s.add(m);
+    };
+    box(6, 3, 10, -5, 7, 6);      // key
+    box(16, 1.2, 6, 0, 10, -1);   // overhead strip
+    box(1, 11, 8, 9, 1.5, -5);    // strips behind, either side
+    box(1, 11, 8, -9, 1.5, -5);
+    _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
+    const rt = _hdriPmrem.fromScene(s, 0, 0.1, 100, { size: 512 });
+    s.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+    return rt.texture;
+  }
   function rigAdd() {
     if (rim || !camera) return;
     rim = new THREE.DirectionalLight(0xf2f5ff, 0); rim.name = '__photoRim';
@@ -17008,6 +17044,7 @@ const _Photo = (() => {
         // the environment that was chosen, to put back (a bundled photo, or one of the presets; a file the user loaded cannot be)
         photo: document.querySelector('.hdri-photo.active')?.dataset.hdriFile || null, preset: state._customHdri ? null : state.hdriPreset,
       };
+      try { if (_Elements.isActive()) _CmdCards.close('elements'); } catch (_) {}      // (out of Edit mesh first: Photo mode is for looking)
       on = true;
       document.body.classList.add('photo-mode');
       _CAD_EDGE_MAT.visible = false;      // (no CAD edge lines in a photo: they are a drawing aid, and read as ink on a rendered surface)
@@ -17020,10 +17057,11 @@ const _Photo = (() => {
         document.querySelector('.hdri-photo[data-hdri-file="' + LOFT + '"]')?.click();
         try { await state._hdriJob; } catch (_) {}
         if (!on) return;      // (switched off again while the light was loading)
+        kept.env = scene.environment;
       }
       state.shadowsEnabled = true; const sh = $('toggle-shadows'); if (sh) { sh.checked = true; sh.disabled = true; sh.title = 'Photo mode keeps the shadows on'; }      // (switching them off under the Photo floor left it with a shadow map that was gone: the renderer logged "binding should be available")
       _applyShadows();
-      rigAdd(); applyLights();
+      rigAdd(); applyLights(); softApply();
       kept.bgNode = scene.backgroundNode || null;
       scene.backgroundNode = stage.backdrop();
       contactSig = '';
@@ -17047,6 +17085,11 @@ const _Photo = (() => {
     _CAD_EDGE_MAT.visible = true;
     if (floor) { scene.remove(floor); try { floor.geometry.dispose(); floor.material.dispose(); } catch (_) {} floor = null; }
     rigRemove();
+    if (softEnv) {      // (the loft as it was, before the HDRI that was chosen before Photo mode is put back below)
+      if (scene && scene.environment === softEnv) scene.environment = (kept && kept.env) || null;
+      try { softEnv.dispose(); } catch (_) {}
+      softEnv = null;
+    }
     const k = kept; kept = null;
     if (scene) scene.backgroundNode = k ? k.bgNode : null;
     { const sh = $('toggle-shadows'); if (sh) { sh.disabled = false; sh.removeAttribute('title'); } }
@@ -17149,6 +17192,7 @@ const _Photo = (() => {
     });
     if ($('photo-lights')) $('photo-lights').value = lightsKind;
     $('photo-stage')?.addEventListener('change', (e) => { stageOn = e.target.checked; placeFloor(); requestRender(); });
+    $('photo-softbox')?.addEventListener('change', (e) => { softOn = e.target.checked; softApply(); });
     $('photo-save')?.addEventListener('click', save);
     $('photo-row-dof')?.classList.toggle('is-off', !lib.isOn('dof'));
     $('photo-fx-dof')?.addEventListener('change', () => { focusShow(); if (!lib.isOn('dof')) focusArm(false); });
@@ -26343,6 +26387,24 @@ async function _exportFbxBinary(root, opts) {
   // colors) but C4D-compatible.
   const meshIdxToGeomIdx = new Map();
   const meshIdxToMatIdx = new Map();      // per-mesh material index
+  // The pictures of the materials, embedded in the file as Blender and Cinema 4D write them: a Video (the picture's bytes in Content,
+  // and its file name) and a Texture that shows it, connected to the material's DiffuseColor or NormalMap. The colour map and the normal
+  // map go out (the normal map drawn OpenGL's way up, as Blender, Unity and three read it); the other maps of a PBR material have no
+  // slot in a Phong material.
+  const FBX_TEX = [['map', 'DiffuseColor', 'BaseColor'], ['normalMap', 'NormalMap', 'Normal']];
+  const fbxTex = new Map();               // texture → { idx, tex, kind, flipGreen, file, mime, bytes }
+  const _fbxMapsOf = (mat) => FBX_TEX.filter(([k]) => mat && mat[k] && mat[k].isTexture && mat[k].image)
+    .map(([k, prop, kind]) => {
+      const t = mat[k];
+      let e = fbxTex.get(t);
+      if (!e) {
+        // (a normal map whose green is not turned in the scene is drawn the DirectX way: written turned)
+        const flipGreen = kind === 'Normal' && !!(mat.normalScale && (mat.normalScale.y < 0) === (mat.normalScale.x < 0));
+        e = { idx: fbxTex.size, tex: t, kind, flipGreen };
+        fbxTex.set(t, e);
+      }
+      return [prop, e];
+    });
   const perMeshMats = [];                 // [{ r, g, b }, ...] one entry per colour (see below)
   const _binMatByColor = new Map();       // "r,g,b" → index in perMeshMats
   const bakedGeoms = [];   // index → { meshNodeIndex, baked }
@@ -26377,18 +26439,28 @@ async function _exportFbxBinary(root, opts) {
       continue;
     }
     const { r, g, b } = _fmx ? _fmx.colours[0] : _binResolveColor(nodes[i]);
+    const _maps = _fbxMapsOf(Array.isArray(nodes[i].obj.material) ? nodes[i].obj.material[0] : nodes[i].obj.material);
     // One material per colour, shared by the meshes that wear it. (This used
     // to write one per mesh, on the belief that Cinema 4D could not build a
     // file in which models share a material. That was read off files it
     // refused for another reason, the file id; with that put right it loads
     // shared materials, as it always did from the ASCII writer: 778 meshes
     // came in with 778 materials, now with the scene's own few dozen.)
-    const _mk = r.toFixed(4) + ',' + g.toFixed(4) + ',' + b.toFixed(4);
+    const _mk = r.toFixed(4) + ',' + g.toFixed(4) + ',' + b.toFixed(4) + _maps.map(([prop, e]) => '|' + prop + ':' + e.idx).join('');      // (with its maps: two white materials with different pictures stay two)
     let _mIdx = _binMatByColor.get(_mk);
-    if (_mIdx === undefined) { _mIdx = perMeshMats.length; _binMatByColor.set(_mk, _mIdx); perMeshMats.push({ r, g, b }); }
+    if (_mIdx === undefined) { _mIdx = perMeshMats.length; _binMatByColor.set(_mk, _mIdx); perMeshMats.push({ r, g, b, maps: _maps }); }
     meshIdxToMatIdx.set(i, _mIdx);
   }
 
+  if (fbxTex.size) {
+    let tUndo = null;
+    try {
+      tUndo = setExportTextureFormats(root);      // (each picture in the format of its own file: texformat.js)
+      for (const e of fbxTex.values()) { e.mime = (e.tex.userData && e.tex.userData.mimeType) || 'image/png'; e.file = 'Texture_' + e.idx + '_' + e.kind + (e.mime === 'image/jpeg' ? '.jpg' : '.png'); }
+    } finally { if (tUndo) tUndo(); }
+    const got = new Map((await _objTextureFiles([...fbxTex.values()])).map(f => [f.name, f.blob]));
+    for (const e of fbxTex.values()) { const b = got.get(e.file); e.bytes = b ? new Uint8Array(await b.arrayBuffer()) : null; }
+  }
   const safeName = (s) => (s || 'unnamed').replace(/["\\]/g, '_').replace(/[\x00-\x1f]/g, '_');
 
   // Choose a binary type code per "Properties70 P-record" entry. The first
@@ -26747,6 +26819,17 @@ async function _exportFbxBinary(root, opts) {
   const geomBlocks = [];
   const modelBlocks = [];
   const matBlocks = [];
+  const texBlocks = [], vidBlocks = [];
+  const texWritten = [...fbxTex.values()].filter(e => e.bytes);
+  if (texWritten.length) {
+    const defs = tree.find(n => n.name === 'Definitions');
+    const cnt = defs.children.find(c => c.name === 'Count');
+    if (cnt) cnt.props[0].value += 2;
+    defs.children.push(
+      { name: 'ObjectType', props: [{ type: 'S', value: 'Texture' }], children: [{ name: 'Count', props: [{ type: 'I', value: texWritten.length }] }] },
+      { name: 'ObjectType', props: [{ type: 'S', value: 'Video' }], children: [{ name: 'Count', props: [{ type: 'I', value: texWritten.length }] }] });
+  }
+  const TEX_ID_BASE = 500000000, VID_ID_BASE = 600000000;
 
   for (let gi = 0; gi < bakedGeoms.length; gi++) {
     const { nodeIdx, baked } = bakedGeoms[gi];
@@ -26982,11 +27065,44 @@ async function _exportFbxBinary(root, opts) {
     });
   }
 
+  for (const e of texWritten) {
+    const stem = e.file.replace(/\.[^.]+$/, '');
+    vidBlocks.push({
+      name: 'Video',
+      props: [{ type: 'L', value: VID_ID_BASE + e.idx }, { type: 'S', value: stem + '\x00\x01Video' }, { type: 'S', value: 'Clip' }],
+      children: [
+        { name: 'Type', props: [{ type: 'S', value: 'Clip' }] },
+        { name: 'Properties70', props: [], children: [P('Path', 'KString', 'XRefUrl', '', e.file), P('RelPath', 'KString', 'XRefUrl', '', e.file)] },
+        { name: 'UseMipMap', props: [{ type: 'I', value: 0 }] },
+        { name: 'Filename', props: [{ type: 'S', value: e.file }] },
+        { name: 'RelativeFilename', props: [{ type: 'S', value: e.file }] },
+        { name: 'Content', props: [{ type: 'R', value: e.bytes }] },
+      ],
+    });
+    texBlocks.push({
+      name: 'Texture',
+      props: [{ type: 'L', value: TEX_ID_BASE + e.idx }, { type: 'S', value: stem + '\x00\x01Texture' }, { type: 'S', value: '' }],
+      children: [
+        { name: 'Type', props: [{ type: 'S', value: 'TextureVideoClip' }] },
+        { name: 'Version', props: [{ type: 'I', value: 202 }] },
+        { name: 'TextureName', props: [{ type: 'S', value: stem + '\x00\x01Texture' }] },
+        { name: 'Properties70', props: [], children: [P('UseMaterial', 'bool', '', '', 1)] },
+        { name: 'Media', props: [{ type: 'S', value: stem + '\x00\x01Video' }] },
+        { name: 'FileName', props: [{ type: 'S', value: e.file }] },
+        { name: 'RelativeFilename', props: [{ type: 'S', value: e.file }] },
+        { name: 'ModelUVTranslation', props: [{ type: 'D', value: 0 }, { type: 'D', value: 0 }] },
+        { name: 'ModelUVScaling', props: [{ type: 'D', value: 1 }, { type: 'D', value: 1 }] },
+        { name: 'Texture_Alpha_Source', props: [{ type: 'S', value: 'None' }] },
+        { name: 'Cropping', props: [{ type: 'I', value: 0 }, { type: 'I', value: 0 }, { type: 'I', value: 0 }, { type: 'I', value: 0 }] },
+      ],
+    });
+  }
+
   // Order matches Blender's FBX exporter exactly. C4D's scene-construction
   // pass walks Objects in document order resolving cross-references —
   // NodeAttribute MUST come before Model that references it.
   tree.push({ name: 'Objects', props: [], children:
-    [...naBlocks, ...geomBlocks, ...modelBlocks, ...matBlocks]
+    [...naBlocks, ...geomBlocks, ...modelBlocks, ...matBlocks, ...texBlocks, ...vidBlocks]
   });
 
   // ── Connections ─────────────────────────────────────────────────────────
@@ -27032,6 +27148,13 @@ async function _exportFbxBinary(root, opts) {
           { type: 'L', value: childId },
         ]});
       }
+    }
+  }
+  for (const e of texWritten) conns.push({ name: 'C', props: [{ type: 'S', value: 'OO' }, { type: 'L', value: VID_ID_BASE + e.idx }, { type: 'L', value: TEX_ID_BASE + e.idx }] });
+  for (let mi = 0; mi < perMeshMats.length; mi++) {
+    for (const [prop, e] of perMeshMats[mi].maps || []) {
+      if (!e.bytes) continue;
+      conns.push({ name: 'C', props: [{ type: 'S', value: 'OP' }, { type: 'L', value: TEX_ID_BASE + e.idx }, { type: 'L', value: MAT_ID_BASE + mi }, { type: 'S', value: prop }] });
     }
   }
   tree.push({ name: 'Connections', props: [], children: conns });
@@ -27725,20 +27848,46 @@ function _exportObjStreaming(root, mtlBaseName) {
   // materials by hex color (any two meshes with the same color share one mtl
   // entry) and emit the .mtl as a parallel Blob so the caller can download
   // both files together.
-  const matByHex = new Map();    // hex int → { name, r, g, b, metalness, roughness }
+  // A material with pictures is an entry of its own (its colour and its maps), so two white materials with different maps stay apart.
+  // Each picture is written once, as a file beside the .obj named after it (<name>_BaseColor.jpg, <name>_Normal.png, ...), and the
+  // .mtl points at it: map_Kd the colour, norm and map_Bump the normal map (Blender reads either as a normal map), map_Pr, map_Pm and
+  // map_d the roughness, metalness and opacity of the PBR extension. The pictures themselves are encoded by the caller (_objTextureFiles).
+  const matByHex = new Map();    // key (colour, and the maps) → { name, r, g, b, metalness, roughness, maps }
+  const texFiles = new Map();    // texture → { file, kind, tex, flipGreen }
+  const usedTexNames = new Set();
+  const OBJ_TEX = [['map', 'BaseColor'], ['normalMap', 'Normal'], ['roughnessMap', 'Roughness'], ['metalnessMap', 'Metallic'], ['alphaMap', 'Opacity']];
+  const texFile = (t, kind, mat) => {
+    let f = texFiles.get(t);
+    if (!f) {
+      const mime = (t.userData && t.userData.mimeType) || 'image/png';
+      const ext = mime === 'image/jpeg' ? 'jpg' : 'png';
+      let stem = (mtlBaseName || 'model') + '_' + kind, n = 1;
+      while (usedTexNames.has(stem + (n > 1 ? '_' + n : ''))) n++;
+      stem += n > 1 ? '_' + n : ''; usedTexNames.add(stem);
+      // (a normal map whose green is not turned in the scene is drawn the DirectX way: written turned, as OBJ readers expect OpenGL's)
+      const flipGreen = kind === 'Normal' && !!(mat.normalScale && (mat.normalScale.y < 0) === (mat.normalScale.x < 0));
+      f = { file: stem + '.' + ext, kind, tex: t, mime, flipGreen };
+      texFiles.set(t, f);
+    }
+    return f.file;
+  };
   const matNameFor = (mat) => {
     if (!mat || !mat.color) return null;
     const hex = mat.color.getHex();
-    let entry = matByHex.get(hex);
+    const maps = OBJ_TEX.filter(([k]) => mat[k] && mat[k].isTexture && mat[k].image);
+    const key = maps.length ? hex + '|' + maps.map(([k]) => k + ':' + mat[k].uuid).join('|') : hex;
+    let entry = matByHex.get(key);
     if (!entry) {
-      const name = 'mat_' + hex.toString(16).padStart(6, '0');
+      let name = 'mat_' + hex.toString(16).padStart(6, '0');
+      if (maps.length) { let n = 1; for (const e of matByHex.values()) if (e.name === name || e.name.startsWith(name + '_tex')) n++; name += '_tex' + n; }
       entry = {
         name,
         r: mat.color.r, g: mat.color.g, b: mat.color.b,
         metalness: typeof mat.metalness === 'number' ? mat.metalness : 0,
         roughness: typeof mat.roughness === 'number' ? mat.roughness : 1,
+        maps: maps.map(([k, kind]) => [k, texFile(mat[k], kind, mat)]),
       };
-      matByHex.set(hex, entry);
+      matByHex.set(key, entry);
     }
     return entry.name;
   };
@@ -27919,10 +28068,43 @@ function _exportObjStreaming(root, mtlBaseName) {
       lines.push(`illum 2\n`);                   // diffuse + specular
       lines.push(`Pr ${_objFloat(e.roughness, 3)}\n`);
       lines.push(`Pm ${_objFloat(e.metalness, 3)}\n`);
+      for (const [k, file] of e.maps || []) {
+        if (k === 'map') lines.push(`map_Kd ${file}\n`);
+        else if (k === 'normalMap') lines.push(`norm ${file}\n`, `map_Bump -bm 1 ${file}\n`);
+        else if (k === 'roughnessMap') lines.push(`map_Pr ${file}\n`);
+        else if (k === 'metalnessMap') lines.push(`map_Pm ${file}\n`);
+        else if (k === 'alphaMap') lines.push(`map_d ${file}\n`);
+      }
     }
     mtlBlob = new Blob(lines, { type: 'text/plain' });
   }
-  return { objBlob, mtlBlob };
+  return { objBlob, mtlBlob, textures: [...texFiles.values()] };
+}
+
+// The pictures an OBJ export names in its .mtl, as files: each texture drawn at its own size and encoded in its own format (JPEG at
+// 0.92, as GLTFExporter does, or PNG). A normal map drawn the DirectX way has its green turned on the way out. A texture that only lives
+// on the graphics card (compressed, KTX2) has no picture to draw and is left out, and said so.
+async function _objTextureFiles(textures) {
+  const out = [], missed = [];
+  for (const f of textures || []) {
+    try {
+      const img = f.tex && f.tex.image;
+      const w = img && (img.naturalWidth || img.videoWidth || img.width), h = img && (img.naturalHeight || img.videoHeight || img.height);
+      if (!img || !w || !h || f.tex.isCompressedTexture) { missed.push(f.file); continue; }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const x = c.getContext('2d', { willReadFrequently: f.flipGreen });
+      if (img.data) {                                      // (raw pixels: a DataTexture)
+        const d = new Uint8ClampedArray(w * h * 4), src = img.data, ch = src.length / (w * h);
+        for (let i = 0, j = 0; i < w * h; i++, j += ch) { d[i * 4] = src[j]; d[i * 4 + 1] = ch > 1 ? src[j + 1] : src[j]; d[i * 4 + 2] = ch > 2 ? src[j + 2] : src[j]; d[i * 4 + 3] = ch > 3 ? src[j + 3] : 255; }
+        x.putImageData(new ImageData(d, w, h), 0, 0);
+      } else x.drawImage(img, 0, 0, w, h);
+      if (f.flipGreen) { const id = x.getImageData(0, 0, w, h), d = id.data; for (let i = 1; i < d.length; i += 4) d[i] = 255 - d[i]; x.putImageData(id, 0, 0); }
+      const blob = await new Promise(r => c.toBlob(r, f.mime, f.mime === 'image/jpeg' ? 0.92 : undefined));
+      if (blob) out.push({ name: f.file, blob }); else missed.push(f.file);
+    } catch (e) { console.warn('[obj] picture not written:', f.file, e); missed.push(f.file); }
+  }
+  if (missed.length) { try { toast('Some pictures not written', missed.join(', ') + ': they live only on the graphics card (compressed) or could not be read.', 'warn', 6000); } catch (_) {} }
+  return out;
 }
 
 // ── Save / restore scene state ──────────────────────────────────────────────
@@ -30369,9 +30551,13 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       // string-length limit doesn't apply regardless of model size.
       // Returns { objBlob, mtlBlob } — the MTL is null if the model has no
       // material colors. Download both so colors survive reimport.
-      const { objBlob, mtlBlob } = _exportObjStreaming(root, base);
+      let tUndo = null, out;
+      try { tUndo = setExportTextureFormats(root); out = _exportObjStreaming(root, base); }      // (each picture in the format of its own file: texformat.js)
+      finally { if (tUndo) tUndo(); }
+      const { objBlob, mtlBlob, textures } = out;
       downloadBlob(objBlob, base + '.obj');
       if (mtlBlob) downloadBlob(mtlBlob, base + '.mtl');
+      for (const f of await _objTextureFiles(textures)) downloadBlob(f.blob, f.name);
     }
     else if (format === 'fbx') {
       // Two export paths: binary FBX 7.4 (default — Blender, Maya, Houdini,
@@ -30434,7 +30620,9 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       // requires STORED to allow mmap'd reads).
       const { USDZExporter } = await import('three/addons/exporters/USDZExporter.js');
       const exp = new USDZExporter();
-      const arr = await exp.parseAsync(root);
+      // (three's writer draws every picture at most 1024 px on its long side unless told: a 2K or 4K map went out at a quarter or a
+      // sixteenth of its pixels. Pictures keep their size up to 4096, the most iPhones and iPads take in AR Quick Look.)
+      const arr = await exp.parseAsync(root, { maxTextureSize: 4096 });
       downloadBlob(new Blob([arr], { type: 'model/vnd.usdz+zip' }), base + '.usdz');
     }
     else if (format === 'stl') {
@@ -32249,7 +32437,7 @@ function wireUI() {
       note.classList.toggle('is-warn', none);
       note.innerHTML = none
         ? ($('exp-selected')?.checked ? 'Nothing is selected.' : 'There are no visible parts to export.')
-        : `Saves as <b>${escapeHtml((_exportFileStem(_expNameInput?.value) || _exportDefaultStem()) + '.' + m.ext)}</b>${fmt === 'obj' ? ' and a .mtl for the colours' : ''}`;
+        : `Saves as <b>${escapeHtml((_exportFileStem(_expNameInput?.value) || _exportDefaultStem()) + '.' + m.ext)}</b>${fmt === 'obj' ? ' and a .mtl for the colours, with the pictures of the materials beside it' : ''}`;
     }
   }
 
@@ -37190,14 +37378,22 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // before. Without it a scene held both directions and nothing said which: an OBJ or FBX written from a glTF model, or a GLB
   // from an OBJ one, had every map upside down.
   if ((format === 'obj' || format === 'fbx' || format === '3mf' || format === 'usd' || format === 'dae') && !(sceneRoot.userData && sceneRoot.userData.__moUvTop)) {
-    const seenG = new Set(), seenT = new Set();
+    const seenG = new Set(), seenT = new Set(), seenM = new Set();
     for (const m of meshList) {
       const g = m.geometry;
       if (g && !seenG.has(g)) {
         seenG.add(g);
         for (const k of ['uv', 'uv1', 'uv2', 'uv3']) { const a = g.attributes[k]; if (!a || a.itemSize !== 2) continue; for (let i = 0; i < a.count; i++) a.setY(i, 1 - a.getY(i)); a.needsUpdate = true; }
       }
-      for (const mat of [].concat(m.material || [])) for (const key in mat) { const t = mat[key]; if (t && t.isTexture && !seenT.has(t)) { seenT.add(t); t.flipY = false; if (t.image) t.needsUpdate = true; } }   // a map whose picture has not arrived (or never will: a file the FBX names but does not hold) gets flipY when it loads; marking it now leaves WebGPU a texture to upload with no image, and every frame fails
+      for (const mat of [].concat(m.material || [])) for (const key in mat) { const t = mat[key]; if (t && t.isTexture && !seenT.has(t)) { seenT.add(t); t.flipY = false; if (t.image) t.needsUpdate = true; } }
+      // A normal map's green says which way is up in its picture, and the up of the UVs has just been turned over: its green is turned
+      // with them (normalScale.y, as three's glTF reader sets it for glTF's own V from the top). Without it every bump of an OBJ, FBX,
+      // 3MF, USD or Collada model pointed the other way (tests/e2e-normal-map-direction.mjs).
+      for (const mat of [].concat(m.material || [])) {
+        if (!mat || seenM.has(mat)) continue; seenM.add(mat);
+        if (mat.normalMap && mat.normalScale) mat.normalScale.y = -mat.normalScale.y;
+        if (mat.clearcoatNormalMap && mat.clearcoatNormalScale) mat.clearcoatNormalScale.y = -mat.clearcoatNormalScale.y;
+      }   // a map whose picture has not arrived (or never will: a file the FBX names but does not hold) gets flipY when it loads; marking it now leaves WebGPU a texture to upload with no image, and every frame fails
     }
   }
   // Copies that arrive as separate geometries (a file from another tool writes
@@ -37844,6 +38040,11 @@ function _parseMtl(txt) {
     else if (k === 'tr' && Number.isFinite(nums[0])) cur.d = 1 - nums[0];
     else if (k === 'ns' && Number.isFinite(nums[0])) cur.ns = nums[0];
     else if (k === 'map_kd' && v) cur.mapKd = v.split(/\s+/).pop();
+    else if ((k === 'norm' || k === 'map_bump' || k === 'bump') && v && !cur.norm) cur.norm = v.split(/\s+/).pop();      // (a normal map: norm, or map_Bump as Blender writes it)
+    else if (k === 'map_pr' && v) cur.mapPr = v.split(/\s+/).pop();
+    else if (k === 'map_pm' && v) cur.mapPm = v.split(/\s+/).pop();
+    else if (k === 'pr' && Number.isFinite(nums[0])) cur.pr = nums[0];
+    else if (k === 'pm' && Number.isFinite(nums[0])) cur.pm = nums[0];
   }
   return lib;
 }
@@ -37871,9 +38072,21 @@ function _objApplyMtl(root, text, file) {
         if (e.kd && m.color) m.color.setRGB(e.kd[0], e.kd[1], e.kd[2]);
         if (e.d < 1) { m.opacity = e.d; m.transparent = true; }
         if (e.ns != null && 'shininess' in m) m.shininess = e.ns;
-        if (e.mapKd) {
-          const f = byName.get(base(e.mapKd));
-          if (f) { let t = tex.get(f); if (!t) { t = loader.load(URL.createObjectURL(f)); t.colorSpace = THREE.SRGBColorSpace; tex.set(f, t); } m.map = t; m.needsUpdate = true; }
+        const pic = (name, srgb) => {
+          const f = name && byName.get(base(name)); if (!f) return null;
+          const key = f.name + '|' + srgb;
+          let t = tex.get(key); if (!t) { t = loader.load(URL.createObjectURL(f)); t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.userData.fileName = f.name; tex.set(key, t); }
+          return t;
+        };
+        if (e.mapKd) { const t = pic(e.mapKd, true); if (t) { m.map = t; m.needsUpdate = true; } }
+        // The normal map (OpenGL's way, as the file's own V runs: the UV turn on import turns its green with the UVs) and, on a
+        // standard material, the roughness and metalness (PBR extension: Pr, Pm and their maps).
+        if (e.norm && 'normalMap' in m) { const t = pic(e.norm, false); if (t) { m.normalMap = t; m.needsUpdate = true; } }
+        if (m.isMeshStandardMaterial) {
+          if (e.pr != null) m.roughness = e.pr;
+          if (e.pm != null) m.metalness = e.pm;
+          if (e.mapPr) { const t = pic(e.mapPr, false); if (t) { m.roughnessMap = t; m.needsUpdate = true; } }
+          if (e.mapPm) { const t = pic(e.mapPm, false); if (t) { m.metalnessMap = t; m.needsUpdate = true; } }
         }
       }
     });
@@ -42120,10 +42333,11 @@ function _openMaterialEditor(info) {
       stepToVal: (s) => MIN + (s / STEPS) * RANGE,
       valToStep: (v) => Math.round((Math.max(MIN, Math.min(MAX, v ?? 1)) - MIN) / RANGE * STEPS),
       format: (v) => ({ value: v.toFixed(2), unit: '' }),
-      initialValue: mat.normalScale.x ?? 1,
+      initialValue: mat.normalScale.x ?? 1,      // (y has the same size, turned or not: see onChange)
       promptTitle: 'Normal scale',
       onChange: (v) => {
-        mat.normalScale.set(v, v);
+        const turned = (mat.normalScale.y < 0) !== (mat.normalScale.x < 0) && mat.normalScale.y !== 0;      // (the green's turn is kept: a glTF's is -1)
+        mat.normalScale.set(v, turned ? -v : v);
         mat.needsUpdate = true;
         requestRender();
         _refreshAll();
@@ -42223,6 +42437,10 @@ function _openMaterialEditor(info) {
     try {
       const newTex = await _loadTexture(f, cs);
       const oldTex = mat[propName];
+      // (a normal map where there was none: its green turned, as a glTF's is, since the scene's V runs from the top; one that replaces
+      // another keeps the strength and the turn the old one had)
+      if (!oldTex && propName === 'normalMap' && mat.normalScale) mat.normalScale.y = -Math.abs(mat.normalScale.x || 1);
+      if (!oldTex && propName === 'clearcoatNormalMap' && mat.clearcoatNormalScale) mat.clearcoatNormalScale.y = -Math.abs(mat.clearcoatNormalScale.x || 1);
       try { oldTex?.dispose?.(); } catch (_) {}
       mat[propName] = newTex;
       // A colour map is multiplied by the material's colour: under a dark one (the Rubber preset is #222428) white lettering comes out
@@ -64780,6 +64998,7 @@ const _Elements = (() => {
     if (m === 'model') { if (active) _CmdCards.close('elements'); else syncCard(); return; }
     if (!MODES.includes(m)) return;
     if (state._animMode) return;      // (no Edit mesh while the Animate window is open)
+    if (_Photo.on) { try { toast('Edit mesh', 'Leave Photo mode first.', 'info', 1800); } catch (_) {} return; }      // (nor in Photo mode: it is for looking, and its marks would be in the picture)
     if (!active && !(state.selected && state.selected.size)) { try { toast('Edit mesh', 'Select a part first.', 'info', 1800); } catch (_) {} return; }      // (nothing to edit: the button is grey and the keys 1 2 3 do nothing either)
     const was = mode; mode = m; save();
     // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first)
@@ -65493,7 +65712,7 @@ const _Elements = (() => {
     const was = active, m = mode;
     const r = fn.apply(this, a);
     if (was) {
-      const back = () => { if (!active && state.selected && state.selected.size && !state._animMode) { try { setMode(MODES.includes(m) ? m : 'faces'); } catch (_) {} } };
+      const back = () => { if (!active && state.selected && state.selected.size && !state._animMode && !_Photo.on) { try { setMode(MODES.includes(m) ? m : 'faces'); } catch (_) {} } };
       if (r && typeof r.then === 'function') r.then(back, () => back()); else setTimeout(back, 0);
       back();
     }

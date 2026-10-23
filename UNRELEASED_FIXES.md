@@ -11,6 +11,32 @@ Last release in the changelog: **v0.36.1**.
 
 ## New
 
+- ![new][new] **Photo mode has softboxes in its reflections.** Metal and gloss reflected the studio as a dim grey blur; Photo mode
+  now lights reflections from the studio with four bright panels hung in it (a key box, an overhead strip, two tall strips behind),
+  made twice as sharp (512 px a side), so chrome shows clean streaks along its curves. A Softboxes switch on the card (on) and
+  `softboxes` in Claude's `photo_mode` leave them out: shiny flat surfaces read a little lighter with them.
+  Where: `app/js/app.js`, `_Photo` softboxEnv / softApply; `app/index.html` #photo-softbox; `app/serve.py` photo_mode.
+  Test: `tests/e2e-mcp-photo.mjs`. Judged by eye on the Scania engine (with and without, same camera).
+
+- ![new][new] **OBJ and FBX exports carry their textures.** An OBJ is written with each picture beside it (<name>_BaseColor.jpg,
+  <name>_Normal.png, ...) and its .mtl points at them: `map_Kd`, `norm` and `map_Bump` (the normal map), `map_Pr`, `map_Pm`, `map_d`.
+  A binary FBX carries the colour map and the normal map inside it (Video and Texture, connected to DiffuseColor and NormalMap, as
+  Blender writes them). Pictures keep their size and their own format; a normal map drawn the DirectX way goes out OpenGL's way.
+  Before, both formats left every picture out (a 2048 px textured square came out as a 14 KB FBX). The app's OBJ reader now also
+  reads `norm` / `map_Bump` and the PBR values and maps of a .mtl, so an OBJ goes out and comes back with its normal map.
+  Where: `app/js/app.js`, `_exportObjStreaming`, `_objTextureFiles`, `_exportFbxBinary`, `_parseMtl` / `_objApplyMtl`.
+  Test: `tests/e2e-export-texture-size.mjs` (OBJ files and .mtl lines; FBX opened again, both maps at 2048 px),
+  `tests/e2e-normal-map-direction.mjs` (GLB → OBJ and GLB → FBX → open, bumps the right way). Checked by hand in Blender 5.2: OBJ
+  and FBX both import with the colour map on Base Color and the normal map through a Normal Map node, at 2048 px.
+
+- ![polish][polish] **No Edit mesh in Photo mode.** Entering Photo mode leaves Edit mesh, its mode button is hidden, and it cannot be
+  opened until Photo mode is left (as in Animate). Its marks were drawn into the picture.
+  Where: `app/js/app.js` `_Photo` enter, `_Elements` setMode; `app/index.html` `body.photo-mode #vp-mode-bar`. Test: `tests/e2e-mcp-photo.mjs`.
+
+- ![polish][polish] **The Edit mesh bar on the right has the spacing of the tool bar on the left**: 4 px round the buttons, 2 px
+  between them and 4 px above and below a divider (it had 6, 4 and 8, so it stood wider and looser). Both are 38 px wide now.
+  Where: `app/index.html`, `.vpc.el-bar`, `.el-bar .el-row`, `.el-bar .vpb-sep`. Measured in headless Chrome; not checked in the user's own window.
+
 - ![new][new] **Claude can set up Photo mode.** A new MCP tool, `photo_mode`, switches it on or off and sets the lights, backdrop,
   finish, quality, floor, every effect (depth of field, occlusion, glow, vignette, grain, colour fringe, contact shadow, floor
   reflection) and the focus (the pivot, the middle of the view, or a part by id or name); the Photo mode card shows what was set.
@@ -28,6 +54,25 @@ Last release in the changelog: **v0.36.1**.
   difference Finer shadows makes has not been judged by eye yet.
 
 ## Fixed
+
+- ![fix][fix] **Bumps of an OBJ, FBX, 3MF, USD or Collada model pointed the wrong way** (a normal map's dents came out as bumps and
+  its bumps as dents, lit from the wrong side). The app turns those files' UVs to run from the top, as glTF's do, and now turns the
+  normal maps' green with them (as three's glTF reader does for a GLB). DirectX maps (`_Normal_DX`) come out right too.
+  Cause: the UV turn on import (`_ingestSceneRoot`) left `normalScale.y` at +1; a GLB's is -1.
+  Where: `app/js/app.js`, `_ingestSceneRoot` (the turn of V).
+  Test: `tests/e2e-normal-map-direction.mjs` (a square lit from the side its normal map leans to: GLB, OBJ, OBJ with a DirectX map).
+
+- ![fix][fix] **The material editor's Normal scale turned a GLB's bumps inside out, and a normal map loaded into the editor came in
+  inside out.** The knob wrote the same value to both directions of the map, wiping the turned green a glTF has; a map put on where
+  there was none got +1. The knob now keeps the turn, and a new map is given the turn the scene's UVs need.
+  Where: `app/js/app.js`, the Normal scale scrubber and `_setTexFromFile`. Not covered by a test (the editor was not driven); the
+  sign rule is the one the import test checks.
+
+- ![fix][fix] **A USDZ export shrank every picture to 1024 px** (a 4K map came out at a sixteenth of its pixels). Pictures keep their
+  size up to 4096, the most AR Quick Look takes.
+  Cause: three's USDZExporter has `maxTextureSize: 1024` unless told otherwise.
+  Where: `app/js/app.js`, the USDZ branch of the export.
+  Test: `tests/e2e-export-texture-size.mjs` (2048 px colour and normal maps through GLB, meshopt, the web preset, glTF and USDZ).
 
 - ![fix][fix] **Photo mode pictures had the CAD edge lines on them** (thin dark outlines round every face, like ink on a render).
   Photo mode now hides them, and they come back when it is left.
@@ -48,6 +93,17 @@ Last release in the changelog: **v0.36.1**.
   checked by eye on the table model, and textures made inside the app (baked, painted) are not covered.
 
 ## Found, not fixed yet
+
+- **`e2e-photo-average` fails 7 of 15 on 2026-10-23**: the average of a still view reaches 15 to 25 of its 32 frames before the test
+  stops waiting, so the checks that need all 32 fail. The same with the new softboxes switched off, so not from them. Looks like time
+  (SwiftShader, with another session's headless Chrome running on the same machine); not compared with v0.36.1, which would need a
+  second server. Not looked into further.
+
+- **ASCII FBX (the export dialog's ASCII option) still leaves the pictures out**; the binary FBX (the default) carries them. Found
+  2026-10-23.
+
+- **Blender marks an OBJ's normal map as sRGB** instead of Non-Color (its OBJ importer does it whatever the .mtl says; it reads
+  `map_Bump`, not `norm`), which bends the normals a little. The FBX's comes in as Non-Color. Nothing to do in the .mtl.
 
 - **`e2e-edit-sheet` gives different results from run to run since the three.js r186 upgrade**: the sheet's dots seen from the front or
   the back, and the picked edges, are counted as not drawn in some runs (the dark pixels with the dots on equal those with them off). The
