@@ -3324,9 +3324,9 @@ module.exports = {
         ['terms', [
           ['Spin', 'Turns round an axis (X, Y or Z, clockwise or counter) at 1 to 600 turns a minute.'],
           ['Swing', 'Rocks to and fro round an axis by an angle of 1 to 180 degrees, in 0.2 to 20 seconds.'],
-          ['Noise', 'A shake of the position and the turn: wave, smooth random or steps. Set how far it moves (up to 50 percent of the part) and turns (up to 90 degrees) on each axis, how fast, how fine and how rough, with a seed and a dice for a new one.'],
-          ['Path', 'A trip along a circle, a figure of eight, a rounded square, a wave or a line, in the plane you choose, from 5 to 200 percent of the part’s size.'],
-          ['Oscillate', 'A to-and-fro on all three axes at once, for pistons, rockers and pumps. Pick a wave: {{Sine}}, {{Piston}} (the real motion of a crank turning a rod, with a rod ratio to tune), {{Eased}} or {{Triangle}}. Set how far it shifts (percent of the part’s size) and turns (degrees) on each axis, and the time of one to-and-fro. {{Axis lag}} makes each axis run behind the one before, which turns X and Y into a circle or an ellipse; {{Turn lag}} runs the turn behind the shift. It loops for ever, with no seam.'],
+          ['Noise', 'A shake of the position and the turn: wave, smooth random or steps. Set how far it moves (in mm) and turns (up to 90 degrees) on each axis, how fast, how fine and how rough, with a seed and a dice for a new one.'],
+          ['Path', 'A trip along a circle, a figure of eight, a rounded square, a wave or a line, in the plane you choose, from 5 mm to 1 m across.'],
+          ['Oscillate', 'A to-and-fro on all three axes at once, for pistons, rockers and pumps. Pick a wave: {{Sine}}, {{Piston}} (the real motion of a crank turning a rod, with a rod ratio to tune), {{Eased}} or {{Triangle}}. Set how far it shifts (mm) and turns (degrees) on each axis, and the time of one to-and-fro. {{Axis lag}} makes each axis run behind the one before, which turns X and Y into a circle or an ellipse; {{Turn lag}} runs the turn behind the shift. It loops for ever, with no seam.'],
         ]],
         ['p', 'Spin and path also loop: {{Loop}}, {{Ping-pong}} or {{Once}}, with two handles on a small timeline for where in the cycle it starts and ends. A part or group can have one layer of each kind, and the layers add up. A group moves all its parts together, about the middle of the group.'],
         ['h', 'Play it'],

@@ -309,6 +309,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.37.1** — A History card that goes back to any step, a Model inspector that draws the faults of a mesh on the model, an Animate window that keeps what you move and copies its clips, Settings built as cards with a say in what a scene file keeps, right-click menus on the toolbar, and 58 fixes.
+
+- ![new][new] **History card:** every step Ctrl+Z goes back to, newest first; a click puts the model at any of them; Clear history asks with a slider.
+- ![new][new] **Model inspector:** redrawn, and *Show in the view* draws open edges, wrong-way faces, doubled and empty triangles, pinched corners and more on the model.
+- ![new][new] **Animate:** positions in mm, copy and paste of clips (Ctrl+C, Ctrl+V and a right-click menu), trim picked clips together, Space plays anywhere, a part you move keeps its place.
+- ![new][new] **Settings:** cards with a live summary and tiles for many switches; *Saved in a scene file* says what a file keeps (shadows start off every time).
+- ![new][new] **Toolbar:** right-click menus on Animate, Library, Materials, the search and the "…"; texture size and WebP in the export window.
+
 **v0.37.0 (Vršič)** — A Section view that cuts the whole scene with a plane, a Photo mode with a toolbar, lens rings and softboxes, Remove thickness for thin-walled parts, textures in OBJ and FBX exports, a Profile that shapes its outline, a Properties card of one height, and 17 fixes.
 
 - ![new][new] **Section view:** one plane through the scene, the cut drawn flat; Explode works, nothing can be picked.

@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 10460
+  "chars": 10475
  },
  {
   "slug": "move-the-view",
@@ -485,7 +485,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Make parts or groups spin, swing, shake, travel along a path or oscillate like a piston, watch it on a timeline, and take it out as a video or inside a GLB.",
-  "chars": 4651
+  "chars": 4587
  },
  {
   "slug": "library",
