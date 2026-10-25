@@ -1,7 +1,7 @@
-// node tests/e2e-paste-group.mjs [model, default inbox/GearboxAssy.glb]
+// node tests/e2e-delete-undo.mjs [model, default inbox/GearboxAssy.glb]
 //
-// Copies a group of the model's own tree (click its row, Ctrl+C) and pastes it (Ctrl+V): the result must be one new group, "<name> copy", with a
-// copy of every part in it, the way other 3D apps do it; the tree keeps its groups (no flat list); undo takes the copy away, redo brings it back.
+// Deletes groups and parts of the model's own tree, then undoes and redoes in quick bursts: the page keeps answering, each undo brings
+// the parts back, the tree stays whole, and everything undone ends with every part as it was loaded.
 // Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
@@ -10,7 +10,7 @@ const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9352, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-delundo-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0, curId = ''; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };

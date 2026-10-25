@@ -25,7 +25,7 @@ const metrics = (orig, files) => [...py('metrics.py', [orig, ...files]).matchAll
 const bOp = (op, src, dst, params) => { const o = py('blender-op.py', [op, src, dst, JSON.stringify(params || {})]); return +(o.match(/OP_SECONDS ([\d.]+)/) || [0, NaN])[1]; };
 
 // ── the app ──
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(os.tmpdir(), 'cdp-compare-' + Date.now())}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-unsafe-webgpu', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(os.tmpdir(), 'cdp-compare-' + Date.now())}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-unsafe-webgpu', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pend = new Map();
 const send = (m, p = {}) => new Promise((res, rej) => { const i = ++id; pend.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
 const ev = async (e) => { const r = await send('Runtime.evaluate', { expression: e, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };

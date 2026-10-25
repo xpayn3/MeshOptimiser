@@ -39,9 +39,9 @@ At the top is **Properties**. With nothing selected it describes the whole scene
 - **Selection bar**: Not a card: it sits under **Properties** and stays at the top while the cards scroll. It counts the selected parts and has icon buttons for All, Invert, Similar, Hide, Isolate and Delete. See [Select parts](meshoptimiser://docs/select-parts).
 - **Quick fixes**: **Empty parts**, **Duplicates**, **Degenerate**, **Floating…**, **Empty groups** and **Normals**, one press each.
 - **Exploded view**: Moves the parts apart. See [Exploded view](meshoptimiser://docs/exploded-view).
-- **Heavy parts, Filters & flags**: **Heavy parts** lists the heaviest parts (with a small count of how many there are). **Filters & flags** marks low-poly parts and slivers.
+- **Heavy parts, Filters & flags**: **Heavy parts** lists the heaviest parts (with a small count of how many there are), and a part with more than 10,000 triangles also carries a **heavy** tag in the Properties card. **Filters & flags** marks low-poly parts and slivers.
 - **Measurements**: Only shown while there is a measurement.
-- **Pick parts**: Sets how close a part has to look to the selected ones to count as similar.
+- **Select similar**: Similarity sets how close a part has to look to the selected ones to count as similar.
 - **Delete small parts**: The size threshold, a look at what it would catch, and the button that deletes it. See [Delete small parts](meshoptimiser://docs/delete-small-parts).
 - **Notes, Photo mode, Scene**: At the bottom of the sidebar, in that order. **Scene** holds the display units, up axis, scene scale, grid cell size, shadows and the background. An **Animation** card follows while Animate is on.
 

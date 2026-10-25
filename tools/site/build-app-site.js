@@ -31,7 +31,7 @@ const ORIGIN = (process.env.SITE_ORIGIN || 'https://xpayn3.github.io/MeshOptimis
 // the features page shows these categories, up to six features each with an icon; the accordion lists every feature by name
 const SHOWCASE = [
   { title: 'Open and convert', note: 'Import', names: ['Reads the whole assembly', 'Finds repeats', 'Rebuilds the surfaces', 'You set the tessellation', 'Smooth from the CAD surfaces', 'Compresses'] },
-  { title: 'Clean up and optimise', note: 'Make it light', names: ['Smart optimise', 'Fasteners', 'Select hidden parts', 'Remove hidden faces', 'Quick remesh (B)', 'Fit to budget'] },
+  { title: 'Clean up and optimise', note: 'Make it light', names: ['Smart optimise', 'Fasteners', 'Select hidden parts', 'Remove hidden faces', 'Quick decimate (B)', 'Fit to budget'] },
   { title: 'Repair and tidy', note: 'Make it right', names: ['Remove holes', 'Remove floating pieces', 'Repair mesh', 'Split', 'Stacked copies', 'Align to floor'] },
   { title: 'Edit mesh', note: 'Go inside', names: ['Points, edges, polygons', 'Click, Box, Brush', 'Move what you picked', 'Dissolve', 'Weld and Fill', 'Planarize and Straighten'] },
   { title: 'Find and organise', note: 'Big assemblies', names: ['Built for big assemblies', 'Search and filters', 'Search (Shift + C)', 'Batch rename (F2)', 'Select by rule', 'Typo-proof part search'] },

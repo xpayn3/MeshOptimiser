@@ -15,7 +15,7 @@ const ROOT = path.resolve(path.dirname(new globalThis.URL(import.meta.url).pathn
 const MODEL = process.argv[2] || path.join(ROOT, 'inbox/benchmark/nist/NIST-PMI-STEP-Files/nist_ctc_01_asme1_ap242-e1.stp');
 const PORT = 9363, URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(os.tmpdir(), 'cdp-brepfill-' + Date.now())}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(os.tmpdir(), 'cdp-brepfill-' + Date.now())}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pend = new Map();
 const send = (m, p = {}) => new Promise((res, rej) => { const i = ++id; pend.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
 const ev = async (e) => { const r = await send('Runtime.evaluate', { expression: e, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };

@@ -1,15 +1,14 @@
 // node tests/e2e-pivot-orient.mjs [model, default inbox/GearboxAssy.glb]
 //
-// The Transform panel with several parts selected, in the real app in headless Chrome (software WebGL2, no window shown): the fields
-// are open, a field shows the number when every part has it and "mixed" only when they differ, a number typed in goes to each part
-// on its own and leaves its other numbers alone, one part selected afterwards reads the same number, and Undo takes it back.
-// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed and Node 22+.
+// Align axes (orientPivotsTo), in the real app in headless Chrome (software WebGL2, no window shown): turns each part's own X, Y and Z
+// and the vertices the other way, so every part looks exactly as it did; Undo puts the axes and the vertices back.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9337, PROFILE = process.env.TEMP + '/cdp-profile-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -28,7 +27,7 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 950, deviceScaleFactor: 1, mobile: false });
-  await send('Page.navigate', { url: 'http://localhost:4242/index.html?t=' + Date.now() });
+  await send('Page.navigate', { url: 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html?t=' + Date.now() });
   for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
   await sleep(1500);
   await evalJS("document.getElementById('welcome-close')?.click()");
@@ -70,9 +69,11 @@ try {
     };
   };
   const run = async (mode) => {
-    await evalJS(`document.getElementById('vp-cmd-host') && _appFns._Actions.run ? _appFns._Actions.run('pivotOrient') : 0`);
+    // (the command of the search: it opens the Pivot card on its Orientation tab; the old line asked for _Actions.run, which does not exist, so the card stayed shut)
+    await evalJS(`(() => { const a = _appFns._Actions.list.find(x => x.id === 'pivotOrient'); if (a) a.run(); })()`);
     await sleep(400);
-    await evalJS(`document.querySelector('.section-cmd[data-cmd="pivot"] [data-orient="${mode}"]').click()`);
+    ok(await evalJS(`(() => { const c = document.querySelector('.section-cmd[data-cmd="axis"]'); return !c.hidden && !!c.querySelector('[data-pv-pane="orient"]:not([hidden])'); })()`), mode + ': the Pivot card is open on its Orientation tab');
+    await evalJS(`document.querySelector('.section-cmd[data-cmd="axis"] [data-orient="${mode}"]').click()`);
     await sleep(900);
   };
   const shot = async (name) => { const r = await send('Page.captureScreenshot', { format: 'png' }); (await import('fs')).writeFileSync(process.env.SHOTDIR + '/' + name + '.png', Buffer.from(r.data, 'base64')); };
@@ -102,6 +103,55 @@ try {
   const back = await evalJS(`__p.snap(${JSON.stringify(ids)})`);
   ok(back.every((b, i) => same(b.pts, mid[i].pts)), 'Undo: the parts look the same');
   ok(back.some((b, i) => !same(b.q, mid[i].q, 1e-3)), 'Undo: the pivot turned back');
+  // One engine for every way of turning a pivot (axisSet). What the old turning routine skipped or could not do:
+  const openCard = async () => { await evalJS("(() => { const a = _appFns._Actions.list.find(x => x.id === 'pivotOrient'); if (a) a.run(); })()"); await sleep(700); };
+  {
+    // a part with uneven scale (and turned): its pivot goes to the scene axes and it looks as it did (it used to be skipped)
+    const id = ids[0];
+    await evalJS(`(() => { const p = state.parts.find(q => q.partId === ${id}); p.mesh.rotation.set(0.4, 0.3, 0.2); p.mesh.scale.set(1, 1.6, 1); p.mesh.updateMatrix(); p.mesh.updateMatrixWorld(true); })()`);
+    await pick([id]);
+    const h0 = await evalJS('state.history.length');
+    const chk = await keep('uneven scale', [id]);
+    await run('world');
+    const aft = await chk();
+    ok(same(aft[0].q, [0, 0, 0, 1]) || same(aft[0].q, [0, 0, 0, -1]), 'uneven scale: the pivot is turned to the scene axes (it was left alone before)', JSON.stringify(aft[0].q));
+    ok((await evalJS('state.history.length')) === h0 + 1, 'uneven scale: one undo step');
+  }
+  {
+    // a locked part keeps its pivot
+    const id = ids[1];
+    await pick([id]);
+    await evalJS(`(() => { const p = state.parts.find(q => q.partId === ${id}); p.locked = true; })()`);
+    const h0 = await evalJS('state.history.length');
+    const before = await evalJS(`__p.snap([${id}])`);
+    await run('view');
+    const after = await evalJS(`__p.snap([${id}])`);
+    ok(same(before[0].q, after[0].q, 1e-6) && same(before[0].pts, after[0].pts), 'a locked part keeps its pivot');
+    ok((await evalJS('state.history.length')) === h0, 'a locked part: no undo step');
+    await evalJS(`(() => { const p = state.parts.find(q => q.partId === ${id}); p.locked = false; })()`);
+  }
+  {
+    // Spread needs three parts: with two, nothing is turned and nothing is put on the undo list
+    await pick(ids.slice(0, 2));
+    const h0 = await evalJS('state.history.length');
+    const before = await evalJS(`__p.snap(${JSON.stringify(ids.slice(0, 2))})`);
+    await run('spread');
+    const after = await evalJS(`__p.snap(${JSON.stringify(ids.slice(0, 2))})`);
+    ok(before.every((b, i) => same(b.q, after[i].q, 1e-6)), 'Spread with two parts: the pivots stay');
+    ok((await evalJS('state.history.length')) === h0, 'Spread with two parts: no undo step');
+  }
+  {
+    // typed angles: the pivot is turned by exactly those (the scene's X, Y, Z), and the part looks as it did
+    const id = ids[2];
+    await pick([id]);
+    const chk = await keep('typed angles', [id]);
+    await openCard();
+    await evalJS("(() => { document.getElementById('pivot-x').value = '0'; document.getElementById('pivot-y').value = '0'; document.getElementById('pivot-z').value = '30'; document.getElementById('btn-pivot-apply').click(); })()");
+    await sleep(900);
+    const aft = await chk();
+    const exp = await evalJS('(() => { const T = _appFns.THREE; return new T.Quaternion().setFromEuler(new T.Euler(0, 0, Math.PI / 6, "XYZ")).toArray(); })()');
+    ok(same(aft[0].q, exp, 1e-3) || same(aft[0].q, exp.map(x => -x), 1e-3), 'typed angles 0, 0, 30: the pivot stands at 30 degrees about Z', JSON.stringify([aft[0].q, exp]));
+  }
   ok(errors.length === 0, 'no JavaScript errors', errors.slice(0, 3).join(' | '));
 } catch (e) { console.log('FAIL the run itself:', e.message); failed++; }
 finally { try { ws && ws.close(); } catch (_) {} chrome.kill(); }

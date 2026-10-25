@@ -19,7 +19,7 @@ const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application
 const port = 9341;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chrome = spawn(CHROME, [
-  '--headless=new', `--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check', `--user-data-dir=${mkdtempSync(join(tmpdir(), 'palette-'))}`,
+  '--headless=new', '--mute-audio', `--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check', `--user-data-dir=${mkdtempSync(join(tmpdir(), 'palette-'))}`,
   '--window-size=1500,1000', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', 'about:blank',
 ], { stdio: 'ignore' });
 let targets;

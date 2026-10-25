@@ -89,6 +89,7 @@
         <h2>Make it lighter</h2>
         <a href="../docs/read-the-numbers.html">How to read the numbers</a>
         <a href="../docs/heavy-parts.html">Heavy parts</a>
+        <a href="../docs/batch-folder.html">Batch optimise a folder</a>
         <a href="../docs/smart-optimise.html">Smart optimise</a>
         <a href="../docs/delete-small-parts.html">Delete small parts</a>
         <a href="../docs/select-hidden-parts.html">Select hidden parts</a>
@@ -97,7 +98,7 @@
         <a href="../docs/stacked-copies.html">Stacked copies</a>
         <a href="../docs/fill-holes.html">Remove holes</a>
         <a href="../docs/remove-floating-pieces.html">Remove floating pieces</a>
-        <a href="../docs/remesh.html" title="Remesh: Untriangulate and Triangulate">Remesh</a>
+        <a href="../docs/remesh.html" title="Triangulation: Untriangulate and Triangulate">Triangulation</a>
         <a href="../docs/split.html">Split</a>
         <a href="../docs/smart-fit.html">Smart fit</a>
         <a href="../docs/decimate.html">Decimate</a>
@@ -113,13 +114,13 @@
         <a href="../docs/view-modes.html">View modes</a>
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/face-colours.html" title="Several colours on one part">Several colours on one part</a>
-        <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
+        <a href="../docs/axis-center.html">The pivot of a part: Centre pivot</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
         <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
         <a href="../docs/remove-thickness.html">Remove thickness</a>
         <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
-        <a href="../docs/mend-mesh.html" title="Mend a mesh: Close cracks, Remove slivers, Patch holes">Mend a mesh</a>
-        <a href="../docs/reshape-mesh.html" title="Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more">Reshape a mesh</a>
+        <a href="../docs/mend-mesh.html" title="Mend a mesh: Close cracks, Remove slivers, Fill mesh holes">Mend a mesh</a>
+        <a href="../docs/reshape-mesh.html" title="Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more">Reshape a mesh</a>
         <a href="../docs/booleans.html" title="Union, Subtract and Intersect parts">Union, Subtract, Intersect</a>
         <a href="../docs/voxel-remesh.html" aria-current="page">Voxel remesh</a>
         <a href="../docs/round-parts.html" title="Round parts: Fill round grooves, Fill solid round, Belt">Round parts</a>
@@ -180,10 +181,13 @@
             <div><dt>Close gaps up to</dt><dd>Fills gaps narrower than this, as a share of the part’s size: the room between fins, a narrow slot. 0 fills nothing. Inside corners of a filled gap come out rounded.</dd></div>
           </dl>
           <p>The card says how many triangles the result has, how big one voxel is in millimetres and how wide a gap is closed. The settings are remembered.</p>
+          <h2 id="wrap-a-whole-assembly-in-one-skin">Wrap a whole assembly in one skin</h2>
+          <p>With two or more parts selected, the card has a switch, <span class="ui">Wrap parts into one</span>. Turn it on and the parts are made one part, called Wrap, and that part is rebuilt on one grid: one closed skin round the whole assembly, with everything inside it gone. Gaps up to 3 % of the length are bridged, so a housing with a small opening is wrapped over it. Use it for a light stand-in that is only seen from outside: a far level of detail, a collision shape, a silhouette. The switch is remembered, so the next Voxel remesh starts the way you left it.</p>
+          <p>The sliders rebuild the wrap: <span class="ui">Detail</span> sets how closely the skin follows the shapes, <span class="ui">Close gaps up to</span> how big an opening is bridged. The parts are not kept: they become one part, and one undo (<span class="ui">Ctrl + Z</span>) gives every one of them back. Turn the switch off and every part is rebuilt on its own again.</p>
           <aside class="kb-note"><p>For a round, turned part (a spool, a pulley) <a href="../docs/round-parts.html">Round parts</a> rebuilds it exactly from its profile, which is usually better than a voxel grid.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/round-parts.html">Round parts: Fill round grooves, Fill solid round, Belt</a></li>
-            <li><a href="../docs/reshape-mesh.html">Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more</a></li>
+            <li><a href="../docs/reshape-mesh.html">Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more</a></li>
             <li><a href="../docs/smart-fit.html">Smart fit</a></li>
             <li><a href="../docs/decimate.html">Decimate</a></li>
           </ul></div>

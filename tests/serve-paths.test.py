@@ -18,6 +18,16 @@ for p in ["/.venv/pyvenv.cfg", "/%2evenv/pyvenv.cfg", "/%2Evenv%2Fpyvenv.cfg", "
 for p in ["/", "/index.html", "/js/app.js?v=1", "/assets/help/clip.webm", "/vendor/three.min.js", "/inbox/a.b.glb"]:
     ok(not hidden(p.split("?")[0]), "served: " + p)
 
+# a long name leaves room for the inbox folder and the converter's files (Windows without long paths stops at 260)
+lim = serve._name_limit()
+long_name = ("a" * 400) + ".step"
+cut = serve._sanitize_filename(long_name, limit=lim)
+ok(cut.endswith(".step") and len(cut) <= lim, "a 400-character name is cut to the limit (%d) and keeps its extension" % lim)
+ok(serve._sanitize_filename("part.stp", limit=lim) == "part.stp", "a short name is left as it is")
+if serve.os.name == "nt":
+    full = len(str(serve.INBOX.resolve())) + 1 + 13 + lim + len(".glb.brep.json.tmp")
+    ok(full < 260, "on Windows the longest file the converter writes for it stays under 260 characters (%d)" % full)
+
 # who is trusted: this server's own page (and curl, node, the launcher), never another site's page
 import email.message, types
 def trusted(**headers):

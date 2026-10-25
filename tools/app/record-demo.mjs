@@ -24,7 +24,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 fs.mkdirSync(OUT, { recursive: true });
 const FR = path.join(OUT, 'frames'); fs.rmSync(FR, { recursive: true, force: true }); fs.mkdirSync(FR);
 const srv = spawn('python', ['app/serve.py', '--no-browser', '--port', String(APP)], { cwd: path.resolve('.'), stdio: 'ignore' });
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', `--window-size=${W},${H}`, 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', `--window-size=${W},${H}`, 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), waiters = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const once = (method) => new Promise(res => waiters.push({ method, res }));

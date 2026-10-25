@@ -14,7 +14,7 @@ const ONLY = (process.env.ONLY || 'memory,files').split(',');
 const PORT = 9361, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-robust-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-precise-memory-info', '--js-flags=--expose-gc', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-precise-memory-info', '--js-flags=--expose-gc', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr, ms = 60000) => {

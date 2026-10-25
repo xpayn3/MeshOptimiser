@@ -5,7 +5,7 @@
 // A "point" here is a welded point of topo (corners at one place are one point); topo.positions has the raw vertices, topo.rep[w] one
 // raw vertex that stands on point w, topo.weld[raw] the point a raw vertex stands on.
 
-import { reduceCollinear, restoreDropped } from './dissolve.js?v=3';
+import { reduceCollinear, restoreDropped } from './dissolve.js?v=4';
 
 const at = (topo, w, out = [0, 0, 0]) => { const r = topo.rep[w] * 3, p = topo.positions; out[0] = p[r]; out[1] = p[r + 1]; out[2] = p[r + 2]; return out; };
 const cornerOf = (topo, t, k) => (topo.index ? topo.index[t * 3 + k] : t * 3 + k);          // the raw vertex at corner k of triangle t

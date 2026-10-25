@@ -37,7 +37,7 @@ Inside the app, press `?` for the same list with a search field and a picture of
 - `Ctrl + B`: Smart fit
 - `U`: Untriangulate the selection
 - `Shift + U`: Triangulate the selection
-- `B`: Quick remesh: pick how many triangles stay, under the pointer
+- `B`: Quick decimate: pick how many triangles stay, under the pointer
 - `M`: Measure
 - `N`: Add a note: click a spot on the model, then write
 - `L`: Draw lines and shapes
@@ -45,7 +45,7 @@ Inside the app, press `?` for the same list with a search field and a picture of
 - `Enter`: Run the open command card
 - `Esc`: Put the open command card away. A second press clears the selection.
 
-The key of a tool also closes its card when the card is already open. `U` and `Shift + U` work on the selection only. See [Remesh](meshoptimiser://docs/remesh), which also describes Quick remesh.
+The key of a tool also closes its card when the card is already open. `U` and `Shift + U` work on the selection only. See [Triangulation](meshoptimiser://docs/remesh), which also describes Quick decimate.
 
 Smart optimise, Decimate, Fit to budget, Remove floating pieces, Sweep, Select hidden parts, Fasteners, Stacked copies and Align to floor have no key of their own. Find them on the toolbar, in the `…` list or with the search.
 

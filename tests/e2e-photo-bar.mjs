@@ -15,7 +15,7 @@ const PORT = 9361, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-photobar-
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const GFX = process.env.GPU ? ['--enable-unsafe-webgpu', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -101,7 +101,7 @@ try {
   // leave by the bar's X
   await evalJS("document.querySelector('#vp-photo-bar [data-leave]').click(); true");
   await until("!document.body.classList.contains('photo-mode')", 40);
-  await until(`${VIS('.vpc.tr:not(#vp-photo-bar)')} && !${VIS('#vp-photo-bar')}`, 20);      // (the fade back)
+  await until(`${VIS('.vpc.tr:not(#vp-photo-bar)')} && !${VIS('#vp-photo-bar')}`, 60);      // (the fade back; up to 15 s, a busy machine drew it late once)
   const back = await evalJS(`({ bottom: ${VIS('.vpc.tr:not(#vp-photo-bar)')}, photoBar: ${VIS('#vp-photo-bar')}, rowsHome: !!document.querySelector('#photo-fx #photo-fx-ao') && !!document.querySelector('#photo-fx #photo-stage') && !!document.querySelector('#photo-fx #photo-focus-pick'),
     panelEmpty: document.querySelectorAll('#vp-photo-bar .vp-photo-fx .prim-row').length === 0, btn: document.getElementById('tg-photo-mode').classList.contains('active'), sw: document.getElementById('toggle-photo').checked, glow: document.getElementById('photo-glow').value })`);
   check('the X leaves Photo mode: the bottom toolbar is back, the rows are back in the card (and keep their values)', back.bottom && !back.photoBar && back.rowsHome && back.panelEmpty && !back.btn && !back.sw && back.glow === '63', back);

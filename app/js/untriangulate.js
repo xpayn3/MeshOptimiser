@@ -36,7 +36,7 @@
 // caller drops the vertices nothing uses any more), `poly` the polygon of every new triangle.
 
 import { analysePolygons } from './wirelines.js?v=3';
-import { dissolvePoints, applyDissolve, reduceCollinear, restoreDropped } from './dissolve.js?v=3';
+import { dissolvePoints, applyDissolve, reduceCollinear, restoreDropped } from './dissolve.js?v=4';
 
 export function untriangulate(positions, index, opts = {}) {
   const { angleDeg = 1, normals = null, normalTol = 5, triangulate, flip = true, tolerance = 0 } = opts;
@@ -307,21 +307,27 @@ export function untriangulate(positions, index, opts = {}) {
   // the new triangle list: every polygon that was not rebuilt keeps its triangles, in place
   let total = 0;
   const outIdx = new Uint32Array(T * 3), outPoly = new Int32Array(T);
+  // opts.faceOf (a number per old triangle, the CAD face it is on): the face of every new triangle. The new list follows the old order, a
+  // rebuilt polygon standing where its first triangle was, and a polygon never crosses a CAD face (they are the CAD's own), so a face
+  // that was one run of triangles is one run of them still.
+  const faceOf = opts.faceOf && opts.faceOf.length === T ? opts.faceOf : null;
+  const outFace = faceOf ? new Int32Array(T) : null;
   const done = new Set();
   for (let t = 0; t < T; t++) {
     const p = poly[t], r = rebuilt.get(p);
     if (!r) {
       outIdx[total * 3] = tv(t, 0); outIdx[total * 3 + 1] = tv(t, 1); outIdx[total * 3 + 2] = tv(t, 2);
+      if (outFace) outFace[total] = faceOf[t];
       outPoly[total++] = p;
     } else if (!done.has(p)) {
       done.add(p);
       outIdx.set(r, total * 3);
-      for (let i = 0; i < r.length / 3; i++) outPoly[total + i] = p;
+      for (let i = 0; i < r.length / 3; i++) { outPoly[total + i] = p; if (outFace) outFace[total + i] = faceOf[t]; }
       total += r.length / 3;
     }
   }
   stats.trisAfter = total;
-  let resIndex = outIdx.slice(0, total * 3), resPoly = outPoly.slice(0, total);
+  let resIndex = outIdx.slice(0, total * 3), resPoly = outPoly.slice(0, total), resFace = outFace ? outFace.slice(0, total) : null;
   // Points that only sit on a straight run of an outline (a long edge cut up into pieces) are kept above, so that a neighbour that
   // still has them does not get a crack. Here they go from every polygon that touches them at once, which is safe.
   // And what is left on faces that are only nearly flat (opts.limitDeg > 0): a limited dissolve. A point goes when the triangles round
@@ -336,12 +342,12 @@ export function untriangulate(positions, index, opts = {}) {
       limitDeg, limitTol: opts.limitTol > 0 ? opts.limitTol : diag * 1e-3, limitMerge: !!limitDeg,
     });
     if (d.dissolved) {
-      const ap = applyDissolve(resIndex, d);
-      resIndex = ap.index; resPoly = ap.poly;
+      const ap = applyDissolve(resIndex, d, faceOf ? resFace : null);
+      resIndex = ap.index; resPoly = ap.poly; resFace = faceOf ? ap.face : null;      // (the new triangles take the face of the one they stand in for)
       stats.straight = d.dissolved; stats.vertsRemoved += d.dissolved; stats.trisAfter = resIndex.length / 3;
     }
   }
-  return { index: resIndex, poly: resPoly, stats };
+  return { index: resIndex, poly: resPoly, face: resFace, stats };
 }
 
 // The sides left open by `tris` must be exactly the outline (the loops of the given sizes, numbered one after the

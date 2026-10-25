@@ -10,7 +10,7 @@ const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9362, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-photo-pic-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4343) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -46,7 +46,8 @@ try {
   for (let i = 0; i < 120; i++) { const n = await evalJS("document.querySelectorAll('#tree .row, #tree [data-uuid]').length").catch(() => 0); if (n > 0) break; await sleep(500); }
   await sleep(2500);
 
-  const lp = await call('list_parts', { sort_by: 'triangles', limit: 3 });
+  // (on a busy machine the first call can come back before the scene is in: ask again until it answers with parts)
+  let lp; for (let i = 0; i < 40; i++) { lp = await call('list_parts', { sort_by: 'triangles', limit: 3 }); if (lp && lp.ok && lp.text && /"parts"/.test(lp.text)) break; await sleep(1000); }
   const ids = JSON.parse(lp.text).parts.map(p => p.id);
   const id = ids[0], solo = ids[1];
   // make part `id` a mesh with two materials: the first half of its triangles wear Steel, the rest Red

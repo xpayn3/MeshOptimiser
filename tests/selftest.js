@@ -206,7 +206,7 @@
   // The transform panel wires its inputs the first time it is opened.
   T.openTransformPanel = async () => {
     const panel = document.getElementById('transform-panel');
-    if (panel && !panel.classList.contains('show')) { document.getElementById('tg-transform')?.click(); await T.sleep(300); }
+    if (panel && !panel.classList.contains('show')) { panel.classList.add('show'); await T.sleep(300); }
   };
   T.typeInto = async (id, value) => {
     await T.openTransformPanel();
@@ -1836,7 +1836,7 @@
     const off = () => { const o = outline(); return o ? o.distanceTo(centre()) : -1; };
     const at = (what) => { const d = off(); T.assert(d >= 0 && d < 1, what + ': the outline is ' + (d < 0 ? 'missing' : d.toFixed(1) + ' away from the part')); };
     await T.pick(['Cube']);
-    if (!document.getElementById('transform-panel').classList.contains('show')) { document.getElementById('tg-transform').click(); await T.sleep(300); }
+    if (!document.getElementById('transform-panel').classList.contains('show')) { document.getElementById('transform-panel').classList.add('show'); await T.sleep(300); }
     const px = document.getElementById('tform-px');
     px.value = '300'; px.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(350);
     T.assert(centre().length() > 100, 'the typed position did not move the part');

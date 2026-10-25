@@ -349,13 +349,15 @@ export function dissolvePoints(positions, index, lab, weld, points, opts = {}) {
 }
 
 // The index and polygons after a dissolve, as one list: the triangles that stay in their order, then the new ones.
-export function applyDissolve(index, res) {
+// faceIn (optional, a number per triangle of `index`, e.g. its CAD face): `face` is the same for the list that comes out, a new triangle
+// taking the one of the old triangle it stands in for.
+export function applyDissolve(index, res, faceIn) {
   const nTri = (index.length / 3) | 0, keep = nTri - res.trisRemoved, total = keep + res.trisAdded;
-  const out = new Uint32Array(total * 3), poly = new Int32Array(total);
+  const out = new Uint32Array(total * 3), poly = new Int32Array(total), face = faceIn ? new Int32Array(total) : null;
   let w = 0;
-  for (let t = 0; t < nTri; t++) if (!res.removed[t]) { out[w * 3] = index[t * 3]; out[w * 3 + 1] = index[t * 3 + 1]; out[w * 3 + 2] = index[t * 3 + 2]; poly[w++] = res.polyOld[t]; }
-  for (let i = 0; i < res.trisAdded; i++) { out[w * 3] = res.caps[i * 3]; out[w * 3 + 1] = res.caps[i * 3 + 1]; out[w * 3 + 2] = res.caps[i * 3 + 2]; poly[w++] = res.capPoly[i]; }
-  return { index: out, poly };
+  for (let t = 0; t < nTri; t++) if (!res.removed[t]) { out[w * 3] = index[t * 3]; out[w * 3 + 1] = index[t * 3 + 1]; out[w * 3 + 2] = index[t * 3 + 2]; if (face) face[w] = faceIn[t]; poly[w++] = res.polyOld[t]; }
+  for (let i = 0; i < res.trisAdded; i++) { out[w * 3] = res.caps[i * 3]; out[w * 3 + 1] = res.caps[i * 3 + 1]; out[w * 3 + 2] = res.caps[i * 3 + 2]; if (face) face[w] = faceIn[res.capOwner[i]]; poly[w++] = res.capPoly[i]; }
+  return { index: out, poly, face };
 }
 
 // ── helpers shared with untriangulate.js ─────────────────────────────────────────────────────────────────────────

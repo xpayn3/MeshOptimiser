@@ -13,7 +13,7 @@ const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9398, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-photo-average-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [], logs = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -21,7 +21,8 @@ let pass = 0, fail = 0;
 const check = (name, ok, extra) => { if (ok) { pass++; console.log('PASS', name); } else { fail++; console.log('FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); } };
 const waitFor = async (expr, ms = 20000) => { for (let t = 0; t < ms; t += 200) { if (await evalJS(expr).catch(() => false)) return true; await sleep(200); } return false; };
 const frames = () => evalJS('window.__moPhoto.frames');
-const settled = (n) => waitFor(`window.__moPhoto.frames >= ${n} && !window.__moPhoto.refining`);
+// (a slow graphics path, software WebGL at a second a frame, takes half a minute to add up 32 frames; a quick one returns at once)
+const settled = (n) => waitFor(`window.__moPhoto.frames >= ${n} && !window.__moPhoto.refining`, 120000);
 // the share of pixels that differ from the corner colour, and the mean brightness, of what is on screen (as e2e-photo.mjs)
 const probe = async () => {
   const r = await send('Page.captureScreenshot', { format: 'png' });

@@ -14,7 +14,7 @@ if (!MODEL) { console.log('usage: node tests/e2e-mesh-tools.mjs <model.glb>'); p
 const PORT = 9351, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-grooves-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -58,8 +58,8 @@ try {
   const TOOLS = [
     ['closeCracks', 'Close cracks', ['tol', 0.05]],
     ['removeSlivers', 'Remove slivers', ['ratio', 8]],
-    ['patchHoles', 'Patch holes', ['maxSize', 20]],
-    ['remeshEvenly', 'Remesh evenly', ['length', 2]],
+    ['patchHoles', 'Fill mesh holes', ['maxSize', 20]],
+    ['remeshEvenly', 'Isotropic remesh', ['length', 2]],
     ['smoothSurface', 'Smooth surface', ['strength', 3]],
     ['convexHull', 'Convex hull', ['maxPoints', 64]],
     ['convexPieces', 'Convex pieces', ['maxPieces', 4]],

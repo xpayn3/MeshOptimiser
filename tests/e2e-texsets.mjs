@@ -16,7 +16,7 @@ const PORT = 9362, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-texsets-'
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const TABLE_DIR = process.env.TABLE_DIR || 'E:/FAB/VaultCache/FabLibrary/Wooden_Table-d69f8adb/fbx/high/wooden_table_veigfjmaw_h_extracted';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -69,7 +69,8 @@ try {
   const a = await look(), toasts = await evalJS('window.__toasts');
   const m = a[0] || {};
   check('OBJ: colour from BaseColor', m.map === 'Crate_2K_BaseColor.jpg' && m.colour === 0xffffff && m.flipY === false, a);
-  check('OBJ: DirectX normal map, green flipped', m.normal === 'Crate_2K_Normal_DX.jpg' && m.ny === -1, a);
+  // an OBJ's normal map is turned on import (normalScale.y = -1, as glTF's), and a DirectX one turned again ends at +1 (9a8bc49; e2e-normal-map-direction proves the lighting)
+  check('OBJ: DirectX normal map, green flipped', m.normal === 'Crate_2K_Normal_DX.jpg' && m.ny === 1, a);
   check('OBJ: roughness from Gloss, turned over', m.rough === 'Crate_2K_Gloss (as roughness)' && m.roughness === 1, a);
   check('OBJ: no bump with a normal map', m.bump === null, a);
   const t = toasts.find(s => /Textures found/.test(s)) || '';

@@ -15,7 +15,7 @@ const APP = 4343, DBG = 9366, PROFILE = (process.env.TEMP || '.') + '/cdp-profil
 const SHOTS = process.env.SHOTS || process.env.TEMP || '.';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const srv = spawn('python', ['serve.py', '--no-browser', '--port', String(APP)], { cwd: path.resolve('app'), stdio: ['ignore', 'ignore', process.env.SERVER_LOG ? fs.openSync(process.env.SERVER_LOG, 'w') : 'ignore'] });      // SERVER_LOG=<file>: what the server printed
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [], consoleErr = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -180,8 +180,8 @@ try {
   // the pill opens a dropdown: the numbers and the basic switches, and More opens Settings
   await evalJS("document.getElementById('settings-close')?.click()"); await sleep(300);
   await evalJS("document.getElementById('claude-pill').click()"); await sleep(400);
-  const pop = await evalJS("(() => { const p = document.getElementById('claude-pop'); if (!p) return null; const r = p.getBoundingClientRect(), b = document.getElementById('claude-pill').getBoundingClientRect(); return { shown: p.classList.contains('show'), text: p.innerText.replace(/\\s+/g, ' '), below: r.top >= b.bottom, inside: r.right <= innerWidth && r.left >= 0, switches: p.querySelectorAll('input[type=checkbox]').length, expanded: document.getElementById('claude-pill').getAttribute('aria-expanded') }; })()");
-  check('the pill opens a dropdown with the numbers and three switches, under it', pop && pop.shown && /Requests/.test(pop.text) && /Said no/.test(pop.text) && pop.switches === 3 && pop.below && pop.inside && pop.expanded === 'true', pop);
+  const pop = await evalJS("(() => { const p = document.getElementById('claude-pop'); if (!p) return null; const r = p.getBoundingClientRect(), b = document.getElementById('claude-pill').getBoundingClientRect(); return { shown: p.classList.contains('show'), text: p.innerText.replace(/\\s+/g, ' '), beside: r.top >= b.bottom || r.bottom <= b.top, inside: r.right <= innerWidth && r.left >= 0, switches: p.querySelectorAll('input[type=checkbox]').length, expanded: document.getElementById('claude-pill').getAttribute('aria-expanded') }; })()");
+  check('the pill opens a dropdown with the numbers and three switches, above or under it', pop && pop.shown && /Requests/.test(pop.text) && /Said no/.test(pop.text) && pop.switches === 3 && pop.beside && pop.inside && pop.expanded === 'true', pop);
   await shot('claude-popover');
   // (the switch sets the mode of each kind of change, Settings › Claude: what it writes is the geometry mode, not the older
   // 'stepopt-claude-ask' alone; and the modes it leaves are cleared after, or every later edit would follow them)
@@ -235,7 +235,9 @@ try {
   const z5_r1 = await z5_run1;
   check('Stop: the batch ends early and says it was stopped', z5_r1.j && z5_r1.j.stopped === true && z5_r1.j.files_done < 6 && z5_r1.j.files_done >= 1, z5_r1.txt && z5_r1.txt.slice(0, 300));
   await evalJS("document.getElementById('claude-pop')?.classList.contains('show') && document.getElementById('claude-pill').click()");
-  check('after Stop the tabs are closed again and the pill is idle', (await tool('scene_tabs')).j.length === z5_tabsBefore && /connected/i.test(await evalJS("document.getElementById('claude-pill').textContent")), { tabs: (await tool('scene_tabs')).j.length, z5_tabsBefore });
+  // (the pill goes back to idle a moment after the call returns: it is waited for, up to 5 s)
+  let z5_state = null; for (let i = 0; i < 25; i++) { z5_state = await evalJS("document.getElementById('claude-pill').dataset.state"); if (z5_state === 'idle') break; await sleep(200); }
+  check('after Stop the tabs are closed again and the pill is idle', (await tool('scene_tabs')).j.length === z5_tabsBefore && z5_state === 'idle', { tabs: (await tool('scene_tabs')).j.length, z5_tabsBefore, z5_state });
 
   // progress to a client that asks for it, and cancelling from the client
   const z5_sse = async (name, args, cancelAfterMs) => {

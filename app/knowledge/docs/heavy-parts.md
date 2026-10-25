@@ -4,6 +4,8 @@ A list of the parts that hold the most triangles, heaviest first, with a count b
 
 A few parts often hold a large share of a model’s triangles. The card **Heavy parts** lists them, so you can see where the weight is without searching the tree.
 
+A part with more than 10,000 triangles also carries a **heavy** tag in the Properties card, at the top of the same sidebar. With several parts selected the tag says how many of them are heavy, and with nothing selected it says how many parts the scene has (for example **18 heavy**): click it to select them all.
+
 ## What the card lists
 
 Only parts with more than 10,000 triangles are listed. The heaviest is at the top, and the list holds at most 500 parts. Each row shows the part’s place in the list, its name, its triangle count (for example 12.4k) and a bar that compares it with the heaviest part. Hover over a row to see the full name, the exact count and the rank.

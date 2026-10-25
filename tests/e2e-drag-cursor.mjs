@@ -12,7 +12,7 @@ const PORT = 9356, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-dragcurso
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const GFX = process.env.GPU ? ['--enable-unsafe-webgpu', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -68,7 +68,7 @@ try {
   // a slider scrub: the Decimate card's percentage, or any scrubber on the page
   await evalJS("window._appFns._Actions.list.find(a => a.id === 'decimate' || /decim/i.test(a.id))?.run(); true").catch(() => {});
   await sleep(600);
-  const sc = await evalJS("(() => { const els = [...document.querySelectorAll('.scrub .scrub-value')].filter(e => e.offsetParent && e.getBoundingClientRect().width > 0); const el = els[0]; if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), text: (el.closest('.scrub')?.querySelector('.scrub-label')?.textContent || '').trim().slice(0, 30) + ' = ' + el.textContent.trim() }; })()");
+  const sc = await evalJS("(() => { const els = [...document.querySelectorAll('.scrub .scrub-value')].filter(e => e.offsetParent && e.getBoundingClientRect().width > 0 && getComputedStyle(e).pointerEvents !== 'none' && !e.closest('.is-off')); const el = els[0]; if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), text: (el.closest('.scrub')?.querySelector('.scrub-label')?.textContent || '').trim().slice(0, 30) + ' = ' + el.textContent.trim() }; })()");
   if (sc) {
     await mouse('mousePressed', sc.x, sc.y, { button: 'left', buttons: 1, clickCount: 1 });
     for (let i = 1; i <= 8; i++) { await mouse('mouseMoved', sc.x + i * 8, sc.y, { button: 'left', buttons: 1 }); await sleep(20); }

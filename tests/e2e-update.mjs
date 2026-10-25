@@ -26,6 +26,8 @@ process.on('exit', cleanup);
 const SKIP = new Set(['.git', '.venv', 'inbox', 'exports', '__pycache__', '.update', 'dist', 'node_modules', '.claude', 'server.log', 'tests', 'docs']);
 const copy = (from, to) => { fs.mkdirSync(to, { recursive: true }); for (const e of fs.readdirSync(from, { withFileTypes: true })) { if (SKIP.has(e.name)) continue; const s = path.join(from, e.name), d = path.join(to, e.name); e.isDirectory() ? copy(s, d) : fs.copyFileSync(s, d); } };
 copy(path.join(SRC, 'app'), A);
+// the installed copy says 0.21.0 whatever version the checkout is on (the test swaps this text for 0.22.0 in the release)
+{ const ip = path.join(A, 'index.html'); fs.writeFileSync(ip, fs.readFileSync(ip, 'utf8').replace(/id="brand-menu-ver">v[0-9.]+</, 'id="brand-menu-ver">v0.21.0<')); }
 fs.mkdirSync(path.join(A, 'inbox'), { recursive: true }); fs.writeFileSync(path.join(A, 'inbox', 'keep-me.glb'), 'MY MODEL');
 fs.writeFileSync(path.join(A, 'version.json'), JSON.stringify({ version: '0.21.0', launcher: 1 }));
 copy(A, path.join(B, 'app')); fs.mkdirSync(path.join(B, 'tools', 'app'), { recursive: true }); fs.copyFileSync(path.join(SRC, 'tools', 'app', 'build-update.py'), path.join(B, 'tools', 'app', 'build-update.py'));
@@ -51,7 +53,7 @@ procs.push(spawn('python', ['serve.py', '--no-browser', '--keep-running', '--por
 for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://127.0.0.1:${APP}/api/update/status`)).ok) break; } catch (_) {} await sleep(250); }
 
 // ── 3. the browser ──
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${path.join(TMP, 'profile')}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${path.join(TMP, 'profile')}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 procs.push(chrome);
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });

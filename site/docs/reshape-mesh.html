@@ -7,12 +7,12 @@
   <meta name="theme-color" content="#131314" />
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
-  <title>Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more — MeshOptimiser Docs</title>
+  <title>Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more — MeshOptimiser Docs</title>
   <meta name="description" content="Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodi…" />
   <link rel="icon" type="image/svg+xml" href="../Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/docs/reshape-mesh" />
   <meta property="og:site_name" content="MeshOptimiser" />
-  <meta property="og:title" content="Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more — MeshOptimiser Docs" />
+  <meta property="og:title" content="Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more — MeshOptimiser Docs" />
   <meta property="og:description" content="Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodi…" />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
@@ -89,6 +89,7 @@
         <h2>Make it lighter</h2>
         <a href="../docs/read-the-numbers.html">How to read the numbers</a>
         <a href="../docs/heavy-parts.html">Heavy parts</a>
+        <a href="../docs/batch-folder.html">Batch optimise a folder</a>
         <a href="../docs/smart-optimise.html">Smart optimise</a>
         <a href="../docs/delete-small-parts.html">Delete small parts</a>
         <a href="../docs/select-hidden-parts.html">Select hidden parts</a>
@@ -97,7 +98,7 @@
         <a href="../docs/stacked-copies.html">Stacked copies</a>
         <a href="../docs/fill-holes.html">Remove holes</a>
         <a href="../docs/remove-floating-pieces.html">Remove floating pieces</a>
-        <a href="../docs/remesh.html" title="Remesh: Untriangulate and Triangulate">Remesh</a>
+        <a href="../docs/remesh.html" title="Triangulation: Untriangulate and Triangulate">Triangulation</a>
         <a href="../docs/split.html">Split</a>
         <a href="../docs/smart-fit.html">Smart fit</a>
         <a href="../docs/decimate.html">Decimate</a>
@@ -113,13 +114,13 @@
         <a href="../docs/view-modes.html">View modes</a>
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/face-colours.html" title="Several colours on one part">Several colours on one part</a>
-        <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
+        <a href="../docs/axis-center.html">The pivot of a part: Centre pivot</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
         <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
         <a href="../docs/remove-thickness.html">Remove thickness</a>
         <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
-        <a href="../docs/mend-mesh.html" title="Mend a mesh: Close cracks, Remove slivers, Patch holes">Mend a mesh</a>
-        <a href="../docs/reshape-mesh.html" aria-current="page" title="Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more">Reshape a mesh</a>
+        <a href="../docs/mend-mesh.html" title="Mend a mesh: Close cracks, Remove slivers, Fill mesh holes">Mend a mesh</a>
+        <a href="../docs/reshape-mesh.html" aria-current="page" title="Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more">Reshape a mesh</a>
         <a href="../docs/booleans.html" title="Union, Subtract and Intersect parts">Union, Subtract, Intersect</a>
         <a href="../docs/voxel-remesh.html">Voxel remesh</a>
         <a href="../docs/round-parts.html" title="Round parts: Fill round grooves, Fill solid round, Belt">Round parts</a>
@@ -161,12 +162,12 @@
       </nav>
       <article class="kb-article">
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#look">Look and arrange</a></p>
-        <h1>Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more</h1>
+        <h1>Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more</h1>
         <p class="lead">Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodies joined into one.</p>
         <div class="kb-body">
           <p>These tools keep the part where it is but change the triangles it is made of. Each one is for a different job.</p>
           <dl class="table">
-            <div><dt>Remesh evenly</dt><dd>Even, well-shaped triangles of one size, lying on the part’s own surface. Edges sharper than <span class="ui">Keep edges sharper than</span> stay sharp, and so do open outlines. <span class="ui">Edge length</span> is how long the edges are, as a share of the part’s size: shorter gives more, finer triangles. A very short length is raised so the part does not grow too heavy, and the card says so. For a part that needs clean triangles to be edited, sculpted or printed.</dd></div>
+            <div><dt>Isotropic remesh</dt><dd>Even, well-shaped triangles of one size, lying on the part’s own surface. Edges sharper than <span class="ui">Keep edges sharper than</span> stay sharp, and so do open outlines. <span class="ui">Edge length</span> is how long the edges are, as a share of the part’s size: shorter gives more, finer triangles. A very short length is raised so the part does not grow too heavy, and the card says so. For a part that needs clean triangles to be edited, sculpted or printed.</dd></div>
             <div><dt>Smooth surface</dt><dd>Takes the noise and the faceting out of a surface without rounding its edges. <span class="ui">Strength</span> is how many rounds of smoothing. Faces that meet at more than <span class="ui">Keep edges sharper than</span> keep their edge. Open outlines do not move. For a scan, or a part that was cut into too few triangles.</dd></div>
             <div><dt>Convex hull</dt><dd>The smallest shell with no dents that wraps the whole part, like cling film pulled tight. <span class="ui">Points at most</span> keeps it under the number of points a game engine accepts (most want 255 or fewer). For a collision shape.</dd></div>
             <div><dt>Convex pieces</dt><dd>A few convex shells that together follow a part with dents, an L or a U. <span class="ui">Pieces at most</span> caps how many, <span class="ui">Cut while emptier than</span> is how much empty room a shell may hold before it is cut in two, and <span class="ui">Points per piece</span> caps each shell. For a collision shape that fits better than one hull.</dd></div>
@@ -179,17 +180,17 @@
             <li>The tool runs on each selected part, and a card opens with its settings, and the Wireframe goes on those parts so you see the triangles change. Change one and the tool runs again from the parts as they were, in the same undo step.</li>
             <li>Press <span class="ui">Done</span> or <kbd>Esc</kbd> to close the card. One undo step (<span class="ui">Ctrl + Z</span>) takes it all back.</li>
           </ol>
-          <p>On a part from a STEP file opened with its CAD faces (see <a href="../docs/cad-edges.html">CAD faces and edges</a>), Remesh evenly and Smooth surface keep the CAD file’s own edges sharp, whatever their angle, and leave the seams inside one round face smooth.</p>
+          <p>On a part from a STEP file opened with its CAD faces (see <a href="../docs/cad-edges.html">CAD faces and edges</a>), Isotropic remesh and Smooth surface keep the CAD file’s own edges sharp, whatever their angle, and leave the seams inside one round face smooth.</p>
           <aside class="kb-note"><p>Convex hull and Convex pieces replace the part’s shape with a simpler one: keep a copy of the part (Duplicate, <span class="ui">Ctrl + D</span>) if you need the original too. Merge bodies needs closed bodies: run <a href="../docs/mend-mesh.html">Close cracks</a> first on a part with hairline gaps.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
-            <li><a href="../docs/mend-mesh.html">Mend a mesh: Close cracks, Remove slivers, Patch holes</a></li>
+            <li><a href="../docs/mend-mesh.html">Mend a mesh: Close cracks, Remove slivers, Fill mesh holes</a></li>
             <li><a href="../docs/booleans.html">Union, Subtract and Intersect parts</a></li>
             <li><a href="../docs/voxel-remesh.html">Voxel remesh</a></li>
-            <li><a href="../docs/remesh.html">Remesh: Untriangulate and Triangulate</a></li>
+            <li><a href="../docs/remesh.html">Triangulation: Untriangulate and Triangulate</a></li>
           </ul></div>
         </div>
         <nav class="kb-turn" aria-label="More articles">
-          <a class="is-before" href="../docs/mend-mesh.html"><span>Before</span><strong>Mend a mesh: Close cracks, Remove slivers, Patch holes</strong></a>
+          <a class="is-before" href="../docs/mend-mesh.html"><span>Before</span><strong>Mend a mesh: Close cracks, Remove slivers, Fill mesh holes</strong></a>
           <a class="is-after" href="../docs/booleans.html"><span>Next</span><strong>Union, Subtract and Intersect parts</strong></a>
         </nav>
       </article>

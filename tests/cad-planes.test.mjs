@@ -67,5 +67,31 @@ const join = (a, b) => ({ pos: [...a.pos, ...b.pos], idx: [...a.idx, ...b.idx.ma
   ok(bad.holes === 0, 'a map of the wrong length is ignored');
 }
 
+// ── 4. the CAD face of every new triangle (opts.faceOf): the faces go on to what Untriangulate builds ──
+{
+  console.log('the CAD face of each new triangle');
+  const n = 6;
+  const g = join(plate(n), plate(n, { o: [n, 0, 0] }));          // two plane faces side by side: x 0 to 6 is face 0, x 6 to 12 is face 1
+  const P = new Float32Array(g.pos), I = new Uint32Array(g.idx), T = I.length / 3;
+  const poly = new Int32Array(T), faceOf = new Int32Array(T);
+  for (let t = 0; t < T; t++) { poly[t] = t < T / 2 ? 0 : 1; faceOf[t] = poly[t]; }
+  const faceAtCentre = (idx, t) => { const x = (P[idx[t * 3] * 3] + P[idx[t * 3 + 1] * 3] + P[idx[t * 3 + 2] * 3]) / 3; return x < n ? 0 : 1; };
+  const check = (label, r) => {
+    ok(r && r.face && r.face.length === r.index.length / 3, label + ': a face for every new triangle');
+    let right = true; for (let t = 0; t < r.face.length; t++) if (r.face[t] !== faceAtCentre(r.index, t)) right = false;
+    ok(right, label + ': every new triangle is on the face it lies in');
+    let runs = 1; for (let t = 1; t < r.face.length; t++) if (r.face[t] !== r.face[t - 1]) runs++;
+    ok(runs === 2, label + ': each face is one run of triangles (' + runs + ' runs)');
+  };
+  check('Untriangulate', untriangulate(P, I, { triangulate, angleDeg: 1, poly, faceOf }));
+  const none = untriangulate(P, I, { triangulate, angleDeg: 1, poly });
+  ok(none && none.face === null, 'no faceOf given: no faces are returned');
+  // with points dissolved too (straight runs, nearly flat faces) the new triangles come at the end of the list: the faces still follow
+  const dis = untriangulate(P, I, { triangulate, angleDeg: 1, poly, faceOf, straight: true, limitDeg: 3 });
+  ok(dis && dis.face && dis.face.length === dis.index.length / 3, 'with points dissolved: a face for every new triangle');
+  let right = true; for (let t = 0; t < dis.face.length; t++) if (dis.face[t] !== faceAtCentre(dis.index, t)) right = false;
+  ok(right, 'with points dissolved: every new triangle is on the face it lies in');
+}
+
 console.log(fails ? '\n' + fails + ' check(s) failed' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

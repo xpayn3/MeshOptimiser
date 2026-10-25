@@ -20,7 +20,7 @@ You do not need to learn these before you start. Come back to this page when a w
 - **Group**: A folder in the parts tree. It holds parts or other groups.
 - **Mesh**: The surface of a part, built from many small flat triangles.
 - **Triangle (tri)**: The smallest piece of a mesh. The app counts everything in triangles: more triangles mean a heavier model.
-- **Polygon (n-gon)**: A flat face with any number of corners. Several triangles that lie in one plane can be joined into one polygon. [Remesh](meshoptimiser://docs/remesh) does that, and turns polygons back into triangles. In [Edit mesh](meshoptimiser://docs/edit-mesh), two triangles that make a four-sided shape count as one polygon.
+- **Polygon (n-gon)**: A flat face with any number of corners. Several triangles that lie in one plane can be joined into one polygon. [Triangulation](meshoptimiser://docs/remesh) does that, and turns polygons back into triangles. In [Edit mesh](meshoptimiser://docs/edit-mesh), two triangles that make a four-sided shape count as one polygon.
 - **Vertex**: A corner point of a triangle. The plural is vertices. In [Edit mesh](meshoptimiser://docs/edit-mesh) it is called a point.
 - **Edge**: The line between two points where two polygons meet, or where a surface ends.
 - **Loop**: A row of polygons or edges that runs round a part, like a ring round a tube. [Edit mesh](meshoptimiser://docs/edit-mesh) picks one with a double-click.

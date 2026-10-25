@@ -1,7 +1,7 @@
 // node tests/e2e-dof.mjs [model.glb] [shot-prefix]
 //
 // Photo mode's depth of field in the real app in headless Chrome.
-//   Depth of field: switched on in Photo mode it draws at every quality; Alt+click on the model sets the focus (the Focus row names the
+//   Depth of field: switched on in Photo mode it draws at every quality; Ctrl+click on the model sets the focus (the Focus row names the
 //   part) without selecting anything; Pick then a plain click does the same and selects nothing; Pivot goes back to the orbit pivot.
 // Needs the app served on http://localhost:4343 (python app/serve.py --no-browser --port 4343), or another port in APP_PORT.
 import { spawn } from 'child_process';
@@ -12,7 +12,7 @@ const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb', SHOT = process.argv[3]
 const PORT = 9353, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-dof-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4343) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [], logs = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -76,11 +76,11 @@ try {
   check('no exceptions or shader errors with depth of field', errors.length === 0 && bad().length === 0, { errors, logs: bad().slice(0, 4) });
   check('the Focus row starts on the orbit pivot', await evalJS("document.getElementById('photo-focus-val').textContent === 'Orbit pivot' && document.getElementById('photo-focus-reset').disabled"));
   const sel0 = await evalJS("(window.state ? window.state.selected.size : document.querySelectorAll('#tree .selected').length)");
-  await click(C.x, C.y, 1);                              // Alt+click
+  await click(C.x, C.y, 2);                              // Ctrl+click (CDP modifier bit 2; Alt was the key before the lens rings)
   await sleep(1500);
   const f1 = await evalJS("document.getElementById('photo-focus-val').textContent");
-  check('Alt+click on the model sets the focus', f1 !== 'Orbit pivot' && !(await evalJS("document.getElementById('photo-focus-reset').disabled")), f1);
-  check('Alt+click selects nothing', (await evalJS("(window.state ? window.state.selected.size : document.querySelectorAll('#tree .selected').length)")) === sel0);
+  check('Ctrl+click on the model sets the focus', f1 !== 'Orbit pivot' && !(await evalJS("document.getElementById('photo-focus-reset').disabled")), f1);
+  check('Ctrl+click selects nothing', (await evalJS("(window.state ? window.state.selected.size : document.querySelectorAll('#tree .selected').length)")) === sel0);
   await shot('-dof');
   await evalJS("document.getElementById('photo-focus-reset').click()");
   await sleep(500);

@@ -50,7 +50,7 @@ for (let i = 0; i + 1 < xs.length; i++) for (let j = 0; j + 1 < ys.length; j++) 
 }
 const objText = v.join('\n') + '\n' + f.join('\n') + '\n';
 
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -115,14 +115,18 @@ try {
   const pts = await evalJS("document.querySelectorAll('#pf-svg .pf-pt').length");
   const sec0 = await evalJS('window.__moAgent.profileSection()');
   check('Edit points shows a handle on every point of the new section', pts > 0 && pts === sec0.reduce((n, S) => n + S.outer.length + S.holes.reduce((m, H) => m + H.length, 0), 0), { pts });
-  // the first handle, dragged by the pointer to 3 px from a corner of the section as it was, lands on that corner exactly
-  const corner = await evalJS('(() => { const s = window.__moAgent.profileSection(); return s[0].outer[3]; })()');
+  // the first handle, dragged by the pointer to 3 px from the next corner of the section as it was, lands on that corner exactly (and the two
+  // points are one: a point let go on its neighbour joins it, so the outline stays a simple one; on a corner further along it would touch itself,
+  // and Apply would leave that profile as it was, with "its section as edited crosses itself")
+  const corner = await evalJS('(() => { const s = window.__moAgent.profileSection(); return s[0].outer[1]; })()');
   const drag = await evalJS(`(async () => {
     const svg = document.getElementById('pf-svg'), c = svg.querySelector('.pf-pt'), M = svg.getScreenCTM();
     const at = (x, y) => { const p = svg.createSVGPoint(); p.x = x; p.y = -y; const q = p.matrixTransform(M); return [q.x, q.y]; };
     const r = c.getBoundingClientRect(), from = [r.left + r.width / 2, r.top + r.height / 2], to = at(${corner[0]}, ${corner[1]});
     const ev = (type, x, y, el) => (el || svg).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, clientX: x, clientY: y, button: 0, buttons: 1 }));
-    ev('pointerdown', from[0], from[1], c); ev('pointermove', to[0] + 3, to[1] - 2); const snapMark = !!svg.querySelector('.pf-snap'); ev('pointerup', to[0] + 3, to[1] - 2);
+    ev('pointerdown', from[0], from[1], c); ev('pointermove', to[0] + 3, to[1] - 2);
+    await new Promise(r => setTimeout(r, 500));          // (a move is drawn in the next frame: the snap mark is there after it)
+    const snapMark = !!svg.querySelector('.pf-snap'); ev('pointerup', to[0] + 3, to[1] - 2);
     await new Promise(r => setTimeout(r, 300));
     return { p: window.__moAgent.profileSection()[0].outer[0], snapMark };
   })()`);
@@ -133,6 +137,11 @@ try {
   await evalJS(`(() => { const svg = document.getElementById('pf-svg'), c = svg.querySelectorAll('.pf-pt')[1], r = c.getBoundingClientRect(); const ev = (t, el) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, pointerId: 8, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, buttons: 1 })); ev('pointerdown', c); ev('pointerup', svg); svg.focus(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true })); })()`);
   await sleep(300);
   check('Delete takes the picked point out, not a part', (await evalJS('window.__moAgent.profileSection()'))[0].outer.length === before - 1 && (await sum()).parts === 3);
+  // the section editor's own Ctrl+Z takes the point back. (That the profile can be built from what is left is not asked of the deletion: the
+  // corner it takes out is one the outline needs, and a section that crosses itself is not built, which the next steps would trip on.)
+  await evalJS("(() => { const svg = document.getElementById('pf-svg'); svg.focus(); svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })); })()");
+  await sleep(300);
+  check("the editor's Ctrl+Z takes the point back", (await evalJS('window.__moAgent.profileSection()'))[0].outer.length === before && (await sum()).parts === 3);
   if (SHOT) await shot(SHOT.replace(/\.png$/, '-card.png'));
 
   // ── Apply ──

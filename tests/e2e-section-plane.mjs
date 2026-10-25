@@ -13,7 +13,7 @@ const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9351, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-section-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const GPU_FLAGS = process.env.CAPTURE_GPU === '1' ? ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'];
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GPU_FLAGS, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GPU_FLAGS, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [], infos = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -40,6 +40,8 @@ const take = async (name, against) => {
 };
 async function oneBackend(webgl) {
   infos.length = 0;
+  // (the app asks "Leave site?" while a model is open and the page was clicked: it holds Page.navigate for ever in headless Chrome; its own "this reload is fine" mark lets it go)
+  await evalJS("try { window.top.__moReloadOk = true; } catch (_) {} true").catch(() => {});
   await send('Page.navigate', { url: 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html?' + (webgl ? 'webgl=1&' : '') + 't=' + Date.now() });
   for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
   await sleep(1500);

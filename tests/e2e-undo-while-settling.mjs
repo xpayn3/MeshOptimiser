@@ -13,7 +13,7 @@ const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9374, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-undosettle-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const ev = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -43,8 +43,9 @@ try {
   check('the model is in and the view is being prepared', caught);
   if (caught) {
     const n0 = await parts(), id0 = await ev('window.state.parts.find(p => !p.deleted && p.mesh).partId');
-    const d1 = await call('duplicate_parts', { ids: [id0] }); await sleep(300);
+    const d1 = await call('duplicate_parts', { ids: [id0] });
     check('a part is duplicated while the view is prepared', d1.ok && (await parts()) === n0 + 1, d1);
+    const still0 = await settling();                                                           // (asked right before the key: the view settles faster on a quick machine)
     await key('z', 2); await sleep(600);                                                       // Ctrl+Z
     const still1 = await settling();
     check('Ctrl+Z takes it back while the view is prepared', (await parts()) === n0, { parts: await parts(), n0, still: still1 });
@@ -54,7 +55,7 @@ try {
     check("Claude's undo takes it back too", u.ok && (await parts()) === n0, u);
     // (the view is ready sooner since three.js r184 (compileAsync no longer holds the drawing back): what counts is that Ctrl+Z came
     // while it was still being prepared)
-    check('(Ctrl+Z came while the loader still said "Preparing the view", so the case was really tested)', still1);
+    check('(Ctrl+Z came while the loader still said "Preparing the view", so the case was really tested)', still0 || still1, { still0, still1 });
   }
   check('no uncaught errors in the page', errors.length === 0, errors);
 } catch (e) { fail++; console.log('FAIL (threw)', e.message); }

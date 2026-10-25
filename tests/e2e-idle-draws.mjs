@@ -16,7 +16,7 @@ const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html'
 const GFX = process.env.GPU ? ['--enable-unsafe-webgpu', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 const IDLE_MS = +(process.env.IDLE_MS || 3000);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -147,7 +147,7 @@ try {
     await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 750, y: 450 });
     await key(k, mods); await idle(name); await key('Escape', 0, 'Escape'); await sleep(300);
   }
-  await click('#tg-transform'); await idle('Transform panel'); await click('#tg-transform');
+  await idle('Transform panel (always shown in the right sidebar)');
   await click('#sb-console-btn'); await idle('console'); await click('#sb-console-btn');
   await evalJS("(() => { const b = document.querySelector('[data-act=\"inspectModel\"]'); if (b) b.click(); })()");
 

@@ -3,13 +3,13 @@
 // The Transform panel with several parts selected, in the real app in headless Chrome (software WebGL2, no window shown): the fields
 // are open, a field shows the number when every part has it and "mixed" only when they differ, a number typed in goes to each part
 // on its own and leaves its other numbers alone, one part selected afterwards reads the same number, and Undo takes it back.
-// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9337, PROFILE = process.env.TEMP + '/cdp-profile-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -28,7 +28,7 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 950, deviceScaleFactor: 1, mobile: false });
-  await send('Page.navigate', { url: 'http://localhost:4242/index.html?t=' + Date.now() });
+  await send('Page.navigate', { url: 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html?t=' + Date.now() });
   for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
   await sleep(1500);
   await evalJS("document.getElementById('welcome-close')?.click()");
@@ -45,7 +45,7 @@ try {
       fields: () => Object.fromEntries(K.map(k => { const e = document.getElementById('tform-' + k); return [k, { v: e.value, off: e.disabled, ph: e.placeholder }]; })),
       mats: (ids) => ids.map(i => { const p = state.parts.find(q => q.partId === i); p.mesh.updateWorldMatrix(true, false); return Array.from(p.mesh.matrixWorld.elements); }),
       // the panel is filled again when it is shown
-      reopen: async () => { const b = document.getElementById('tg-transform'), p = document.getElementById('transform-panel'); if (p.classList.contains('show')) { b.click(); await new Promise(r => setTimeout(r, 350)); } b.click(); await new Promise(r => setTimeout(r, 450)); },
+      reopen: async () => { await new Promise(r => setTimeout(r, 500)); },      // (the Transform block of the right sidebar is always shown and reads the selection itself)
       type: async (k, v) => { const e = document.getElementById('tform-' + k); e.focus(); e.value = String(v); e.dispatchEvent(new Event('change', { bubbles: true })); e.blur(); await new Promise(r => setTimeout(r, 350)); },
     };
   })()`);

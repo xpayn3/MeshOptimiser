@@ -18,7 +18,7 @@ Every editing action: deleting, hiding and showing, moving, renaming, grouping, 
 - In Align to floor, a run of adjustments is one step.
 - Changing the threshold of Delete small parts while its parts are isolated adds no step of its own.
 - In [Edit mesh](meshoptimiser://docs/edit-mesh), a move, turn or scale of the picked pieces is one step, however long you drag, and so is each of Delete, Dissolve, Planarize, Straighten, Weld, Fill, Extract and Reverse normals. After an undo the pieces are picked again.
-- Quick remesh (`B`) is one step, taken when you let go on a level.
+- Quick decimate (`B`) is one step, taken when you let go on a level.
 - Each press of a button in [Align parts](meshoptimiser://docs/align-parts) is one step, and so is [Bake geo](meshoptimiser://docs/library) on a library shape (`Ctrl + Z` gives its parameters back).
 - A number typed into the Transform panel with several parts selected is one step for all of them.
 

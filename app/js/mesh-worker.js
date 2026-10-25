@@ -37,8 +37,26 @@ import { analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { repairMesh, analyseNormals } from './meshrepair.js?v=8';
 import { findRepeats } from './repeats.js?v=1';
 import { buildTopology, pairQuads, buildPolygons, outlineLines, outlinePoints, lineSlopes, vertexNormals } from './meshedit.js?v=6';
-import { untriangulate, evenTriangles, pairIntoQuads } from './untriangulate.js?v=12';
+import { untriangulate, evenTriangles, pairIntoQuads } from './untriangulate.js?v=14';
 import { unsubdivide } from './unsubdivide.js?v=1';
+// The triangles of a result put in the order of their CAD faces (a stable sort on `face`): after a dissolve the new triangles come at the
+// end of the list, and a face must be one run of triangles for the record that follows.
+function orderByFace(r) {
+  const f = r.face; if (!f) return;
+  let sorted = true, max = -1;
+  for (let i = 0; i < f.length; i++) { if (i && f[i] < f[i - 1]) sorted = false; if (f[i] > max) max = f[i]; }
+  if (sorted || max < 0) return;
+  const n = f.length, start = new Int32Array(max + 2);
+  for (let i = 0; i < n; i++) start[Math.max(0, f[i]) + 1]++;
+  for (let k = 0; k <= max; k++) start[k + 1] += start[k];
+  const idx = new Uint32Array(n * 3), poly = new Int32Array(n), face = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    const w = start[Math.max(0, f[i])]++;
+    idx[w * 3] = r.index[i * 3]; idx[w * 3 + 1] = r.index[i * 3 + 1]; idx[w * 3 + 2] = r.index[i * 3 + 2];
+    poly[w] = r.poly[i]; face[w] = f[i];
+  }
+  r.index = idx; r.poly = poly; r.face = face;
+}
 import { voxelRemesh } from './voxel.js?v=4';
 import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=19';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
@@ -262,15 +280,18 @@ self.onmessage = async (e) => {
         const cadPoly = m.cadPoly && m.cadPoly.length * 3 === m.index.length ? m.cadPoly.subarray(g.start / 3, (g.start + g.count) / 3) : null;
         const opts = { angleDeg: m.angle || 1, normals: m.normals || null, triangulate, normalTol: m.normalTol || 5, flip: m.flip !== false, tolerance: m.tolerance || 0, straight: !!m.straight, limitDeg: m.limitDeg || 0, poly: cadPoly, limitTol: m.tolerance || 0 };
         const face = m.quads && m.cadFace && m.cadFace.length * 3 === m.index.length ? m.cadFace.subarray(g.start / 3, (g.start + g.count) / 3) : null;
+        if (m.faceOf && m.faceOf.length * 3 === m.index.length) opts.faceOf = m.faceOf.subarray(g.start / 3, (g.start + g.count) / 3);      // (the CAD face of each triangle: the result says the face of each new one)
         const r = even ? evenTriangles(m.positions, sub, { angleDeg: m.angle || 1 })
           : m.quads ? pairIntoQuads(m.positions, sub, { faceDeg: m.faceDeg, shapeDeg: m.shapeDeg, uvs: m.uvs || null, face })
           : untriangulatePasses(m.positions, sub, opts);
+        if (r && r.face) orderByFace(r);
         if (!r) { const n = sub.length / 3; parts.push({ idx: sub.slice(), poly: Int32Array.from({ length: n }, (_, i) => polyBase + i), materialIndex: g.materialIndex }); polyBase += n; stats.trisBefore += sub.length / 3; stats.trisAfter += sub.length / 3; continue; }
         const poly = r.poly;
         for (let i = 0; i < poly.length; i++) poly[i] += polyBase;
         polyBase += r.stats.polygons;
-        parts.push({ idx: r.index, poly, materialIndex: g.materialIndex });
+        parts.push({ idx: r.index, poly, face: r.face || null, materialIndex: g.materialIndex });
         transfer.push(r.index.buffer, poly.buffer);
+        if (r.face) transfer.push(r.face.buffer);
         for (const k of ['trisBefore', 'trisAfter', 'polygons', 'joined', 'rebuilt', 'vertsRemoved', 'straight', 'quads', 'seams']) stats[k] += r.stats[k] || 0;
         for (const k in stats.kept) stats.kept[k] += r.stats.kept[k];
       }

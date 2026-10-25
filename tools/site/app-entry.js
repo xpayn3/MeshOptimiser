@@ -380,7 +380,7 @@ window.labApps = [
       // the Quick wand on the page (see wandDemo in tools/site/build-app-site.js): the app's own ring on three parts
       // The home page's Quick remesh band (tools/site/build-app-site.js, quickRemeshBand): a clip of the real app, a title and a line under it.
       quickRemesh: {
-        kicker: 'Quick remesh',
+        kicker: 'Quick decimate',
         title: 'Press B. Slide. Let go.',
         line: 'A column of levels opens under the pointer, and the part changes as you move down it. This bracket goes from 1,802 triangles to 900 at 50%.',
         clip: 'Images/apps/meshoptimiser-quick-remesh-b.webm',
@@ -436,7 +436,7 @@ window.labApps = [
         more: [
           ['Remove floating pieces', 'Plugs, shavings and stray dots, gone. The main body always stays.', 'remove-floating-pieces'],
           ['Remove hidden faces', 'Deletes faces that never show: inside a housing, where two parts meet.', 'remove-hidden-faces'],
-          ['Remesh', 'Flat faces rebuilt with the fewest triangles. The shape doesn’t move.', 'remesh'],
+          ['Triangulation', 'Flat faces rebuilt with the fewest triangles. The shape doesn’t move.', 'remesh'],
           ['Delete small parts', 'Screws and clips too small to see, gone. A slider and a preview show what goes.', 'delete-small-parts'],
           ['Repair mesh', 'Doubled points, empty triangles and flipped faces, fixed.', 'cleanup'],
           ['Stacked copies', 'Parts drawn twice in the same place, found and removed.', 'stacked-copies'],
@@ -692,7 +692,7 @@ window.labApps = [
     },
     spotlights: [
       ['One button, half the triangles', 'Smart optimise runs every clean-up in order, then reduces to your target. This truck axle went from 540,007 triangles to 270,248. One Ctrl+Z puts it all back.', 'Images/apps/meshoptimiser-optimise-axle.webp', 'cube'],
-      ['Quick remesh', 'Press B and a column of levels opens under the pointer. Move down it and the part changes as you go; let go to keep it. This bracket goes from 1,802 triangles to 900 at 50%.', 'Images/apps/meshoptimiser-quick-remesh-b.webm', 'cube'],
+      ['Quick decimate', 'Press B and a column of levels opens under the pointer. Move down it and the part changes as you go; let go to keep it. This bracket goes from 1,802 triangles to 900 at 50%.', 'Images/apps/meshoptimiser-quick-remesh-b.webm', 'cube'],
       ['Bolts, found by their shape', 'CAD names rarely say what a part is. Fasteners reads each part’s outline and finds bolts, screws, nuts and washers, and leaves bushings and bearings alone. 376 here, 354,399 triangles, 9.6% of the scene.', 'Images/apps/meshoptimiser-fasteners-engine-wide.webp', 'cube'],
       ['9,572 triangles down to 96', 'Smart fit swaps a heavy part for a box, a cylinder or a few blocks that keep its outline. This axle part went from 9,572 triangles to 96, same size and place.', 'Images/apps/meshoptimiser-smart-fit-axle-2.webp', 'cube'],
       ['Pull it apart', 'One slider, and a pill for each axis, so an assembly can open along one direction only. Drag it and an axle comes apart. One click puts it back.', 'Images/apps/meshoptimiser-exploded.webm', 'cube'],
@@ -720,9 +720,9 @@ window.labApps = [
       ['Dissolve', 4, [], []],
       ['Edit mesh', 4, [], ['edit-mesh']],
       ['Fit to budget', 4, [], ['fit-to-budget']],
-      ['Quick remesh', 4, ['Quick remesh (B)'], []],
+      ['Quick decimate', 4, ['Quick decimate (B)'], []],
       ['Smart fit', 3, [], ['smart-fit']],
-      ['Untriangulate', 3, ['Remesh'], ['remesh']],
+      ['Untriangulate', 3, ['Triangulation'], ['remesh']],
       ['Repair mesh', 2, [], []],
       ['Sweep', 2, [], ['sweep']],
       ['Cloner', 2, [], []],
@@ -786,10 +786,10 @@ window.labApps = [
         ['Remove floating pieces', 'Plugs, shavings and stray dots, gone.'],
         ['Split', 'One fused lump, back to the solids it was, or a mesh with several materials, one part for each.'],
         ['Smart fit', 'Swaps a part for a box, a cylinder or blocks that keep the outline.'],
-        ['Quick remesh (B)', 'Slide down a column of levels and watch the part change.'],
+        ['Quick decimate (B)', 'Slide down a column of levels and watch the part change.'],
         ['Fit to budget', 'Name a triangle count. The heaviest meshes go first.'],
         ['Remove hidden faces', 'Faces that never show, gone: inside housings, where parts meet.'],
-        ['Remesh', 'Untriangulate re-cuts flat faces with the fewest triangles: a 200-triangle plate becomes 38. Triangulate is the way back.'],
+        ['Triangulation', 'Untriangulate re-cuts flat faces with the fewest triangles: a 200-triangle plate becomes 38. Triangulate is the way back.'],
       ], more: [
         ['Stacked copies', 'Parts drawn twice in the same place, removed. Only true copies go.'],
         ['Recipes', 'Save Smart optimise settings by name, run them again, share them as a file.'],
@@ -849,7 +849,7 @@ window.labApps = [
         ['A library of 112 parts', 'Bolts, nuts, pipe fittings, bearings, brackets, gears, a servo. Set the size, drag it in.'],
         ['Exploded view', 'One slider pulls it apart, along the axes you choose.'],
         ['Animate (alpha)', 'Make parts spin, swing, shake, travel along a path or oscillate like a piston, on a video-editor timeline along the bottom. Take it out as a video, or inside a GLB as keyframes.'],
-        ['Axis Center', 'Put the axis in the middle of a part and reset its rotation, move the axis or the object to the origin, the selection or the view, align it, reset the scale. One undo each.'],
+        ['Centre pivot', 'Put the pivot in the middle of a part and reset its rotation, move the pivot or the object to the origin, the selection or the view, align it, reset the scale. One undo each.'],
         ['Lock a part or a group', 'Lock one part or a whole group from Properties or the right-click menu. It shows a red lock, and delete skips it.'],
         ['Dynamic place (D)', 'Drag a part over a surface: it rests on it and turns to face it.'],
         ['Align parts', 'Align or spread parts and whole groups along X, Y and Z, with a gap if you want one. One undo.'],
@@ -957,7 +957,7 @@ window.labApps = [
         'Repair mesh', 'Optimisation report', 'Merge parts',
       ] },
       { title: 'Reduce triangles', items: [
-        'Decimate', 'Smart fit', 'Remesh', 'Quick remesh',
+        'Decimate', 'Smart fit', 'Triangulation', 'Quick decimate',
       ] },
       { title: 'Edit mesh', items: [
         'Move picked pieces', 'Extract polygons', 'Reverse normals', 'Quads and n-gons remembered',

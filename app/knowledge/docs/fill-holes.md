@@ -58,7 +58,7 @@ A whole run is one undo step. Press `Ctrl + Z` and every hole is back.
 - A hole whose wall is wound the wrong way round, or whose edge is doubled, is found and closed too, instead of being closed twice.
 - Two holes that touch at a corner, or a hole that touches the edge of its face, are closed as well.
 - While it runs, Remove holes shows in the Tasks list of the status bar.
-- Small loose pieces left next to a part are a job for [Remove floating pieces](meshoptimiser://docs/remove-floating-pieces). To turn the closed faces into clean polygons, or back into triangles, see [Remesh](meshoptimiser://docs/remesh).
+- Small loose pieces left next to a part are a job for [Remove floating pieces](meshoptimiser://docs/remove-floating-pieces). To turn the closed faces into clean polygons, or back into triangles, see [Triangulation](meshoptimiser://docs/remesh).
 
 [Smart optimise](meshoptimiser://docs/smart-optimise) can run this command as one of its steps, with the settings and the size limit of this panel.
 

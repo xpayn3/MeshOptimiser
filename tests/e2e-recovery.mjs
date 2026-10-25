@@ -12,7 +12,7 @@ const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 const PORT = 9347, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-recovery-' + Date.now();
 const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0, curId = ''; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -138,9 +138,10 @@ try {
   check('a copy exists before the reload', (await copies()).length === 1);
   await evalJS("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', bubbles: true, cancelable: true }))");
   await sleep(600);
-  const dlg = await evalJS("(() => { const b = document.querySelector('button[data-act=\"discard\"]'); return b ? b.parentElement.parentElement.innerText : null; })()");
+  // (the way through is a slide-to-confirm track since v0.37.x: its thumb is moved with the arrow keys, three presses reach the end)
+  const dlg = await evalJS("(() => { const t = document.querySelector('.cq-slide-thumb'); return t ? t.closest('.cq-card').innerText : null; })()");
   check('F5 asks first and says the changes are lost', dlg && /will be lost/i.test(dlg) && /not bring the scene back/i.test(dlg), dlg);
-  evalJS("document.querySelector('button[data-act=\"discard\"]').click()").catch(() => {});
+  evalJS("(() => { const t = document.querySelector('.cq-slide-thumb'); for (let i = 0; i < 3; i++) t.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })); })()").catch(() => {});
   await sleep(3000);
   await ready();
   await sleep(3000);

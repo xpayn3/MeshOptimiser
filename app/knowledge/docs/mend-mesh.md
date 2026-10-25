@@ -1,4 +1,4 @@
-# Mend a mesh: Close cracks, Remove slivers, Patch holes
+# Mend a mesh: Close cracks, Remove slivers, Fill mesh holes
 
 Three small repairs for meshes that came out of a CAD program: close the hairline cracks between faces, get rid of needle-thin triangles, and patch openings so the patch follows the curve round them.
 
@@ -8,12 +8,12 @@ A CAD program cuts each face of a model into triangles on its own. Where two fac
 
 - **Close cracks**: Joins the edges of a crack. Ends of open edges that lie closer together than **Gap up to** become one point, and an edge that has another face’s point lying on it is split there, so both sides share their points. Nothing moves further than the gap. The card says how many points were joined and how many open edges there were before and after.
 - **Remove slivers**: Cleans up needle triangles. A triangle whose shortest edge is shorter than **Needle under** (a share of its longest edge) has that short edge taken out, and a triangle with one angle near 180° has its long edge turned. Nothing is done where a triangle round it would turn over, so the shape stays.
-- **Patch holes**: Closes each opening up to **Holes up to** across (a share of the part’s size). The patch is cut to the size of the triangles round the hole and bent to carry on the curve of the surface, so a hole in a curved face is closed curved, not flat.
+- **Fill mesh holes**: Closes each opening up to **Holes up to** across (a share of the part’s size). The patch is cut to the size of the triangles round the hole and bent to carry on the curve of the surface, so a hole in a curved face is closed curved, not flat.
 
 ## How to use them
 
 1. Select the parts to mend.
-2. Open the command search (**Ctrl + K**) and type the tool’s name: **Close cracks**, **Remove slivers** or **Patch holes**.
+2. Open the command search (**Ctrl + K**) and type the tool’s name: **Close cracks**, **Remove slivers** or **Fill mesh holes**.
 3. The tool runs on each selected part, and a card opens with its one setting, and the Wireframe goes on those parts so you see the triangles change. Change the setting and the tool runs again from the parts as they were, in the same undo step.
 4. Press **Done** or `Esc` to close the card. One undo step (**Ctrl + Z**) takes the whole change back.
 

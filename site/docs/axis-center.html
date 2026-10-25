@@ -7,13 +7,13 @@
   <meta name="theme-color" content="#131314" />
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
-  <title>The axis of a part: Axis Center — MeshOptimiser Docs</title>
-  <meta name="description" content="Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale." />
+  <title>The pivot of a part: Centre pivot — MeshOptimiser Docs</title>
+  <meta name="description" content="Centre the pivot of a part, reset its rotation, move the pivot or the object to the origin, the selection or the view, align it, and reset the scale." />
   <link rel="icon" type="image/svg+xml" href="../Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/docs/axis-center" />
   <meta property="og:site_name" content="MeshOptimiser" />
-  <meta property="og:title" content="The axis of a part: Axis Center — MeshOptimiser Docs" />
-  <meta property="og:description" content="Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale." />
+  <meta property="og:title" content="The pivot of a part: Centre pivot — MeshOptimiser Docs" />
+  <meta property="og:description" content="Centre the pivot of a part, reset its rotation, move the pivot or the object to the origin, the selection or the view, align it, and reset the scale." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -89,6 +89,7 @@
         <h2>Make it lighter</h2>
         <a href="../docs/read-the-numbers.html">How to read the numbers</a>
         <a href="../docs/heavy-parts.html">Heavy parts</a>
+        <a href="../docs/batch-folder.html">Batch optimise a folder</a>
         <a href="../docs/smart-optimise.html">Smart optimise</a>
         <a href="../docs/delete-small-parts.html">Delete small parts</a>
         <a href="../docs/select-hidden-parts.html">Select hidden parts</a>
@@ -97,7 +98,7 @@
         <a href="../docs/stacked-copies.html">Stacked copies</a>
         <a href="../docs/fill-holes.html">Remove holes</a>
         <a href="../docs/remove-floating-pieces.html">Remove floating pieces</a>
-        <a href="../docs/remesh.html" title="Remesh: Untriangulate and Triangulate">Remesh</a>
+        <a href="../docs/remesh.html" title="Triangulation: Untriangulate and Triangulate">Triangulation</a>
         <a href="../docs/split.html">Split</a>
         <a href="../docs/smart-fit.html">Smart fit</a>
         <a href="../docs/decimate.html">Decimate</a>
@@ -113,13 +114,13 @@
         <a href="../docs/view-modes.html">View modes</a>
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/face-colours.html" title="Several colours on one part">Several colours on one part</a>
-        <a href="../docs/axis-center.html" aria-current="page">The axis of a part: Axis Center</a>
+        <a href="../docs/axis-center.html" aria-current="page">The pivot of a part: Centre pivot</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
         <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
         <a href="../docs/remove-thickness.html">Remove thickness</a>
         <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
-        <a href="../docs/mend-mesh.html" title="Mend a mesh: Close cracks, Remove slivers, Patch holes">Mend a mesh</a>
-        <a href="../docs/reshape-mesh.html" title="Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more">Reshape a mesh</a>
+        <a href="../docs/mend-mesh.html" title="Mend a mesh: Close cracks, Remove slivers, Fill mesh holes">Mend a mesh</a>
+        <a href="../docs/reshape-mesh.html" title="Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more">Reshape a mesh</a>
         <a href="../docs/booleans.html" title="Union, Subtract and Intersect parts">Union, Subtract, Intersect</a>
         <a href="../docs/voxel-remesh.html">Voxel remesh</a>
         <a href="../docs/round-parts.html" title="Round parts: Fill round grooves, Fill solid round, Belt">Round parts</a>
@@ -161,23 +162,23 @@
       </nav>
       <article class="kb-article">
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#look">Look and arrange</a></p>
-        <h1>The axis of a part: Axis Center</h1>
-        <p class="lead">Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale.</p>
+        <h1>The pivot of a part: Centre pivot</h1>
+        <p class="lead">Centre the pivot of a part, reset its rotation, move the pivot or the object to the origin, the selection or the view, align it, and reset the scale.</p>
         <div class="kb-body">
-          <p>Every part has an axis: the origin and the X, Y and Z the gizmo shows in <span class="ui">Local</span> axes. These commands move or turn the axis, and the shape stays exactly where it is (the points are carried the opposite way). Each is one undo step that puts back exactly what was there.</p>
-          <h2 id="axis-center">Axis Center</h2>
-          <p>Put the axis in the middle of the part and reset its rotation to 0, 0, 0. It is in the search as <span class="ui">Axis Center</span> and as <span class="ui">Centre pivot</span> in the right-click menu of a selection. A part whose axis is already there is left alone: no change and no undo step.</p>
-          <h2 id="the-axis-card">The Axis card</h2>
-          <p>Search for <span class="ui">Axis…</span> to open the card. It works on the selected parts.</p>
+          <p>Every part has a pivot: its origin and the X, Y and Z axes the gizmo shows in <span class="ui">Local</span>. These commands move or turn the pivot, and the shape stays exactly where it is (the points are carried the opposite way). Each is one undo step that puts back exactly what was there.</p>
+          <h2 id="centre-pivot">Centre pivot</h2>
+          <p>Put the pivot in the middle of the part and reset its rotation to 0, 0, 0. It is <span class="ui">Centre pivot</span> in the search and in the right-click menu of a selection. A part whose pivot is already there is left alone: no change and no undo step.</p>
+          <h2 id="the-pivot-card">The Pivot card</h2>
+          <p>Search for <span class="ui">Pivot…</span> to open the card. It works on the selected parts.</p>
           <dl class="table">
-            <div><dt>Center axis to</dt><dd>The axis goes to the world origin, the middle of the selection, the axis of the part picked last, or the middle of the view. <span class="ui">Also reset its rotation</span> turns it as well.</dd></div>
-            <div><dt>Center object to</dt><dd>The object moves so that its axis lands on the world origin, the part picked last or the middle of the view. The shape keeps its place around the axis.</dd></div>
-            <div><dt>Align axis to</dt><dd>Turn the axis to the world (0, 0, 0), to its parent, or to the part’s own biggest flat faces. Curved shapes with no flat faces are left alone.</dd></div>
+            <div><dt>Pivot to</dt><dd>The pivot goes to the world origin, the middle of the selection, the pivot of the part picked last, or the middle of the view. <span class="ui">Also reset its rotation</span> turns it as well.</dd></div>
+            <div><dt>Move object to</dt><dd>The object moves so that its pivot lands on the world origin, the part picked last or the middle of the view. The shape keeps its place around the pivot.</dd></div>
+            <div><dt>Align pivot to</dt><dd>Turn the pivot to the world (0, 0, 0), to its parent, or to the part’s own biggest flat faces. Curved shapes with no flat faces are left alone.</dd></div>
             <div><dt>Reset Scale</dt><dd>The scale goes back to 1, 1, 1 and is built into the mesh. The part looks the same. A mirrored part (a negative scale) is left alone.</dd></div>
           </dl>
           <h2 id="what-to-know">What to know</h2>
           <ul class="kb-points">
-            <li>Locked parts keep their axis. Copies that share one mesh get a mesh of their own first.</li>
+            <li>Locked parts keep their pivot. Copies that share one mesh get a mesh of their own first.</li>
           </ul>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a></li>

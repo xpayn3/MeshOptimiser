@@ -13,7 +13,7 @@ const URL = 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html'
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // GPU=1 runs on the real graphics card (WebGPU); without it, on swiftshader (WebGL2).
 const GFX = process.env.GPU ? ['--enable-unsafe-webgpu', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, ...GFX, '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -50,7 +50,7 @@ const PICKED = `(() => {
   let s = window.state.partsRoot; while (s.parent) s = s.parent;
   const g = s.getObjectByName('_elements'); if (!g) return { edges: 0, ver: -1, dots: 0, first: null };
   const fat = g.children.find(o => o.isMesh && o.geometry && o.geometry.isInstancedBufferGeometry && o.renderOrder === 16);
-  const dot = g.children.find(o => o.isSprite && o.renderOrder === 12 && !o.userData.depthPass);
+  const dot = g.children.find(o => o.isSprite && o.renderOrder === 19 && !o.userData.depthPass);
   const a = fat && fat.geometry.attributes.instanceStart;
   return { edges: fat && fat.visible ? fat.geometry.instanceCount : 0, ver: a ? a.version : -1, dots: dot && dot.visible ? dot.count : 0, first: a && fat.visible ? [a.array[0], a.array[1], a.array[2]] : null };
 })()`;

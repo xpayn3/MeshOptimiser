@@ -58,13 +58,15 @@ if (fs.existsSync(BLENDER)) {
 } else console.log('Blender not found: the USD cases are skipped');
 
 // ── the app ──
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1400,900', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1400,900', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
 async function freshApp() {
+  // (mark the old page, so the wait below cannot be satisfied by it before the new one has loaded)
+  await evalJS('window.__moOldPage = true').catch(() => {});
   await send('Page.navigate', { url: URL + '?t=' + Date.now() });
-  for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
+  for (let i = 0; i < 120; i++) { if (await evalJS("!window.__moOldPage && document.body && document.body.classList.contains('app-ready') && typeof window.__moOpenFile === 'function'").catch(() => false)) break; await sleep(500); }
   await sleep(1200);
   await evalJS("document.getElementById('welcome-close')?.click(); window.__moQuietToasts = true; true");
 }

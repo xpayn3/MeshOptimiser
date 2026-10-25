@@ -1,18 +1,21 @@
-// node tests/e2e-smoke.mjs <folder for screenshots> [model, default inbox/Drive_Unit_DU-240.glb]
+// node tests/e2e-smoke.mjs [folder for screenshots, default scratch] [model, default inbox/GearboxAssy.glb]
 //
 // Drives the real app in headless Chrome (software WebGL2, no window shown): loads a model through the file input, switches to
-// the CAD view, orbits, opens Settings › Appearance and About, the Help window, and prints every JavaScript error. Needs the app
-// served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed (path below) and Node 22+.
+// the CAD view, orbits, opens Settings › Appearance and About, the Help window. Fails (exit 1) on any page exception or console error. Needs the app
+// served on http://localhost:4242, or the port in APP_PORT (python app/serve.py --no-browser --port 4343), Chrome installed (path below) and Node 22+.
 // It cannot show WebGPU-only behaviour: on this path the renderer is WebGL2.
 // Drives the real app in headless Chrome (software WebGL2): loads a model, switches views, screenshots, collects errors.
 import { spawn } from 'child_process';
 import fs from 'fs';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const OUT = process.argv[2];
-const MODEL = process.argv[3] || 'inbox/Drive_Unit_DU-240.glb';
+const OUT = process.argv[2] || 'scratch';
+const MODEL = process.argv[3] || 'inbox/GearboxAssy.glb';
+const APP = process.env.APP_PORT || 4242;
+fs.mkdirSync(OUT, { recursive: true });
 const PORT = 9333, PROFILE = process.env.TEMP + '/cdp-profile-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+let harnessError = null;
 let ws, id = 0; const pending = new Map(), errors = [], consoleErr = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -31,7 +34,7 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 950, deviceScaleFactor: 1, mobile: false });
-  await send('Page.navigate', { url: 'http://localhost:4242/index.html?t=' + Date.now() });
+  await send('Page.navigate', { url: 'http://localhost:' + APP + '/index.html?t=' + Date.now() });
   for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
   console.log('app ready:', await evalJS("document.body.classList.contains('app-ready')"));
   await sleep(1500);
@@ -62,9 +65,13 @@ try {
   await shot('6-settings-pink');
   await evalJS("window.__openSettings('about')"); await sleep(600); await shot('7-settings-about');
   await evalJS("document.getElementById('settings-close')?.click(); window.MOHelp.show()"); await sleep(1500); await shot('8-help');
-} catch (e) { console.log('HARNESS ERROR:', e.message); }
+} catch (e) { harnessError = e.message; console.log('HARNESS ERROR:', e.message); }
 console.log('page exceptions:', errors.length); errors.slice(0, 8).forEach(e => console.log('  ' + e));
 console.log('console errors:', consoleErr.length); consoleErr.slice(0, 8).forEach(e => console.log('  ' + e));
+const failed = errors.length + consoleErr.length + (harnessError ? 1 : 0);
+console.log(errors.length ? 'FAIL the app threw no exceptions' : 'PASS the app threw no exceptions');
+console.log(consoleErr.length ? 'FAIL the console shows no errors' : 'PASS the console shows no errors');
+if (harnessError) console.log('FAIL the run reached the end (' + harnessError + ')');
 try { ws && ws.close(); } catch (_) {}
 chrome.kill();
-process.exit(0);
+process.exit(failed ? 1 : 0);

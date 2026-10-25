@@ -246,7 +246,16 @@ def _graceful(signum, frame):
 HTTPD: "http.server.ThreadingHTTPServer | None" = None
 
 
-def _sanitize_filename(name: str, fallback: str = "upload.step") -> str:
+def _name_limit() -> int:
+    """How long an uploaded name may be. Windows without long paths stops a path at 260 characters, and the staged upload is
+    <inbox folder>/<job id, 12>_<name> with the converter's files beside it (<name>.glb.brep.json.tmp and the like): a name that fits
+    the 200-character cap but not the folder used to upload and convert, then fail late writing its B-rep file."""
+    if os.name != "nt":
+        return 200
+    return max(48, min(200, 250 - len(str(INBOX.resolve())) - 1 - 13 - 22))
+
+
+def _sanitize_filename(name: str, fallback: str = "upload.step", limit: int = 200) -> str:
     """Strip everything except a conservative alphabet + dot/dash/underscore/space.
 
     Path.name already strips directory components — this layer also defangs
@@ -258,10 +267,10 @@ def _sanitize_filename(name: str, fallback: str = "upload.step") -> str:
     base = base.strip().lstrip(".")                      # no leading dots
     if not base or base in {".", "..", "_"}:
         return fallback
-    if len(base) > 200:
+    if len(base) > limit:
         # Prevent absurdly-long names that some filesystems reject.
         stem, ext = os.path.splitext(base)
-        base = stem[:200 - len(ext)] + ext
+        base = stem[:max(1, limit - len(ext))] + ext
     return base
 
 
@@ -990,6 +999,8 @@ MCP_TOOLS += [
      "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "deviation_mm": {"type": "number", "description": "How far the surface may move from the true round face, mm (default 0.05 % of the part's size)."}, "min_segments": {"type": "integer", "description": "A full turn keeps at least this many facets (default 12)."}})},
     {"name": "remove_thickness", "description": "Make thin-walled parts one surface: a hollow pipe keeps its outside (the inside and the end rings go), a part made of sheet keeps one face (the other face and the strip round its edge go), or with inset_percent 50 the middle of the wall. Walls up to max_thickness_mm are found by looking straight into the material; walls that cannot be split into two sides, and thicker ones, are left alone. The surface left is open. The user is asked to allow it; one undo step.",
      "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "max_thickness_mm": {"type": "number", "description": "Walls up to this thick, in mm (default 0.5 % of each part's size)."}, "inset_percent": {"type": "number", "description": "0 (default) leaves the side that stays where it is; 50 puts the surface in the middle of the wall."}})},
+    {"name": "bake_textures", "description": "Reduce parts and bake what the reduction took away onto shared pictures: the parts are reduced by reduce_percent and laid out flat together on a square picture of size_px; then the colour of the original surface (its material colour, its Base colour map, its vertex colours), its normals (so the reduced parts shade as the original did) and, if asked, its ambient occlusion are read under every texel. The reduced parts keep their look with far fewer triangles, and all wear one new material, 'Baked'. Opacity and emission are not baked. Parts: ids, name_contains, or the selection. The user is asked to allow it; one undo step; progress shows and the user can stop it.",
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "reduce_percent": {"type": "number", "description": "How much of the triangles go, 0 to 90 (default 50). 0 only lays out and bakes."}, "size_px": {"type": "number", "enum": [1024, 2048, 4096], "description": "Side of the square picture (default 2048)."}, "maps": {"type": "array", "items": {"type": "string", "enum": ["colour", "normals", "occlusion"]}, "description": "Which maps to bake (default colour and normals). Occlusion is the slow one: rays from every texel, at half the size, against all the chosen parts together."}, "occlusion_reach_percent": {"type": "number", "description": "How far something can be and still shade a point, as a share of the size of everything chosen (default 5)."}, "occlusion_rays": {"type": "number", "description": "Rays per texel for occlusion (default 16)."}})},
     {"name": "remove_fillets", "description": "Take the fillets and chamfers off parts that still have their CAD faces (a STEP opened with them) and make the edges sharp: each blend's two neighbouring faces are extended until they meet. Fillets up to max_radius_mm and chamfers up to max_chamfer_mm (default: 2 % of the part's size each; 0 leaves that kind). Works between planes and cylinders; a blend on another kind of face is left and counted. The user is asked to allow it. Parts: ids, name_contains, or the selection; with none of them, every part that is shown.",
      "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "max_radius_mm": {"type": "number", "description": "The largest fillet radius to take off, mm (0: leave fillets)."}, "max_chamfer_mm": {"type": "number", "description": "The widest chamfer to take off, mm (0: leave chamfers)."}})},
     {"name": "boolean_parts", "description": "Exact booleans between parts (Manifold, in world space), as the Boolean card does them: union, subtract (the first less the others), intersect, without (the first less the others with the cut left open, Cinema 4D's A without B) or split (the first cut in two: the part outside the others stays, the part inside becomes a new part). The first id (A) is the part that changes; the others (B) are kept, hidden or deleted afterwards (cutters_after). Only closed bodies take part. One undo step. The user is asked to allow it.",
@@ -998,8 +1009,8 @@ MCP_TOOLS += [
                           "keep_original": {"type": "boolean", "description": "Put the result on a copy of the first part and hide the first part (default false)."},
                           "shared_with_all": {"type": "boolean", "description": "intersect with three parts or more: keep what the first shares with every other part (default true); false: with any of them."},
                           "optimise_points_mm": {"type": "number", "description": "Afterwards merge points closer than this, in mm, and simplify the flat faces they leave (default 0: off)."}}, ["ids", "op"])},
-    {"name": "voxel_remesh", "description": "Rebuild parts on a voxel grid (like Blender's Voxel remesh or ZBrush's DynaMesh): one closed, even surface; overlapping bodies become one, hollows shut inside are filled, sharp edges are kept to the size of a voxel, and the result is reduced as far as adaptivity allows. Optionally closes gaps narrower than close_gaps_mm. Good for a clean, watertight stand-in of a messy or many-bodied part; not exact CAD (use simplify_round_part for round parts and belts). The user is asked to allow it. " + _WHICH,
-     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "detail": {"type": "integer", "description": "Voxels along each part's longest side, 32 to 400 (default 160)."}, "adaptivity": {"type": "number", "description": "How far the reduction may move the surface, in voxels, 0 to 2 (default 0.25; 0 keeps every face of the grid)."}, "close_gaps_mm": {"type": "number", "description": "Also fill gaps narrower than this, in mm (default 0: none)."}})},
+    {"name": "voxel_remesh", "description": "Rebuild parts on a voxel grid (like Blender's Voxel remesh or ZBrush's DynaMesh): one closed, even surface; overlapping bodies become one, hollows shut inside are filled, sharp edges are kept to the size of a voxel, and the result is reduced as far as adaptivity allows. Optionally closes gaps narrower than close_gaps_mm. Good for a clean, watertight stand-in of a messy or many-bodied part; not exact CAD (use simplify_round_part for round parts and belts). With wrap true the listed parts (two or more) are first made ONE part, called Wrap, and that part is rebuilt: one closed skin round the whole assembly, everything inside gone, and (unless close_gaps_mm says otherwise) gaps narrower than 3 % of its length bridged. Use wrap for a light outside-only stand-in of an assembly (a far LOD, a collision shape, a silhouette); the parts are not kept, one undo brings them back. The user is asked to allow it. " + _WHICH,
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "detail": {"type": "integer", "description": "Voxels along each part's longest side, 32 to 400 (default 160)."}, "adaptivity": {"type": "number", "description": "How far the reduction may move the surface, in voxels, 0 to 2 (default 0.25; 0 keeps every face of the grid)."}, "close_gaps_mm": {"type": "number", "description": "Also fill gaps narrower than this, in mm (default 0: none; with wrap, 3 % of the length of the whole)."}, "wrap": {"type": "boolean", "description": "Make the listed parts one part first and rebuild that, one closed skin round the whole assembly (default false: each part on its own)."}})},
     {"name": "simplify_round_part", "description": "For round parts (turned: a spool, bushing, pulley, grommet, fan clutch). mode ridges (default): fill the ridges and grooves of the surface and rebuild the part clean from its profile. The axis is found by itself; gaps along the axis narrower than width_mm are filled flush with the ridge tops, while steps, lips, chamfers, recesses and the bore stay exactly. The part keeps its number of segments and comes out closed with far fewer triangles. A part that is not round around one axis (bolt holes in a flange, a flat, a key way) is refused and left as it was, with the reason. mode belt is for a band swept along a closed path in a plane (a poly-V drive belt, a flat belt, a seal strip): its ribs or grooves along the band are filled and it is swept again from one cross-section. mode solid is for parts round only in steps (a fan with fins, a clutch with ribs), not quite round, or with gaps in the mesh: the part is rebuilt as one solid round shape from its outline, so fins and everything between them become solid; a good low-detail stand-in. The user is asked to allow it. " + _WHICH,
      "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "width_mm": {"type": "number", "description": "Fill gaps narrower than this, in mm. It must be wider than the spacing of the ridges and narrower than any channel to keep. Default: 15 % of the part's length or diameter, whichever is smaller. 0 fills none (mode solid)."}, "mode": {"type": "string", "enum": ["ridges", "solid", "belt"], "description": "ridges (default): remove ridges, the rest stays exact; the part must be round all the way round. solid: make it one solid round shape (fins, ribs and gaps filled). belt: a belt or band along a closed path; its ribs are filled."}, "segments": {"type": "integer", "description": "Segments around the axis. Default: the part's own (ridges) or 64 (solid)."}})},
     {"name": "search_docs", "description": "Search the app's own knowledge base: the playbooks (how to optimise, recipes by goal, judgement, safety, troubleshooting) and about 50 help articles, one per tool and job. Use it before guessing how a tool works, and for a symptom (flicker, lying on its side, too big). Answered by the server: the app need not be open.",
@@ -1181,7 +1192,7 @@ MCP_TIMEOUT_MORE = {"optimise_to_target": 1800, "compare_images": 900, "batch_op
 MCP_TIMEOUT = {"decimate": 900, "fit_to_budget": 900, "fill_holes": 900, "merge_parts": 600, "export_model": 600,
                "turntable_video": 900, "open_file": 600, "find_fasteners": 300, "clean_up": 600, "remove_small_parts": 300,
                "split_parts": 600, "repair_mesh": 600, "remove_hidden_faces": 900, "duplicate_parts": 300, "merge_by_colour": 600,
-               "smart_optimise": 1800, "render_image": 900, "remove_thickness": 600, "photo_mode": 120, "run_recipe": 1800, "save_scene": 600, "check_model": 300, "find_hidden_parts": 600, "smart_fit": 600, "untriangulate": 900, "remove_fillets": 600, "simplify_round_faces": 900, "simplify_round_part": 300, "voxel_remesh": 900, "fix_mesh": 600, "reshape_mesh": 900, "boolean_parts": 600, "remove_floating_pieces": 600, "make_unique": 300}
+               "smart_optimise": 1800, "render_image": 900, "remove_thickness": 600, "bake_textures": 1800, "photo_mode": 120, "run_recipe": 1800, "save_scene": 600, "check_model": 300, "find_hidden_parts": 600, "smart_fit": 600, "untriangulate": 900, "remove_fillets": 600, "simplify_round_faces": 900, "simplify_round_part": 300, "voxel_remesh": 900, "fix_mesh": 600, "reshape_mesh": 900, "boolean_parts": 600, "remove_floating_pieces": 600, "make_unique": 300}
 MCP_TIMEOUT.update(MCP_TIMEOUT_MORE)
 OPEN_EXT = {".step", ".stp", ".iges", ".igs", ".brep", ".brp", ".glb", ".gltf", ".fbx", ".obj", ".3mf", ".stl",
             ".usd", ".usda", ".usdc", ".usdz", ".dae"}
@@ -1191,13 +1202,13 @@ EXPORT_DIR = Path(__file__).resolve().parent / "exports"
 # client uses that to decide what to ask), the server can offer documents to read (resources) and jobs to start (prompts), and
 # it sends a short brief when the connection opens (instructions). The app still asks the user before it changes anything.
 _READ_ONLY = {"say", "scene_summary", "list_parts", "get_selection", "screenshot", "measure_parts", "list_groups", "search_docs", "read_doc", "check_model", "optimisation_report", "estimate_export_size", "list_materials", "list_recipes", "list_library", "list_folder", "list_notes", "get_note", "show_note"}
-_CHANGES_MODEL = {"remove_thickness", "delete_parts", "remove_small_parts", "merge_parts", "merge_by_colour", "decimate", "fit_to_budget", "fill_holes",
+_CHANGES_MODEL = {"remove_thickness", "bake_textures", "delete_parts", "remove_small_parts", "merge_parts", "merge_by_colour", "decimate", "fit_to_budget", "fill_holes",
                   "remove_hidden_faces", "repair_mesh", "clean_up", "split_parts", "duplicate_parts", "group_parts", "ungroup", "remove_floating_pieces", "make_unique",
                   "rename_parts", "transform_parts", "recenter_model", "align_to_floor", "smart_optimise", "smart_fit", "untriangulate", "simplify_round_part", "voxel_remesh", "fix_mesh", "reshape_mesh", "remove_fillets", "simplify_round_faces", "boolean_parts", "run_recipe", "add_library_part", "optimise_to_target"}
 _TITLES = {"scene_summary": "What is open", "list_parts": "List parts", "get_selection": "What is selected", "select_parts": "Select parts",
            "select_all": "Select all or invert", "frame_selection": "Fly to the selection", "screenshot": "Take a screenshot", "hide_parts": "Hide parts",
            "isolate_parts": "Isolate parts", "show_all": "Show everything", "set_view_mode": "Change the view mode", "set_explode": "Explode the view",
-           "set_grid": "Show or hide the grid", "set_camera_view": "Move the camera", "remove_thickness": "Remove thickness", "photo_mode": "Photo mode", "undo": "Undo", "redo": "Redo", "find_fasteners": "Find bolts and nuts",
+           "set_grid": "Show or hide the grid", "set_camera_view": "Move the camera", "remove_thickness": "Remove thickness", "bake_textures": "Bake textures", "photo_mode": "Photo mode", "undo": "Undo", "redo": "Redo", "find_fasteners": "Find bolts and nuts",
            "find_stacked_copies": "Find stacked copies", "remove_lettering": "Remove lettering", "measure_parts": "Measure between parts", "list_groups": "List groups", "scene_tabs": "Scene tabs",
            "delete_parts": "Delete parts", "remove_small_parts": "Delete small parts", "merge_parts": "Merge parts", "merge_by_colour": "Merge by colour",
            "decimate": "Reduce triangles", "fit_to_budget": "Fit to a triangle budget", "fill_holes": "Remove holes", "remove_hidden_faces": "Remove hidden faces",
@@ -2100,7 +2111,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         # ── Validate inputs BEFORE we touch disk
         raw_name = q.get("name", ["upload.step"])[0]
-        name = _sanitize_filename(raw_name)
+        name = _sanitize_filename(raw_name, limit=_name_limit())
         # Extension allow-list — never write anything that's not a CAD file
         # step2glb.py reads (it picks its reader by the extension).
         if not name.lower().endswith(CAD_EXTS):

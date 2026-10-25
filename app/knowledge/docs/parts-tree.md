@@ -17,7 +17,7 @@ The parts tree in the left sidebar lists everything in the scene. A part is one 
 - **Rename**: Renames many parts at once. A click, or a right-click, opens a menu: **Batch rename…** first (`F2` opens it too), then your saved rules and the built-in ones. A rule opens the window with its settings filled in.
 - **Flatten**: Removes levels of grouping. A click, or a right-click, opens a menu: **Advanced flatten…** first, then quick choices such as flattening the deepest level.
 - **Transform**: Shows or hides the Transform card at the foot of the sidebar. See [Move, rotate, scale](meshoptimiser://docs/move-rotate-scale).
-- **Recentre, Axis Center, Bake transforms**: One command each, in the search (`Ctrl + K`). See [Clean up](meshoptimiser://docs/cleanup) and [The axis of a part](meshoptimiser://docs/axis-center).
+- **Recentre, Centre pivot, Bake transforms**: One command each, in the search (`Ctrl + K`). See [Clean up](meshoptimiser://docs/cleanup) and [The pivot of a part](meshoptimiser://docs/axis-center).
 
 ## Collapse and expand part of the tree
 

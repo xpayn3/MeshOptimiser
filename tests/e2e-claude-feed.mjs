@@ -12,11 +12,11 @@ const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';
 // the second model, opened over the first; it has to be under app/ (the server shows nothing else). It was inbox/coral.glb, a customer's model
 // that is not on this computer: the server answered 404 with its HTML page, and that page went into the loader ("Unexpected token '<'").
-const SECOND = process.env.SECOND_MODEL || 'inbox/shapes_test.glb';
+const SECOND = process.env.SECOND_MODEL || 'inbox/Drive_Unit_DU-240.glb';
 const isSecond = (file) => String(file || '').toLowerCase().includes(path.basename(SECOND, path.extname(SECOND)).toLowerCase());
 const PORT = 9347, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-feed-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CH, ['--headless=new', '--mute-audio', '--no-sandbox', `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [], consoleErr = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -84,7 +84,7 @@ try {
   await sleep(1800);
   check('split: the app chrome is gone (top bar, sidebars, status bar, viewport tools)', await evalJS("['tb','sidebar-left','sidebar-right','sb','vp-overlay'].every(i => getComputedStyle(document.getElementById(i)).display === 'none')"));
   check('split: the viewport card fills the rest of the window', await evalJS("(() => { const r = document.getElementById('viewport').getBoundingClientRect(), f = document.getElementById('claude-feed').getBoundingClientRect(); return r.left > f.right && r.left - f.right < 24 && innerWidth - r.right < 24 && r.top < 24 && innerHeight - r.bottom < 24; })()"));
-  await sleep(700); check('split: the Properties card floats at the bottom right of the viewport', await evalJS("(() => { const c = document.getElementById('cf-props'), r = c.getBoundingClientRect(); return /Properties/.test(c.textContent) && /Parts/.test(c.textContent) && r.bottom > innerHeight - 40 && r.right > innerWidth - 40; })()"));
+  await sleep(700); check('split: the Properties card floats at the bottom right of the viewport', await evalJS("(() => { const c = document.getElementById('cf-props'), r = c.getBoundingClientRect(); return /Properties/.test(c.textContent) && /[0-9] parts/.test(c.textContent) && r.bottom > innerHeight - 40 && r.right > innerWidth - 40; })()"), await evalJS("(() => { const r = document.getElementById('cf-props').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom, innerWidth, innerHeight]; })()"));
   await evalJS("document.getElementById('cf-set').click()"); await sleep(600);
   check('Settings opens above the feed', await evalJS("(() => { const m = document.getElementById('settings-modal'); if (!m || !m.classList.contains('show')) return false; const r = m.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2).closest('#settings-modal') !== null; })()"));
   await evalJS("document.getElementById('settings-close')?.click()"); await sleep(400);

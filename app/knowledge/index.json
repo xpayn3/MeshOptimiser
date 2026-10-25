@@ -13,7 +13,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "A plain-language glossary: STEP, mesh, triangle, GLB, instancing, decimation, WebGPU, virtual environment and the other terms these pages use.",
-  "chars": 6930
+  "chars": 6937
  },
  {
   "slug": "first-file",
@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 10364
+  "chars": 10460
  },
  {
   "slug": "move-the-view",
@@ -101,7 +101,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Search, rename, group and reorder the parts of a model, rename many at once, and flatten a hierarchy that is deeper than you need.",
-  "chars": 8438
+  "chars": 8440
  },
  {
   "slug": "organise-the-tree",
@@ -133,7 +133,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Every editing action can be taken back with Ctrl + Z. What counts as one step, and how to go back to the file as it was opened.",
-  "chars": 2517
+  "chars": 2519
  },
  {
   "slug": "scene-tabs",
@@ -165,7 +165,15 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "A list of the parts that hold the most triangles, heaviest first, with a count beside its title. Tick the ones you do not need and delete them in one step.",
-  "chars": 3084
+  "chars": 3398
+ },
+ {
+  "slug": "batch-folder",
+  "title": "Batch optimise a folder",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Optimise every model in a folder, one after another, and find the lighter copies in the exports folder.",
+  "chars": 2116
  },
  {
   "slug": "smart-optimise",
@@ -221,7 +229,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Close bolt holes, slots, pockets and lettering in flat faces. Each closed hole removes the triangles of its walls.",
-  "chars": 6644
+  "chars": 6651
  },
  {
   "slug": "remove-floating-pieces",
@@ -233,11 +241,11 @@
  },
  {
   "slug": "remesh",
-  "title": "Remesh: Untriangulate and Triangulate",
+  "title": "Triangulation: Untriangulate and Triangulate",
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Join the triangles of each flat face into one polygon and take away the vertices in its middle, or go back to even triangles. The shape stays as it is.",
-  "chars": 7833
+  "chars": 7852
  },
  {
   "slug": "split",
@@ -353,11 +361,11 @@
  },
  {
   "slug": "axis-center",
-  "title": "The axis of a part: Axis Center",
+  "title": "The pivot of a part: Centre pivot",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale.",
-  "chars": 1782
+  "summary": "Centre the pivot of a part, reset its rotation, move the pivot or the object to the origin, the selection or the view, align it, and reset the scale.",
+  "chars": 1769
  },
  {
   "slug": "move-rotate-scale",
@@ -393,19 +401,19 @@
  },
  {
   "slug": "mend-mesh",
-  "title": "Mend a mesh: Close cracks, Remove slivers, Patch holes",
+  "title": "Mend a mesh: Close cracks, Remove slivers, Fill mesh holes",
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Three small repairs for meshes that came out of a CAD program: close the hairline cracks between faces, get rid of needle-thin triangles, and patch openings so the patch follows the curve round them.",
-  "chars": 2941
+  "chars": 2953
  },
  {
   "slug": "reshape-mesh",
-  "title": "Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more",
+  "title": "Reshape a mesh: Isotropic remesh, Smooth surface, Convex hull and more",
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodies joined into one.",
-  "chars": 3111
+  "chars": 3120
  },
  {
   "slug": "booleans",
@@ -421,7 +429,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a part as one clean, closed, even surface, the way Blender’s Voxel remesh does. Overlapping bodies become one and hollows inside are filled. Good for a watertight stand-in of a messy part.",
-  "chars": 2206
+  "chars": 3094
  },
  {
   "slug": "round-parts",
@@ -445,7 +453,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.",
-  "chars": 9934
+  "chars": 9936
  },
  {
   "slug": "align-to-floor",
@@ -597,7 +605,7 @@
   "group": "reference",
   "groupTitle": "Reference",
   "summary": "Every keyboard shortcut and mouse action in MeshOptimiser, grouped by what it does.",
-  "chars": 8378
+  "chars": 8389
  },
  {
   "slug": "file-formats",

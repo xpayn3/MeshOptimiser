@@ -1,10 +1,10 @@
-# Remesh: Untriangulate and Triangulate
+# Triangulation: Untriangulate and Triangulate
 
 Join the triangles of each flat face into one polygon and take away the vertices in its middle, or go back to even triangles. The shape stays as it is.
 
 Screens draw triangles, so every flat face of a part is cut into triangles, often more than it needs. A polygon, also called an n-gon, is a flat face with any number of corners: several triangles in one plane, joined into one face.
 
-Remesh has two actions in one panel, and a quick way to make a part lighter, [Quick remesh](meshoptimiser://docs/remesh), further down. **Untriangulate** joins flat triangles into polygons and takes away the vertices in the middle of each flat face. **Triangulate** is the way back: the flat faces stop being polygons and show their triangles again.
+The Triangulation panel has two actions, and a quick way to make a part lighter, [Quick decimate](meshoptimiser://docs/remesh), further down. **Untriangulate** joins flat triangles into polygons and takes away the vertices in the middle of each flat face. **Triangulate** is the way back: the flat faces stop being polygons and show their triangles again.
 
 ## When to use it
 
@@ -58,12 +58,12 @@ Pair into quads moves no point and takes no triangle away: it only says which tw
 
 In the wireframe view (`Alt + 2`), a part that has been through Untriangulate draws its polygons, and a part that has been through Triangulate draws its triangles. That holds whatever **Lines** is set to under **Settings**, **Viewport**.
 
-## Quick remesh
+## Quick decimate
 
-Quick remesh makes the selected parts lighter by choosing a level, with a live preview, instead of typing numbers. It is a separate tool from Untriangulate and Triangulate: it removes triangles, so it is lossy, like [Decimate](meshoptimiser://docs/decimate).
+Quick decimate makes the selected parts lighter by choosing a level, with a live preview, instead of typing numbers. It is a separate tool from Untriangulate and Triangulate: it removes triangles, so it is lossy, like [Decimate](meshoptimiser://docs/decimate).
 
 1. Select the parts to make lighter.
-2. Press `B`, or find **Quick remesh** with the search. A column of levels opens under the pointer. Each level is how many of the triangles stay, written as a number without a % sign.
+2. Press `B`, or find **Quick decimate** with the search. A column of levels opens under the pointer. Each level is how many of the triangles stay, written as a number without a % sign.
 3. Move up and down the column. The selected parts take the level the pointer is on straight away, so you judge the result on the real model. Moving back up gives the detail back.
 4. Let go of the mouse button on a level, press `Enter`, or let go of `B` if you held it, to keep that level.
 

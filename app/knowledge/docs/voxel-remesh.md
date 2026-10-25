@@ -20,6 +20,12 @@ Voxel remesh puts the part on a grid of small cubes (voxels), works out which cu
 
 The card says how many triangles the result has, how big one voxel is in millimetres and how wide a gap is closed. The settings are remembered.
 
+## Wrap a whole assembly in one skin
+
+With two or more parts selected, the card has a switch, **Wrap parts into one**. Turn it on and the parts are made one part, called Wrap, and that part is rebuilt on one grid: one closed skin round the whole assembly, with everything inside it gone. Gaps up to 3 % of the length are bridged, so a housing with a small opening is wrapped over it. Use it for a light stand-in that is only seen from outside: a far level of detail, a collision shape, a silhouette. The switch is remembered, so the next Voxel remesh starts the way you left it.
+
+The sliders rebuild the wrap: **Detail** sets how closely the skin follows the shapes, **Close gaps up to** how big an opening is bridged. The parts are not kept: they become one part, and one undo (**Ctrl + Z**) gives every one of them back. Turn the switch off and every part is rebuilt on its own again.
+
 > For a round, turned part (a spool, a pulley) [Round parts](meshoptimiser://docs/round-parts) rebuilds it exactly from its profile, which is usually better than a voxel grid.
 
 Related: [round-parts](meshoptimiser://docs/round-parts), [reshape-mesh](meshoptimiser://docs/reshape-mesh), [smart-fit](meshoptimiser://docs/smart-fit), [decimate](meshoptimiser://docs/decimate)
