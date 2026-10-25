@@ -53,6 +53,7 @@ try {
   let r = await rows();
   ok(r.length === 1 && r[0].name === 'Opened' && r[0].now, 'a model with no steps lists only "Opened", lit', JSON.stringify(r));
   ok((await evalJS("document.getElementById('history-status').textContent")) === 'Nothing done yet.', 'and says nothing is done yet');
+  ok(await evalJS("!!document.querySelector('#history-list .hist-base .hist-tag')"), 'a file that was just opened is as saved: its first row carries the Saved tag');
   ok(await evalJS("document.getElementById('history-undo').disabled && document.getElementById('history-redo').disabled && document.getElementById('history-clear').disabled"), 'Undo, Redo and Clear are off');
 
   // ── three steps

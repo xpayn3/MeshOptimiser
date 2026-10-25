@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=38';
 import { installHoleFillCard } from './holefill-card.js?v=5';
 import { installPivotCard } from './pivot-card.js?v=4';
-import { installHistoryCard } from './history-card.js?v=1';
+import { installHistoryCard } from './history-card.js?v=2';
 import { installXrayGhost } from './xray-ghost.js?v=7';
 import { installProfileCard } from './profile-card.js?v=26';
 import { installRoundCard } from './round-card.js?v=22';
@@ -28,11 +28,11 @@ import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
 import { checkMesh } from './meshcheck.js?v=4';
-import { KINDS as GEO_KINDS, build as geoBuild, dispose as geoDispose } from './geo-overlay.js?v=1';
+import { KINDS as GEO_KINDS, build as geoBuild, instance as geoInstance, dispose as geoDispose } from './geo-overlay.js?v=2';
 import * as FM from './facemat.js?v=2';
-import { setExportTextureFormats, shrinkExportTextures } from './texformat.js?v=2';
+import { setExportTextureFormats, shrinkExportTextures } from './texformat.js?v=3';
 import { installExportWriters } from './export-writers.js?v=2';
-import { installAnim } from './anim.js?v=9';
+import { installAnim } from './anim.js?v=10';
 import { installSectionPlane } from './section-plane.js?v=1';
 import * as TS from './texsets.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -10981,7 +10981,7 @@ function clearModel() {
   try { _matPanelSelected.clear(); } catch (_) {}
   state.userMaterials = null;
   try { _alignForget(); } catch (_) {}         // (the turn "Align to floor" gave the last model)
-  setTimeout(() => _Dirty.mark(), 0);          // a new or freshly opened scene has nothing unsaved
+  setTimeout(() => _Dirty.mark({ blank: true }), 0);          // a new scene has nothing unsaved (and nothing saved: its first row carries no Saved tag)
   // "Recenter on origin" moves partsRoot. A new model must start from zero
   // or it would load (and export) offset by the previous model's centre.
   if (state.partsRoot && state.partsRoot.position.lengthSq() > 0) {
@@ -23361,7 +23361,7 @@ const _Tabs = (() => {
 // of the tab's icon shows it (yellow, or green when saved); a click on the
 // icon saves.
 const _Dirty = (() => {
-  let savedTop = null;
+  let savedTop = null, savedOnce = false;      // (savedOnce: the scene has been saved in this session; savedTop null alone also means "as opened")
   const top = () => (state.history && state.history.length) ? state.history[state.history.length - 1] : null;
   const dirty = () => top() !== savedTop && state.parts.some(p => !p.deleted);
   function sync() {
@@ -23380,7 +23380,7 @@ const _Dirty = (() => {
   }
   // keepCopy: a save the page cannot see through (a download: the browser never says whether its save sheet was cancelled) keeps
   // the last recovery copy until the scene changes again, instead of throwing it away at once.
-  function mark(o) { savedTop = top(); sync(); try { if (o && o.keepCopy) _Autosave.hold(); else _Autosave.forget(); } catch (_) {} }
+  function mark(o) { savedTop = top(); if (!(o && o.blank)) savedOnce = true; sync(); try { if (o && o.keepCopy) _Autosave.hold(); else _Autosave.forget(); } catch (_) {} }
   // a scene that was brought back from a recovery copy: it is not as saved, whatever its history says
   function force() { savedTop = {}; sync(); }
   // The history keeps up to 200 entries (30 of the geometry-carrying kind); `op` is one that has just fallen off its
@@ -23396,7 +23396,7 @@ const _Dirty = (() => {
   }
   const wire = () => document.getElementById('doc-save')?.addEventListener('click', (e) => { e.stopPropagation(); if (dirty()) document.getElementById('btn-save-scene')?.click(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
-  return { sync, mark, dirty, dropped, force, saved: () => savedTop };      // (saved: the step the scene was saved at, null for as opened; the History card marks it)
+  return { sync, mark, dirty, dropped, force, saved: () => savedTop, wasSaved: () => savedOnce };      // (saved: the step the scene was saved at, null for as opened; the History card marks it)
 })();
 // ── Crash safety ─────────────────────────────────────────────────────────────
 // Whatever goes wrong should never be a silent freeze:
@@ -24915,7 +24915,7 @@ let _historyCard = null;
 function _installHistoryCard() {
   _historyCard = installHistoryCard({
     state, undoLast: () => undoLast(), redoLast: () => redoLast(), canRedo: (op) => _UndoOps.canRedo(op), clear: _clearUndoHistory,
-    savedOp: () => _Dirty.saved(), max: () => _UNDO_MAX, confirm: (o) => _confirmQuitDialog(o), toast: (...x) => toast(...x), lucide: () => _lucide(),
+    savedOp: () => _Dirty.saved(), wasSaved: () => _Dirty.wasSaved(), max: () => _UNDO_MAX, confirm: (o) => _confirmQuitDialog(o), toast: (...x) => toast(...x), lucide: () => _lucide(),
   });
   window.__moHistory = _historyCard;      // (tests/e2e-history-card.mjs)
 }
@@ -30927,9 +30927,9 @@ function wireUI() {
   // lost the viewport; the clicks now settle for a moment and only the last state is applied, and only if it differs from what is shown)
   let _shadowTimer = 0;
   // Shadows are off every time the app starts, whatever they were left at: the browser puts a switch back the way it was on a reload,
-  // so it is set off here (and again once the page has loaded), and it takes no part in what the browser remembers. Photo mode and a
+  // so it is set off here, and it takes no part in what the browser remembers. Photo mode and a
   // scene file that was saved with shadows on still turn them on, and they stay as they are across Photo mode.
-  { const off = () => { const sh = $('toggle-shadows'); if (!sh || sh.disabled || _Photo.on) return; sh.autocomplete = 'off'; if (sh.checked || state.shadowsEnabled) { sh.checked = false; state.shadowsEnabled = false; try { _applyShadows(); requestRender(); } catch (_) {} } }; off(); window.addEventListener('load', off, { once: true }); }
+  { const off = () => { const sh = $('toggle-shadows'); if (!sh || sh.disabled || _Photo.on) return; sh.autocomplete = 'off'; if (sh.checked || state.shadowsEnabled) { sh.checked = false; state.shadowsEnabled = false; try { _applyShadows(); requestRender(); } catch (_) {} } }; off(); }
   $('toggle-shadows')?.addEventListener('change', e => {
     state.shadowsEnabled = e.target.checked;
     clearTimeout(_shadowTimer);
@@ -39872,11 +39872,12 @@ const _ModelInspector = (() => {
   // ── the faults drawn on the model (geo-overlay.js): "Show in the view" in the window ──
   const showKinds = new Set();                // the kinds that are on ('open', 'flip', …)
   const detailCache = new Map();              // mesh uuid → { fp, d }: where the faults of a mesh are (looked for only when a kind is on)
-  let overlayObjs = [], ovBusy = false, ovAgain = false;
+  let overlayObjs = [], overlayTpl = [], ovBusy = false, ovAgain = false;      // (overlayObjs: what is in the scene; overlayTpl: the buffers they share, one set for each mesh and kind)
   const tone = (name) => new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#ff6b6b');
   function clearOverlays() {
-    for (const o of overlayObjs) { try { if (o.parent) o.parent.remove(o); geoDispose(o); } catch (_) {} }
-    overlayObjs = [];
+    for (const o of overlayObjs) { try { if (o.parent) o.parent.remove(o); } catch (_) {} }
+    for (const t of overlayTpl) { try { geoDispose(t); } catch (_) {} }
+    overlayObjs = []; overlayTpl = [];
     try { requestRender(); } catch (_) {}
   }
   const settle = () => new Promise(res => setTimeout(res, 0));
@@ -39901,15 +39902,18 @@ const _ModelInspector = (() => {
           let d = detailCache.get(uuid);
           if (!d || d.fp !== fpOf(e.g)) { let r = null; try { r = analyseGeo(e.g, true); } catch (err) { console.warn('[inspector] detail failed:', err); } d = { fp: fpOf(e.g), d: r && r.detail }; detailCache.set(uuid, d); }
           if (!d.d) continue;
+          const tpls = new Map();      // the buffers of this mesh, built once for all the parts that use it
+          for (const K of want) { const t = geoBuild(THREE, e.g, d.d, K.key, tone(K.color)); tpls.set(K.key, t); if (t) overlayTpl.push(t); }
           for (const p of e.parts) for (const K of want) {
-            const obj = geoBuild(THREE, e.g, d.d, K.key, tone(K.color)); if (!obj) continue;
+            const tpl = tpls.get(K.key); if (!tpl) continue;
+            const obj = geoInstance(tpl);
             if (p.mesh) p.mesh.add(obj);
             else if (p.instancedMesh && state.partsRoot) {
+              // a copy has no mesh of its own: each node takes the place of its copy at every frame, so it moves with it (explode, animation)
               const im = p.instancedMesh, m = new THREE.Matrix4();
-              im.getMatrixAt(p.instanceIndex, m); im.updateWorldMatrix(true, false); state.partsRoot.updateWorldMatrix(true, false);
-              m.premultiply(im.matrixWorld).premultiply(new THREE.Matrix4().copy(state.partsRoot.matrixWorld).invert());
-              obj.matrixAutoUpdate = false; obj.matrix.copy(m); obj.matrixWorldNeedsUpdate = true; state.partsRoot.add(obj);
-            } else { geoDispose(obj); continue; }
+              obj.traverse((c) => { if (c.isMesh || c.isLine || c.isPoints) { c.matrixAutoUpdate = false; c.onBeforeRender = () => { try { im.getMatrixAt(p.instanceIndex, m); c.matrixWorld.multiplyMatrices(im.matrixWorld, m); } catch (_) {} }; } });
+              state.partsRoot.add(obj);
+            } else continue;
             overlayObjs.push(obj);
           }
           if (performance.now() - last > 60) { last = performance.now(); try { requestRender(); } catch (_) {} await settle(); }
@@ -62752,12 +62756,20 @@ const _Elements = (() => {
     if (_Photo.on) { try { toast('Edit mesh', 'Leave Photo mode first.', 'info', 1800); } catch (_) {} return; }      // (nor in Photo mode: it is for looking, and its marks would be in the picture)
     if (!active && !(state.selected && state.selected.size)) { try { toast('Edit mesh', 'Select a part first.', 'info', 1800); } catch (_) {} return; }      // (nothing to edit: the button is grey and the keys 1 2 3 do nothing either)
     // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first), so Edit mesh does not open on it
-    { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length && !active) { try { toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {} return; } }
+    { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length) { try { toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {} return; } }
     const was = mode; mode = m; save();
     if (!active) { _CmdCards.open('elements'); return; }
     if (was !== m) { hover = null; for (const [, e] of live()) e.dirty = true; }
     changed();
   }
+  // Edit mesh already open when a library shape is picked: it closes (the shape's parameters would rebuild it and undo the edit)
+  _selFollowers.push({ follow() {
+    if (!active) return;
+    const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive);
+    if (!raw.length) return;
+    try { toast('Bake geo first', 'This shape still has shape parameters. Press Bake geo under them to make it editable. Edit mesh is closed.', 'info', 3600); } catch (_) {}
+    try { _CmdCards.close('elements'); } catch (_) {}
+  } });
   function setSpace(s) {
     if (!SPACES.includes(s)) return;
     space = s; save(); syncCard();

@@ -108,14 +108,24 @@ check('names', mimeFromName('a_4K_BaseColor.jpg') === 'image/jpeg' && mimeFromNa
   const none = shrinkExportTextures(scene(new THREE.MeshStandardMaterial({ map: a })), 0, { makeCanvas: fakeCanvas });
   none(); check('0 means as they are', a.image === wide);
 }
-// 7. Pictures as WebP: forced over what a picture says, and undo() brings the old format back
+// 7. Pictures as WebP: forced over what a colour picture says; maps that hold numbers keep theirs; undo() brings the old format back
 {
-  const j = tex(img('blob:j'), '', { fileName: 'a.jpg' }), l = tex(img('blob:l'), '', { mimeType: 'image/png' });
-  const undo = setExportTextureFormats(scene(new THREE.MeshStandardMaterial({ map: j, normalMap: l })), { force: 'image/webp' });
-  check('forced WebP over JPEG and a loader PNG', j.userData.mimeType === 'image/webp' && l.userData.mimeType === 'image/webp');
+  const j = tex(img('blob:j'), '', { fileName: 'a.jpg' }), l = tex(img('blob:l'), '', { mimeType: 'image/png' }), r = tex(img('blob:r'), '', { fileName: 'r.jpg' });
+  const undo = setExportTextureFormats(scene(new THREE.MeshStandardMaterial({ map: j, normalMap: l, roughnessMap: r })), { force: 'image/webp' });
+  check('a colour picture is forced to WebP', j.userData.mimeType === 'image/webp');
+  check('a normal map keeps its own PNG', l.userData.mimeType === 'image/png', l.userData);
+  check('a roughness map is written as before (JPEG by its name), not WebP', r.userData.mimeType === 'image/jpeg', r.userData);
   undo();
   check('undo restores the earlier format', !('mimeType' in j.userData) && l.userData.mimeType === 'image/png', [j.userData, l.userData]);
 }
-
+// 8. The shrunk pictures go back and are uploaded again (they are the viewer's own textures)
+{
+  const fakeCanvas = (w, h) => ({ width: w, height: h, getContext: () => ({ drawImage() {} }) });
+  const big = { width: 4096, height: 4096 }, t1 = new THREE.Texture(big);
+  const v0 = t1.version;
+  const undo = shrinkExportTextures(scene(new THREE.MeshStandardMaterial({ map: t1 })), 512, { makeCanvas: fakeCanvas });
+  undo();
+  check('the picture is its own again and is marked for upload', t1.image === big && t1.version > v0, [t1.version, v0]);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

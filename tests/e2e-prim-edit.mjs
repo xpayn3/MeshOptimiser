@@ -50,6 +50,11 @@ try {
   ok(await G(`!state.parts.find(q => q.partId === window.__pp).isPrimitive && !document.getElementById('em-mode').classList.contains('is-prim')`), 'after Bake geo the button is on again');
   await G(`document.getElementById('em-mode').click()`); await sleep(600);
   ok(await G(`!!document.querySelector('.section-cmd[data-cmd="elements"]:not([hidden])') || document.getElementById('em-pick-points') && !document.getElementById('em-pick-points').hidden`), 'and Edit mesh opens on it');
+  // Edit mesh is open on the baked part; picking another library shape closes it
+  const pid2 = await G(`(() => { const p = _appFns._addPrimitive('sphere', {}); return p ? p.partId : null; })()`);
+  await sleep(400);
+  await G(`(() => { state.selected = new Set([${pid2}]); _appFns.applySelectionColors(); })()`); await sleep(700);
+  ok(await G(`!document.querySelector('.section-cmd[data-cmd="elements"]:not([hidden])')`), 'with Edit mesh open, picking a library shape closes it');
   ok(errors.length === 0, 'no JavaScript errors', errors.slice(0, 3).join(' | '));
 } catch (e) { console.log('FAIL the run itself:', e.message); failed++; }
 finally { if (errors.length) console.log('page errors:', errors.slice(0, 5)); try { ws && ws.close(); } catch (_) {} chrome.kill(); }
