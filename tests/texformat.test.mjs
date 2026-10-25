@@ -10,7 +10,7 @@ import { register } from 'node:module';
 // (GLTFExporter imports 'three': the same core module the test uses, so its instanceof checks hold)
 register('data:text/javascript,' + encodeURIComponent(`export async function resolve(s, c, next) { return s === 'three' ? { url: ${JSON.stringify(new URL('../app/vendor/three/build/three.core.js', import.meta.url).href)}, shortCircuit: true } : next(s, c); }`));
 import * as THREE from '../app/vendor/three/build/three.core.js';
-import { setExportTextureFormats, imageHasAlpha, mimeFromName } from '../app/js/texformat.js';
+import { setExportTextureFormats, shrinkExportTextures, imageHasAlpha, mimeFromName } from '../app/js/texformat.js';
 
 let pass = 0, fail = 0;
 const check = (name, ok, extra) => { if (ok) { pass++; console.log('PASS', name); } else { fail++; console.log('FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); } };
@@ -91,6 +91,30 @@ check('names', mimeFromName('a_4K_BaseColor.jpg') === 'image/jpeg' && mimeFromNa
   undo();
   check('with the pass an opaque picture is written as JPEG', after.images?.[0]?.mimeType === 'image/jpeg' && asked[0] === 'image/jpeg', { img: after.images, asked });
   check('and the texture is as it was afterwards', !('mimeType' in noise.userData));
+}
+
+// 6. Texture size: pictures longer than max are drawn smaller in proportion, once each, and put back
+{
+  const fakeCanvas = (w, h) => ({ width: w, height: h, getContext: () => ({ drawImage() {} }) });
+  const wide = { width: 4096, height: 2048 }, tiny = { width: 256, height: 256 }, data = { width: 4096, height: 4096, data: new Uint8Array(4) };
+  const a = new THREE.Texture(wide), b = new THREE.Texture(wide), c = new THREE.Texture(tiny), d = new THREE.Texture(data);
+  const stats = {};
+  const undo = shrinkExportTextures(scene(new THREE.MeshStandardMaterial({ map: a, normalMap: b }), new THREE.MeshStandardMaterial({ roughnessMap: c, aoMap: d })), 1024, { makeCanvas: fakeCanvas, stats });
+  check('4096 x 2048 at 1024 keeps its proportions', a.image.width === 1024 && a.image.height === 512, [a.image.width, a.image.height]);
+  check('a picture shared by two textures is drawn once', a.image === b.image && stats.shrunk === 1, stats);
+  check('a small picture and raw data are left alone', c.image === tiny && d.image === data);
+  undo();
+  check('undo puts the pictures back', a.image === wide && b.image === wide);
+  const none = shrinkExportTextures(scene(new THREE.MeshStandardMaterial({ map: a })), 0, { makeCanvas: fakeCanvas });
+  none(); check('0 means as they are', a.image === wide);
+}
+// 7. Pictures as WebP: forced over what a picture says, and undo() brings the old format back
+{
+  const j = tex(img('blob:j'), '', { fileName: 'a.jpg' }), l = tex(img('blob:l'), '', { mimeType: 'image/png' });
+  const undo = setExportTextureFormats(scene(new THREE.MeshStandardMaterial({ map: j, normalMap: l })), { force: 'image/webp' });
+  check('forced WebP over JPEG and a loader PNG', j.userData.mimeType === 'image/webp' && l.userData.mimeType === 'image/webp');
+  undo();
+  check('undo restores the earlier format', !('mimeType' in j.userData) && l.userData.mimeType === 'image/png', [j.userData, l.userData]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

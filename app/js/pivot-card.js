@@ -61,6 +61,8 @@ export function installPivotCard(app) {
   const rot = () => !!($i('axis-reset-rot') && $i('axis-reset-rot').checked);
   const run = {
     centre: () => { if (!G('centre', 'world')) axisCenter(); },
+    'axis-bottom': () => { if (!G('bottom', rot() ? 'world' : 'keep')) axisSet('bottom', rot() ? 'world' : 'keep'); },
+    'axis-top': () => { if (!G('top', rot() ? 'world' : 'keep')) axisSet('top', rot() ? 'world' : 'keep'); },
     'axis-origin': () => { if (!G('origin', rot() ? 'world' : 'keep')) axisSet('origin', rot() ? 'world' : 'keep'); },
     'axis-selection': () => { if (!G('selection', 'keep')) axisSet('selection', rot() ? 'world' : 'keep'); },
     'axis-active': () => { if (!G('active', 'keep')) axisSet('active', rot() ? 'active' : 'keep'); },

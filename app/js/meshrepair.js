@@ -1,7 +1,7 @@
 // meshrepair.js: the arithmetic behind Repair mesh and Remove hidden faces. No three.js in here: plain typed arrays in and out,
 // so it can be tested on its own (tests/meshrepair.test.mjs). app.js loads it when a tool first runs.
 
-import { weldByDistance, flatness, DEFAULTS as CHECK } from './meshcheck.js?v=3';
+import { weldByDistance, flatness, DEFAULTS as CHECK } from './meshcheck.js?v=4';
 
 const nextPow2 = (n) => { let p = 1; while (p < n) p <<= 1; return p; };
 const UVQ = 1e5;                                     // uv coordinates closer than 1e-5 count as the same

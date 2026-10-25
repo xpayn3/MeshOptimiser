@@ -1,8 +1,9 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=34';
-import { installHoleFillCard } from './holefill-card.js?v=2';
-import { installPivotCard } from './pivot-card.js?v=3';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=38';
+import { installHoleFillCard } from './holefill-card.js?v=5';
+import { installPivotCard } from './pivot-card.js?v=4';
+import { installHistoryCard } from './history-card.js?v=1';
 import { installXrayGhost } from './xray-ghost.js?v=7';
 import { installProfileCard } from './profile-card.js?v=26';
 import { installRoundCard } from './round-card.js?v=22';
@@ -26,11 +27,12 @@ import { reduceIndex, reduceWithin, packAttributes } from './simplify-core.js?v=
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
-import { checkMesh } from './meshcheck.js?v=3';
+import { checkMesh } from './meshcheck.js?v=4';
+import { KINDS as GEO_KINDS, build as geoBuild, dispose as geoDispose } from './geo-overlay.js?v=1';
 import * as FM from './facemat.js?v=2';
-import { setExportTextureFormats } from './texformat.js?v=1';
+import { setExportTextureFormats, shrinkExportTextures } from './texformat.js?v=2';
 import { installExportWriters } from './export-writers.js?v=2';
-import { installAnim } from './anim.js?v=1';
+import { installAnim } from './anim.js?v=9';
 import { installSectionPlane } from './section-plane.js?v=1';
 import * as TS from './texsets.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -168,6 +170,7 @@ if (typeof window !== 'undefined') {
     get controls() { return controls; },
     get applyPerfMode() { return applyPerfMode; },
     get applySelectionColors() { return applySelectionColors; },
+    get _addPrimitive() { return _addPrimitive; },      // (tests/e2e-prim-edit.mjs)
     get clearModel() { return clearModel; },
     get fitToView() { return fitToView; },
     get reindexParts() { return _reindexParts; },
@@ -1751,7 +1754,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=83', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=87', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -3630,6 +3633,7 @@ async function _openRecentByKey(key) {
 const _Prefs = (() => {
   const KEY = 'stepopt-prefs';
   const DEFAULTS = {
+    saveCamera: true, saveDisplay: true, saveLights: true, saveShadows: false, saveUnits: true, saveParts: true, saveExplode: true, saveAnim: true, saveNotes: true,      // (what a scene file keeps: Settings › General › "Saved in a scene file"; the shadows start off every time and are kept only if asked)
     welcomeOnBoot: true,
     splashOnStart: true,             // the short splash while the app opens
     dynPlaceAlign: true,             // Dynamic place: turn the part to face the surface it rests on
@@ -4435,6 +4439,16 @@ const _Settings = (() => {
       _toggleRow('set-sounds', 'Interface sounds', p.uiSounds !== false, 'Soft clicks from the gizmos and quick wheels of the viewport: the lens rings of Photo mode as they turn and catch on a mark, the command wheel (Q), the colour wheel and the quick remesh pill (B) as they open and go from one choice to the next. Made by the app itself, quiet and short.') +
       _group('Opening files') +
       _toggleRow('set-autofit', 'Fit the view after loading', p.autoFitOnLoad, 'Frame the whole model as soon as it opens.') +
+      _group('Saved in a scene file') +
+      _toggleRow('set-sv-camera', 'The camera', p.saveCamera !== false, 'Where you were looking from.') +
+      _toggleRow('set-sv-display', 'Display', p.saveDisplay !== false, 'The look of the view: shading mode, grid, background and light of the scene, fog, small parts highlighted.') +
+      _toggleRow('set-sv-lights', 'Lights', p.saveLights !== false, 'Exposure, sun, ambient light and where the sun stands.') +
+      _toggleRow('set-sv-shadows', 'Shadows', p.saveShadows === true, 'Off: a file never turns the shadows on, and they start off every time the app opens. On: a file keeps them as they were when it was saved.') +
+      _toggleRow('set-sv-units', 'Units and size', p.saveUnits !== false, 'The unit sizes are shown in, the scale of the scene, which way is up and the grid cell.') +
+      _toggleRow('set-sv-parts', 'Hidden, flagged and locked parts', p.saveParts !== false, 'Which parts are hidden, flagged or locked, and whether the view was isolated.') +
+      _toggleRow('set-sv-explode', 'The exploded view', p.saveExplode !== false, 'How far the parts were pulled apart.') +
+      _toggleRow('set-sv-anim', 'Animation', p.saveAnim !== false, 'The animations of the Animate window and its timeline.') +
+      _toggleRow('set-sv-notes', 'Notes', p.saveNotes !== false, 'The review notes and the conversations on them. The Save window can still leave them out of one file. A duplicate of the scene or a recovery copy keeps all of it, except the shadows.') +
       _group('Tabs') +
       _toggleRow('set-same-sidebars', 'Same sidebars in every tab', (() => { try { return _Tabs.sameSidebars(); } catch (_) { return true; } })(), 'Switching tabs keeps the sidebar widths, and the folded left sidebar, of the tab you came from. Off: each tab keeps its own.') +
       _group('Bottom docks') +
@@ -4540,6 +4554,7 @@ const _Settings = (() => {
     $s('set-sel-glow')?.addEventListener('change', (e) => { _Prefs.set('selGlow', e.target.checked); state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} });
     $s('set-hilite')?.addEventListener('change', (e) => { const t = $s('toggle-highlight'); if (t) { t.checked = e.target.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } });
     [
+      ['set-sv-camera', 'saveCamera'], ['set-sv-display', 'saveDisplay'], ['set-sv-lights', 'saveLights'], ['set-sv-shadows', 'saveShadows'], ['set-sv-units', 'saveUnits'], ['set-sv-parts', 'saveParts'], ['set-sv-explode', 'saveExplode'], ['set-sv-anim', 'saveAnim'], ['set-sv-notes', 'saveNotes'],
       ['set-splash', 'splashOnStart'], ['set-sounds', 'uiSounds'], ['set-welcome', 'welcomeOnBoot'], ['set-restore', 'autoRestoreSession'], ['set-autofit', 'autoFitOnLoad'],
       ['set-confirm', 'confirmDestructive'], ['set-share-dock-h', 'shareDockHeight'], ['set-warn-unsaved', 'warnUnsaved'], ['set-auto-empty', 'autoDeleteEmptyGroups'], ['set-zoom-cursor', 'zoomToCursor'], ['set-hover-link', 'hoverLink'], ['set-orbit-invert', 'orbitInvert'], ['set-orbit-limit', 'orbitLimit'], ['set-offscreen', 'offscreenArrow'],
     ].forEach(([id, key]) => {
@@ -4573,26 +4588,28 @@ const _Settings = (() => {
     if (_structuring) return;
     _structuring = true;
     try {
-      for (const b of document.querySelectorAll('#set-main .set-pane-b')) {
+      for (const b of document.querySelectorAll('#set-main .set-pane-b, #set-main #set-camera-prefs')) {      // (the Camera pane keeps its navigation groups in a box of their own)
         if (!b.querySelector(':scope > .set-group-title')) continue;
         const pane = b.closest('.set-pane'), pid = pane.dataset.pane;
         pane.querySelector(':scope > .set-jump')?.remove();
         let card = null; const titled = [];
         for (const kid of [...b.children]) {
+          if (kid.id === 'set-camera-prefs') { b.appendChild(kid); card = null; continue; }      // (its own groups come after the cards above it, not inside the last one)
           if (kid.classList.contains('set-group-title')) {
             const title = kid.textContent.trim(), key = pid + '/' + title;
             card = document.createElement('div');
             card.className = 'set-card'; card.dataset.key = key;
-            card.innerHTML = '<button type="button" class="set-card-h" aria-expanded="true"><span class="set-card-t"></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+            card.innerHTML = '<button type="button" class="set-card-h" aria-expanded="true"><span class="set-card-t"></span><span class="set-card-n"></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="set-card-b"><div class="set-card-bi"></div></div>';
             card.querySelector('.set-card-t').textContent = title;
             if (_fold.get(key)) { card.classList.add('is-fold'); card.firstChild.setAttribute('aria-expanded', 'false'); }
             b.appendChild(card); titled.push(card); kid.remove();
           } else {
             if (!card) { card = document.createElement('div'); card.className = 'set-card set-card-plain'; b.appendChild(card); }
-            card.appendChild(kid);
+            (card.querySelector(':scope > .set-card-b > .set-card-bi') || card).appendChild(kid);
           }
         }
-        if (titled.length >= 3) {
+        for (const c of titled) _cardLive(c);
+        if (titled.length >= 3 && b.parentNode === pane) {
           const j = document.createElement('div'); j.className = 'set-jump';
           titled.forEach((c, i) => { const a = document.createElement('button'); a.type = 'button'; a.className = 'set-jump-c'; a.dataset.i = String(i); a.textContent = c.querySelector('.set-card-t').textContent; j.appendChild(a); });
           pane.insertBefore(j, b);
@@ -4600,14 +4617,46 @@ const _Settings = (() => {
       }
     } finally { _structuring = false; }
   }
+  // A card of switches says how many are on, and a card of five or more plain switches is shown as tiles (a tile lights when its switch is on)
+  // with All on / None, and the line under them reads what the tile the pointer is on does. The rows are the same elements, moved and
+  // restyled, so every id and listener stays.
+  const TILE_HINT = 'Point at a setting to read what it does.';
+  function _cardLive(card) {
+    const bi = card.querySelector(':scope > .set-card-b > .set-card-bi'); if (!bi) return;
+    const rows = [...bi.children].filter(k => k.classList && k.classList.contains('set-row') && k.classList.contains('toggle'));
+    const plain = rows.length >= 5 && rows.length === bi.children.length && rows.every(r => r.querySelectorAll('input').length === 1 && r.querySelector('input[type=checkbox]'));
+    if (plain && !bi.querySelector(':scope > .set-tiles')) {
+      const grid = document.createElement('div'); grid.className = 'set-tiles';
+      for (const r of rows) grid.appendChild(r);
+      const tools = document.createElement('div'); tools.className = 'set-card-tools';
+      tools.innerHTML = '<span class="set-tile-desc"></span><button type="button" class="set-mini" data-set-all="on">All on</button><button type="button" class="set-mini" data-set-all="off">None</button>';
+      tools.firstChild.textContent = TILE_HINT;
+      bi.appendChild(grid); bi.appendChild(tools);
+    }
+    _cardCount(card);
+  }
+  function _cardCount(card) {
+    const n = card.querySelector('.set-card-n'); if (!n) return;
+    if (card.querySelector('.set-card-bi select, .set-card-bi .cs-wrap, .set-card-bi input:not([type=checkbox])')) { n.textContent = ''; n.classList.remove('is-all', 'is-none'); return; }      // (a count of switches only on a card that is made of switches)
+    const boxes = [...card.querySelectorAll('.set-card-bi .toggle input[type=checkbox]')].filter(x => !x.closest('[style*="display:none"], [hidden]'));
+    if (boxes.length < 2) { n.textContent = ''; n.classList.remove('is-all'); return; }
+    const on = boxes.filter(x => x.checked).length;
+    n.textContent = on + ' of ' + boxes.length + ' on'; n.classList.toggle('is-all', on === boxes.length); n.classList.toggle('is-none', on === 0);
+  }
   function _structureWire() {
     if (_structWired) return;
     const main = $s('set-main'); if (!main) return;
     _structWired = true;
     const later = () => queueMicrotask(_structure);
     const mo = new MutationObserver(later);
-    for (const b of main.querySelectorAll('.set-pane-b')) mo.observe(b, { childList: true });
+    for (const b of main.querySelectorAll('.set-pane-b, #set-camera-prefs')) mo.observe(b, { childList: true });
+    main.addEventListener('change', (e) => { const c = e.target.closest && e.target.closest('.set-card'); if (c) _cardCount(c); });
+    main.addEventListener('pointerover', (e) => { const t = e.target.closest && e.target.closest('.set-tiles > .set-row'); if (!t) return; const d = t.closest('.set-card-bi').querySelector('.set-tile-desc'); const h = t.querySelector('.set-help'); if (d) d.textContent = h ? h.textContent : TILE_HINT; });
+    main.addEventListener('focusin', (e) => { const t = e.target.closest && e.target.closest('.set-tiles > .set-row'); if (!t) return; const d = t.closest('.set-card-bi').querySelector('.set-tile-desc'); const h = t.querySelector('.set-help'); if (d) d.textContent = h ? h.textContent : TILE_HINT; });
+    main.addEventListener('pointerleave', () => { for (const d of main.querySelectorAll('.set-tile-desc')) d.textContent = TILE_HINT; });
     main.addEventListener('click', (e) => {
+      const all = e.target.closest && e.target.closest('[data-set-all]');
+      if (all) { const want = all.dataset.setAll === 'on'; for (const cb of all.closest('.set-card-bi').querySelectorAll('.set-tiles input[type=checkbox]')) if (cb.checked !== want && !cb.disabled) cb.click(); return; }
       const h = e.target.closest('.set-card-h');
       if (h) {
         const card = h.parentElement, fold = !card.classList.contains('is-fold');
@@ -5396,6 +5445,7 @@ const _Actions = (() => {
     { id:'showAll',      group:'Selection',  label:'Show all parts',             kbd:'Alt+H', run: () => { try { showAllParts(); } catch (_) {} } },
     { id:'hideUnsel',    group:'Selection',  label:'Hide unselected',            kbd:'Shift+H', run: () => { try { hideUnselected(); } catch (_) {} } },
     { id:'reveal',       group:'Selection',  label:'Reveal selected in tree',    kbd:'Shift+S', run: () => { try { revealSelectedInTree(); } catch (_) {} } },
+    { id:'historyCard', group:'Edit',      icon:'history', label:'History', words:'history undo steps list jump back redo timeline clear', run: () => { try { const h = document.querySelector('#history-section .section-h'); if (h && h.classList.contains('collapsed')) h.click(); document.getElementById('history-section')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {} } },
     { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undoLast(); } catch (_) {} } },
     { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', alt:'Ctrl+Shift+Z', run: () => { try { redoLast(); } catch (_) {} } },
     { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', alt:'Backspace', run: () => { if (state.selected.size || state.selectedGroupIds?.size) _deleteSelection('Deleted via palette'); } },
@@ -5513,6 +5563,8 @@ const _Actions = (() => {
     { id:'bakeTransforms', group:'Edit',     label:'Bake transforms into the mesh', run: () => bakeTransforms() },
     { id:'centerPivot',  group:'Edit',       label:'Centre pivot',  words:'pivot origin center centre axis reset rotation c4d axis center: centre the axis on the part and reset its rotation to 0, 0, 0', run: () => axisCenter() },
     { id:'axisCard',     group:'Edit',       label:'Pivot…', words:'pivot axis center centre align origin reset scale object c4d axis…: centre, align and move the axis, centre the object, reset scale', run: () => _CmdCards.open('axis') },
+    { id:'axisToBottom', group:'Edit',      label:'Pivot to the bottom', words:'pivot axis base bottom foot floor lowest base of the part: put the axis in the middle of the lowest face', run: () => axisSet('bottom', 'keep') },
+    { id:'axisToTop',    group:'Edit',       label:'Pivot to the top', words:'pivot axis top highest lid: put the axis in the middle of the highest face', run: () => axisSet('top', 'keep') },
     { id:'axisToOrigin', group:'Edit',       label:'Pivot to the world origin', words:'pivot axis origin zero', run: () => axisSet('origin', 'keep') },
     { id:'axisToSel',    group:'Edit',       label:'Pivot to the selection', words:'pivot axis selection centre center axis to the middle of the selection', run: () => axisSet('selection', 'keep') },
     { id:'objToOrigin',  group:'Edit',       label:'Move to the world origin', words:'move object origin zero center object to the world origin (its axis lands on 0, 0, 0)', run: () => axisMoveObject('origin') },
@@ -5791,7 +5843,7 @@ const _CmdK = (() => {
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
-  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'booleanCard', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
+  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'booleanCard', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToBottom', 'axisToTop', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
   const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
     'flagSliver', 'isolateSmall', 'deleteSmall', 'smallParts', 'splitAll', 'split', 'fillHoles', 'removeBlends', 'roundFaces', 'removeThickness', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
@@ -8061,7 +8113,6 @@ function _partWorldBoxOwn(mesh) {
 }
 function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   if (!state.gizmo || !state.pivot) return;
-  if (state._animMode) return;                                  // (no gizmo while the Animate window is open)
   // Promote any selected-but-instanced parts so they CAN be moved by the
   // gizmo. Without this they'd silently be filtered out below and the user
   // would see "selection but no gizmo" on every instanced part — which on
@@ -8340,7 +8391,6 @@ function _updateGizmoImpl() {
   // carry no transform gizmo (a move made here would only be undone by the
   // next change of the explosion). It comes back when the parts are put back.
   { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { _detachGizmo(); return; } }
-  if (state._animMode) { _detachGizmo(); return; }      // (the Animate window is open: no gizmo, the parts are looked at, not moved)
   try { if (_Draw.isActive()) { _detachGizmo(); return; } } catch (_) {}      // the Draw tool owns the left button
   try { if (_Elements.isActive()) { _detachGizmo(); _Elements.gizmo(); return; } } catch (_) {}  // …and so does Edit mesh: its own gizmo sits on the picked pieces
   const ids = [...state.selected];
@@ -15674,20 +15724,22 @@ function _readStableSize(obj, target) {
   else _tfTmpBox.getSize(target);
 }
 
-// The third column of the Transform panel: the size of the part (its box, in the scene's unit) or, with the Scale switch in the
-// panel head on, its scale (a factor, 1 = as it came). A group always shows its scale. The choice is kept in this browser.
+// The third column of the Transform panel: the size of the part (its box, in the scene's unit) or, after a click on the column's
+// title (Size / Scale), its scale (a factor, 1 = as it came). A group always shows its scale. The choice is kept in this browser.
 let _tformScale = (() => { try { return localStorage.getItem('stepopt-tform-scale') === '1'; } catch (_) { return false; } })();
 function _tformScaleOn() { return _tformScale; }
 function _tformScaleSet(on) { _tformScale = !!on; try { localStorage.setItem('stepopt-tform-scale', _tformScale ? '1' : '0'); } catch (_) {} }
-// The switch is wired on its own, as soon as the page is there: the rest of the panel is wired the first time it is opened
-// (_wireTransformPanel), and until then a press on the switch did nothing.
+// The title is wired on its own, as soon as the page is there: the rest of the panel is wired the first time it is opened
+// (_wireTransformPanel), and until then a press on it did nothing.
 function _tformScaleWire() {
-  const sw = document.getElementById('tform-scale-toggle');
-  if (!sw || sw._wired) return;
-  sw._wired = true;
-  const sync = () => { const on = _tformScaleOn(); sw.setAttribute('aria-pressed', String(on)); sw.classList.toggle('is-on', on); };
-  sw.addEventListener('click', () => { _tformScaleSet(!_tformScaleOn()); sync(); sw.blur(); try { _transformPanelRefresh(); } catch (_) {} });
-  sync();
+  const grid = document.getElementById('tform-grid');
+  if (!grid || grid._scaleWired) return;
+  grid._scaleWired = true;
+  grid.addEventListener('click', (e) => {
+    if (!e.target.closest('.tform-col-label[data-tform-col="scale"]')) return;
+    _tformScaleSet(!_tformScaleOn());
+    try { _transformPanelRefresh(); } catch (_) {}
+  });
 }
 if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _tformScaleWire, { once: true }); else _tformScaleWire(); }
 // ── Several parts selected ──
@@ -19110,7 +19162,7 @@ function _treeFillVisible(ev) {
 // not in the document. Returns false if the row is hidden or not in the tree.
 function _treeScrollToRow(row, where = 'center', smooth = false) {
   const el = $('tree');
-  if (!el || !row) return false;
+  if (!el || !row || state._animMode) return false;
   if (!el._rows) {                            // a flat list: the row is in the document
     if (!row.isConnected) return false;
     if (where === 'top') el.scrollTop = Math.max(0, el.scrollTop + row.getBoundingClientRect().top - el.getBoundingClientRect().top);
@@ -19732,7 +19784,7 @@ function rebuildTreeSelectionOnly() {
 let _selColorsQueued = false;
 const _selFollowers = [];      // (cards that move to the new selection while they are open: Profile, Round part; each has follow())
 function applySelectionColors() {
-  try { const m = document.getElementById('em-mode'); if (m) { const idle = !(state.selected && state.selected.size); m.classList.toggle('is-idle', idle); m.setAttribute('aria-disabled', idle ? 'true' : 'false'); } } catch (_) {}      // (the Model mode button is grey while nothing is selected)
+  try { const m = document.getElementById('em-mode'); if (m) { const prim = [...(state.selected || [])].some(id => { const p = getPart(id); return p && !p.deleted && p.isPrimitive; }), idle = !(state.selected && state.selected.size) || prim; const wasPrim = m.classList.contains('is-prim'); m.classList.toggle('is-idle', idle); m.classList.toggle('is-prim', prim); if (prim) m.title = 'Bake geo first: a library shape is edited with its settings. Press Bake geo under them to turn it into a mesh you can edit.'; else if (wasPrim) m.title = 'Model mode: a click picks a whole part, hold for all four modes'; m.setAttribute('aria-disabled', idle ? 'true' : 'false'); } } catch (_) {}      // (the Model mode button is grey while nothing is selected, or a library shape with parameters: Bake geo first)
   try { const i = _flatSelInfo(); _FlattenDialog.syncSelection({ selectedGroupCount: i.selectedIds.length, selectedNames: i.selectedNames }); } catch (_) {}      // (Advanced flatten, when it is open, follows the selection)
   for (const c of _selFollowers) { try { c.follow(); } catch (_) {} }      // (Profile: clean outline, Round part, ...: when open, they move to the new selection)
   if (_selColorsQueued) return;
@@ -22581,6 +22633,7 @@ function _purgeDropped(op) {
 function pushUndo(op) {
   let droppedAny = false;
   if (op && op.type === 'decimate' && _instFollowOn && !op.noFollow) { try { _instFollowOp(op); } catch (e) { console.warn('[instances] follow:', e); } }      // (Edit all instances together)
+  if (op && op._t == null) op._t = Date.now();      // (when it was done: the History card)
   state.history.push(op); _undoPushes++;
   if (op.type === 'vis') _flagVisSoon();
   // (the entry that falls off the far end can no longer be undone: the
@@ -23343,7 +23396,7 @@ const _Dirty = (() => {
   }
   const wire = () => document.getElementById('doc-save')?.addEventListener('click', (e) => { e.stopPropagation(); if (dirty()) document.getElementById('btn-save-scene')?.click(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
-  return { sync, mark, dirty, dropped, force };
+  return { sync, mark, dirty, dropped, force, saved: () => savedTop };      // (saved: the step the scene was saved at, null for as opened; the History card marks it)
 })();
 // ── Crash safety ─────────────────────────────────────────────────────────────
 // Whatever goes wrong should never be a silent freeze:
@@ -24848,6 +24901,25 @@ function undoLast() {
   _refreshUndoRedoButtons();
   requestRender();
 }
+
+// Forget every step (the History card's Clear): the model stays as it is. The unsaved marker is told of each step that goes, as when the
+// far end falls off, and the geometry only the steps held is freed.
+function _clearUndoHistory() {
+  for (const op of state.history) { try { _Dirty.dropped(op); } catch (_) {} _purgeDropped(op); }
+  state.history.length = 0;
+  if (state.redo) state.redo.length = 0;
+  try { _geomSweepSoon(); } catch (_) {}
+  _refreshUndoRedoButtons();
+}
+let _historyCard = null;
+function _installHistoryCard() {
+  _historyCard = installHistoryCard({
+    state, undoLast: () => undoLast(), redoLast: () => redoLast(), canRedo: (op) => _UndoOps.canRedo(op), clear: _clearUndoHistory,
+    savedOp: () => _Dirty.saved(), max: () => _UNDO_MAX, confirm: (o) => _confirmQuitDialog(o), toast: (...x) => toast(...x), lucide: () => _lucide(),
+  });
+  window.__moHistory = _historyCard;      // (tests/e2e-history-card.mjs)
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _installHistoryCard); else _installHistoryCard();
 
 function _dropRedo() {
   if (!state.redo || !state.redo.length) return;
@@ -26769,9 +26841,14 @@ const SCENE_STATE_VERSION = 1;
 // (the control gets its value and an input / change event, so everything it does is done): the unit the sizes are shown in, the grid, the
 // lights and the shadows, and the up axis and the scale of the scene (the file itself is written unscaled and Z up). (The other controls are the application's own preferences, which belong to the person and not to the scene.)
 const _SCENE_CONTROLS = ['scene-up-axis', 'scene-scale', 'display-units', 'grid-cell', 'light-exposure', 'light-sun', 'light-ambient', 'light-azi', 'light-ele', 'toggle-shadows'];
-function _collectSceneControls() {
+// which Settings switch decides whether a file keeps each of them
+const _CONTROL_PREF = { 'scene-up-axis': 'saveUnits', 'scene-scale': 'saveUnits', 'display-units': 'saveUnits', 'grid-cell': 'saveUnits', 'light-exposure': 'saveLights', 'light-sun': 'saveLights', 'light-ambient': 'saveLights', 'light-azi': 'saveLights', 'light-ele': 'saveLights', 'toggle-shadows': 'saveShadows' };
+// full: a copy of the whole scene (a duplicate tab, a recovery copy) keeps everything but the shadows, whatever the switches say
+const _keeps = (k, full) => k === 'saveShadows' ? _Prefs.get(k) === true : (full || _Prefs.get(k) !== false);
+function _collectSceneControls(full) {
   const out = {};
   for (const id of _SCENE_CONTROLS) {
+    if (!_keeps(_CONTROL_PREF[id], full)) continue;
     const el = document.getElementById(id);
     if (!el) continue;
     out[id] = el.type === 'checkbox' ? !!el.checked : String(el.value);
@@ -26782,6 +26859,7 @@ function _applySceneControls(c) {
   if (!c || typeof c !== 'object') return;
   for (const id of _SCENE_CONTROLS) {
     if (!(id in c)) continue;
+    if (id === 'toggle-shadows' && _Prefs.get('saveShadows') !== true) continue;      // (the shadows start off: a file turns them on only when asked to keep them)
     const el = document.getElementById(id);
     if (!el) continue;
     try {
@@ -26794,9 +26872,11 @@ function _applySceneControls(c) {
 }
 function _animPayload() { try { return _Anim.serialize(); } catch (e) { console.warn('[scene-save] animation', e); return undefined; } }
 function _collectSceneState(o) {
-  const wantView = !o || o.view !== false, wantNotes = !o || o.notes !== false;
+  const full = !!(o && o.full), K = (k) => _keeps(k, full);
+  const wantView = !o || o.view !== false, wantNotes = (!o || o.notes !== false) && K('saveNotes');
   const notesPayload = wantNotes && window.MONotesUI && window.MONotesUI.count() > 0 ? window.MONotesUI.serialize() : undefined;
-  if (!wantView) return { v: SCENE_STATE_VERSION, app: 'step-optimizer', savedAt: new Date().toISOString(), sourceName: state._loadedFilename || null, notes: notesPayload, anim: _animPayload() };
+  const animPayload = K('saveAnim') ? _animPayload() : undefined;
+  if (!wantView) return { v: SCENE_STATE_VERSION, app: 'step-optimizer', savedAt: new Date().toISOString(), sourceName: state._loadedFilename || null, notes: notesPayload, anim: animPayload };
   const partsPayload = [];
   for (const p of state.parts) {
     if (p.deleted) continue;
@@ -26812,7 +26892,7 @@ function _collectSceneState(o) {
     });
   }
   // Camera distance can be huge for unscaled CAD models, so store full doubles.
-  const cam = camera ? {
+  const cam = camera && K('saveCamera') ? {
     pos:    camera.position.toArray(),
     target: controls ? controls.target.toArray() : [0,0,0],
     up:     camera.up.toArray(),
@@ -26826,7 +26906,7 @@ function _collectSceneState(o) {
     savedAt: new Date().toISOString(),
     sourceName: state._loadedFilename || null,
     camera: cam,
-    view: {
+    view: !K('saveDisplay') ? undefined : {
       viewMode:        state._viewModeShown || state.viewMode,
       showGrid:        state.showGrid,
       threshold:       state.threshold,
@@ -26843,12 +26923,12 @@ function _collectSceneState(o) {
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
-    controls: _collectSceneControls(),
+    controls: _collectSceneControls(full),
     notes: notesPayload,
-    anim: _animPayload(),      // (what Animate animates, as it is: found again by name when the file is opened)
-    isolated: state._isolated ? true : undefined,     // (the view was isolated: Show all / S then leave it, as before the save)
-    explode: state.explode && (state.explode.x || state.explode.y || state.explode.z) ? { x: state.explode.x, y: state.explode.y, z: state.explode.z, mode: state.explodeMode || 'scene' } : null,
-    parts: partsPayload,
+    anim: animPayload,      // (what Animate animates, as it is: found again by name when the file is opened)
+    isolated: state._isolated && K('saveParts') ? true : undefined,     // (the view was isolated: Show all / S then leave it, as before the save)
+    explode: K('saveExplode') && state.explode && (state.explode.x || state.explode.y || state.explode.z) ? { x: state.explode.x, y: state.explode.y, z: state.explode.z, mode: state.explodeMode || 'scene' } : null,
+    parts: K('saveParts') ? partsPayload : [],
   };
 }
 
@@ -27108,9 +27188,11 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
     const em = meshByPart && meshByPart.get(p.partId);
     if (!em) continue;
     if (withNotes && p.uid) em.userData.soUid = p.uid;
-    if (!p.visible) em.userData.soHidden = true;
-    if (p.flagged) em.userData.soFlagged = true;
-    if (p.locked) em.userData.soLocked = true;
+    if (_keeps('saveParts', !!toBlob)) {      // (Settings › "Saved in a scene file": which parts are hidden, flagged or locked)
+      if (!p.visible) em.userData.soHidden = true;
+      if (p.flagged) em.userData.soFlagged = true;
+      if (p.locked) em.userData.soLocked = true;
+    }
     if (ask.view && state.selected.has(p.partId)) em.userData.soSel = true;      // (what was selected: a view thing, so only when the view is saved)
     if (p.layers && p.layers.length) em.userData.soLayers = p.layers.slice();
   }
@@ -27125,7 +27207,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   // default, which silently dropped the whole saved state (camera, view
   // settings, hidden parts, measurements). It is an empty Object3D, so
   // there is nothing to draw either way.
-  marker.userData[SCENE_STATE_KEY] = _collectSceneState({ view: !!ask.view, notes: withNotes });
+  marker.userData[SCENE_STATE_KEY] = _collectSceneState({ view: !!ask.view, notes: withNotes, full: !!toBlob });
   root.add(marker);             // (always: the animation, the explode amount and the measurements ride on it too, not only the view and the notes)
   // Export the root's children rather than the root itself, otherwise every
   // save / reopen cycle nests the whole scene inside one more "Group".
@@ -29105,7 +29187,7 @@ function _stripMaterialsForExport(root) {
     for (const k of ['color', 'uv', 'uv1', 'uv2', 'uv3']) if (g.attributes[k]) g.deleteAttribute(k);
   });
 }
-async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', pivot='part', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='', animate=false, materials=true }) {
+async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', pivot='part', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='', animate=false, materials=true, texSize=0, texWebp=false }) {
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
   { const own = _exportConvention(format); if (axis === 'auto') axis = own.axis; if (scale === 'auto' || !(scale > 0)) scale = own.scale; }      // ("each format's own": see _exportConvention)
   setLoader(true, 'Preparing export…', fmtLabel);
@@ -29185,13 +29267,15 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
         if (typeof first === 'string' && first.indexOf('Creating normalized normal attribute') !== -1) return;
         return _origWarn.apply(this, args);
       };
-      let result, texUndo = null;
+      let result, texUndo = null, sizeUndo = null;
       try {
-        texUndo = setExportTextureFormats(root);      // (each picture in its own format, not all as PNG: see texformat.js)
+        if (materials && texSize > 0) sizeUndo = shrinkExportTextures(root, texSize);      // (the pictures drawn smaller while the file is written: texformat.js)
+        texUndo = setExportTextureFormats(root, { force: materials && texWebp ? 'image/webp' : '' });      // (each picture in its own format, not all as PNG: see texformat.js)
         result = await new Promise((res, rej) => exp.parse(root, res, rej, { binary: isBin, embedImages: true, animations }));
       } finally {
         console.warn = _origWarn;
         if (texUndo) texUndo();
+        if (sizeUndo) sizeUndo();
       }
       if (isBin) {
         if (brepPack) { try { result = _Brep.embedGlb(result, brepPack); } catch (e) { console.warn('[export] CAD edges not written:', e); } }
@@ -29309,9 +29393,14 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       // requires STORED to allow mmap'd reads).
       const { USDZExporter } = await import('three/addons/exporters/USDZExporter.js');
       const exp = new USDZExporter();
+      let arr;
       // (three's writer draws every picture at most 1024 px on its long side unless told: a 2K or 4K map went out at a quarter or a
       // sixteenth of its pixels. Pictures keep their size up to 4096, the most iPhones and iPads take in AR Quick Look.)
-      const arr = await exp.parseAsync(root, { maxTextureSize: 4096 });
+      let sizeUndo = null;
+      try {
+        if (materials && texSize > 0 && texSize < 4096) sizeUndo = shrinkExportTextures(root, texSize);
+        arr = await exp.parseAsync(root, { maxTextureSize: 4096 });
+      } finally { if (sizeUndo) sizeUndo(); }
       downloadBlob(new Blob([arr], { type: 'model/vnd.usdz+zip' }), base + '.usdz');
     }
     else if (format === 'stl') {
@@ -30837,6 +30926,10 @@ function wireUI() {
   // (each change re-links every material, so flicking the switch several times in a second queued a pile of shader compiles and
   // lost the viewport; the clicks now settle for a moment and only the last state is applied, and only if it differs from what is shown)
   let _shadowTimer = 0;
+  // Shadows are off every time the app starts, whatever they were left at: the browser puts a switch back the way it was on a reload,
+  // so it is set off here (and again once the page has loaded), and it takes no part in what the browser remembers. Photo mode and a
+  // scene file that was saved with shadows on still turn them on, and they stay as they are across Photo mode.
+  { const off = () => { const sh = $('toggle-shadows'); if (!sh || sh.disabled || _Photo.on) return; sh.autocomplete = 'off'; if (sh.checked || state.shadowsEnabled) { sh.checked = false; state.shadowsEnabled = false; try { _applyShadows(); requestRender(); } catch (_) {} } }; off(); window.addEventListener('load', off, { once: true }); }
   $('toggle-shadows')?.addEventListener('change', e => {
     state.shadowsEnabled = e.target.checked;
     clearTimeout(_shadowTimer);
@@ -30947,12 +31040,14 @@ function wireUI() {
     const animate = (fmt === 'glb' || fmt === 'gltf') && !merge && $('exp-anim-row')?.style.display !== 'none' && !!$('exp-anim')?.checked;
     const stlAscii = !!$('exp-stl-ascii')?.checked && fmt === 'stl';
     const materials = $('exp-materials')?.checked !== false;
+    const texSize = (fmt === 'glb' || fmt === 'gltf' || fmt === 'usdz') ? (parseInt($('exp-texsize')?.value, 10) || 0) : 0;
+    const texWebp = (fmt === 'glb' || fmt === 'gltf') && !!$('exp-texwebp')?.checked;
     const fileName = $('exp-filename')?.value || '';
     // The choices that are the same from one export to the next are kept.
     // (Not "selected only": it depends on what is selected right now. Not the file name: it belongs to the scene.)
     _Prefs.set('exportOpts', {
       scale: scaleSel, scaleCustom: $('exp-scale-custom')?.value || '1', axis, origin, pivot, conv: 2,
-      merge, visible: visibleOnly, flat, materials,
+      merge, visible: visibleOnly, flat, materials, texSize, texWebp,
     });
 
     // Validate selected-only.
@@ -31018,7 +31113,7 @@ function wireUI() {
       }
     }
     try {
-      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, pivot, draco, meshopt, reorder, flat, stlAscii, fileName, animate, materials });
+      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, pivot, draco, meshopt, reorder, flat, stlAscii, fileName, animate, materials, texSize, texWebp });
     } finally {
       if (snapshot.length) {
         for (const s of snapshot) s.p.visible = s.prev;
@@ -31142,6 +31237,9 @@ function wireUI() {
     const show = (el, on) => { if (el) el.style.display = on ? '' : 'none'; };
     const onlyFor = (rowId, cbId, on) => { show($(rowId), on); const cb = $(cbId); if (cb && !on) cb.checked = false; };
     { const has = (fmt === 'glb' || fmt === 'gltf') && !!(typeof _Anim !== 'undefined' && _Anim.count && _Anim.count() > 0); show($('exp-anim-row'), has); const ar = $('exp-anim-row'); if (ar) { const off = !!$('exp-merge')?.checked; ar.style.opacity = off ? '.42' : ''; ar.style.pointerEvents = off ? 'none' : ''; } }      // (Include animation: a glTF with something animated; not one merged mesh, which has no parts to move)
+    show($('exp-texsize-row'), fmt === 'glb' || fmt === 'gltf' || fmt === 'usdz');
+    onlyFor('exp-texwebp-row', 'exp-texwebp', fmt === 'glb' || fmt === 'gltf');
+    { const off = $('exp-materials')?.checked === false; for (const id of ['exp-texsize-row', 'exp-texwebp-row']) { const r = $(id); if (r) { r.style.opacity = off ? '.42' : ''; r.style.pointerEvents = off ? 'none' : ''; } } }      // (no materials, no pictures)
     onlyFor('exp-draco-row', 'exp-draco', fmt === 'glb');
     onlyFor('exp-meshopt-row', 'exp-meshopt', fmt === 'glb');
     onlyFor('exp-reorder-row', 'exp-reorder', fmt === 'glb');
@@ -31192,7 +31290,8 @@ function wireUI() {
       const setSel = (id, v) => { const el = $(id); if (el && v != null && [...el.options].some(op => op.value === v)) el.value = v; };
       setSel('exp-axis', o.axis); setSel('exp-origin', o.origin); setSel('exp-pivot', o.pivot);
       const setCb = (id, v) => { const el = $(id); if (el && typeof v === 'boolean') el.checked = v; };
-      setCb('exp-merge', o.merge); setCb('exp-visible', o.visible); setCb('exp-flat', o.flat); setCb('exp-materials', o.materials);
+      setCb('exp-merge', o.merge); setCb('exp-visible', o.visible); setCb('exp-flat', o.flat); setCb('exp-materials', o.materials); setCb('exp-texwebp', o.texWebp);
+      setSel('exp-texsize', String(o.texSize || 0));
     }
   } catch (_) {}
   _refreshFormatToggles();
@@ -39287,7 +39386,8 @@ function _axisLocalOf(m, worldPos, worldQuat) {
   if (worldQuat) out.quat = _axisParentQuat(m).invert().multiply(worldQuat);
   return out;
 }
-// where the axis goes: the target is 'centre' (the middle of the part), 'origin', 'selection', 'active', 'view' or 'keep'
+// where the axis goes: the target is 'centre' (the middle of the part), 'bottom' / 'top' (the middle of its lowest / highest face, Z up),
+// 'origin', 'selection', 'active', 'view' or 'keep'
 // how it turns: 'keep', 'world' (0, 0, 0), 'parent', 'active', 'view' or 'object' (the part's own flat faces)
 function axisSet(where, turn, opts = {}) {
   const parts = _axisParts(opts.ids); if (!parts) return 0;
@@ -39309,7 +39409,7 @@ function axisSet(where, turn, opts = {}) {
   }
   if (where === 'active' && parts.length < 2) { toast('Pick a second part', 'The last selected part is the target: select the part to move first, then the target', 'info', 3200); return 0; }
   if (where === 'selection' && !selC) { toast('Nothing to centre on', '', 'info'); return 0; }
-  const names = { centre: 'Centre pivot', origin: 'Pivot to the origin', selection: 'Pivot to the selection', active: 'Pivot to the last selected', view: 'Pivot to the view', keep: 'Align pivot' };
+  const names = { centre: 'Centre pivot', bottom: 'Pivot to the bottom', top: 'Pivot to the top', origin: 'Pivot to the origin', selection: 'Pivot to the selection', active: 'Pivot to the last selected', view: 'Pivot to the view', keep: 'Align pivot' };
   const label = opts.label || (turn !== 'keep' && where === 'keep' ? 'Align pivot to ' + ({ world: 'the world', parent: 'its parent', active: 'the last selected', view: 'the view', object: 'its faces', spread: 'the way the parts are spread', custom: 'the typed angles' }[turn] || turn) : names[where] || 'Pivot');
   const n = _axisRun(label, parts, (p) => {
     const m = p.mesh; m.updateWorldMatrix(true, false);
@@ -39328,6 +39428,10 @@ function axisSet(where, turn, opts = {}) {
     let Pw;
     if (where === 'keep') Pw = m.getWorldPosition(new THREE.Vector3());
     else if (where === 'centre') Pw = _axisCentreOf(p, Qw);
+    else if (where === 'bottom' || where === 'top') {      // (measured in the scene's own axes: the foot of a part is its lowest point whichever way it is turned)
+      const b = _axisBoxIn(p, new THREE.Quaternion());
+      if (b) { Pw = b.min.clone().add(b.max).multiplyScalar(0.5); Pw.z = where === 'bottom' ? b.min.z : b.max.z; }
+    }
     else if (where === 'origin') Pw = new THREE.Vector3();
     else if (where === 'selection') Pw = selC.clone();
     else if (where === 'active') Pw = ctx.activePos && ctx.activePos.clone();
@@ -39754,7 +39858,7 @@ const _ModelInspector = (() => {
   const _CmdKRun = (id) => { try { _Actions.list.find(a => a.id === id)?.run(); } catch (_) {} };
 
   // ── the geometry scan: one mesh, by meshcheck.js (the same code the node tests run) ──
-  function analyseGeo(g) {
+  function analyseGeo(g, detail = false) {
     const pa = g.attributes && g.attributes.position; if (!pa) return null;
     const vc = pa.count, ia = g.index, T = ia ? Math.floor(ia.count / 3) : Math.floor(vc / 3);
     if (T > SCAN_MAX_TRIS) return { skipped: true, tris: T };
@@ -39763,8 +39867,58 @@ const _ModelInspector = (() => {
       p = new Float32Array(vc * 3);
       for (let i = 0; i < vc; i++) { p[i * 3] = pa.getX(i); p[i * 3 + 1] = pa.getY(i); p[i * 3 + 2] = pa.getZ(i); }
     }
-    return checkMesh(p, ia ? ia.array : null);
+    return checkMesh(p, ia ? ia.array : null, detail ? { detail: true } : {});
   }
+  // ── the faults drawn on the model (geo-overlay.js): "Show in the view" in the window ──
+  const showKinds = new Set();                // the kinds that are on ('open', 'flip', …)
+  const detailCache = new Map();              // mesh uuid → { fp, d }: where the faults of a mesh are (looked for only when a kind is on)
+  let overlayObjs = [], ovBusy = false, ovAgain = false;
+  const tone = (name) => new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#ff6b6b');
+  function clearOverlays() {
+    for (const o of overlayObjs) { try { if (o.parent) o.parent.remove(o); geoDispose(o); } catch (_) {} }
+    overlayObjs = [];
+    try { requestRender(); } catch (_) {}
+  }
+  const settle = () => new Promise(res => setTimeout(res, 0));
+  async function refreshOverlays() {
+    if (ovBusy) { ovAgain = true; return; }
+    ovBusy = true;
+    try {
+      do {
+        ovAgain = false;
+        clearOverlays();
+        if (!showKinds.size) break;
+        if (!scan && !scanning) await runScan();
+        while (scanning) await new Promise(res => setTimeout(res, 60));
+        if (!scan || !showKinds.size) break;
+        const byGeo = new Map();
+        for (const p of live()) { const g = geomOf(p); if (!g) continue; if (!byGeo.has(g.uuid)) byGeo.set(g.uuid, { g, parts: [] }); byGeo.get(g.uuid).parts.push(p); }
+        const kinds = GEO_KINDS.filter(K => showKinds.has(K.key));
+        let last = performance.now();
+        for (const [uuid, e] of byGeo) {
+          const c = cache.get(uuid); if (!c || !c.r || c.r.skipped) continue;
+          const want = kinds.filter(K => (K.count(c.r) || 0) > 0); if (!want.length) continue;
+          let d = detailCache.get(uuid);
+          if (!d || d.fp !== fpOf(e.g)) { let r = null; try { r = analyseGeo(e.g, true); } catch (err) { console.warn('[inspector] detail failed:', err); } d = { fp: fpOf(e.g), d: r && r.detail }; detailCache.set(uuid, d); }
+          if (!d.d) continue;
+          for (const p of e.parts) for (const K of want) {
+            const obj = geoBuild(THREE, e.g, d.d, K.key, tone(K.color)); if (!obj) continue;
+            if (p.mesh) p.mesh.add(obj);
+            else if (p.instancedMesh && state.partsRoot) {
+              const im = p.instancedMesh, m = new THREE.Matrix4();
+              im.getMatrixAt(p.instanceIndex, m); im.updateWorldMatrix(true, false); state.partsRoot.updateWorldMatrix(true, false);
+              m.premultiply(im.matrixWorld).premultiply(new THREE.Matrix4().copy(state.partsRoot.matrixWorld).invert());
+              obj.matrixAutoUpdate = false; obj.matrix.copy(m); obj.matrixWorldNeedsUpdate = true; state.partsRoot.add(obj);
+            } else { geoDispose(obj); continue; }
+            overlayObjs.push(obj);
+          }
+          if (performance.now() - last > 60) { last = performance.now(); try { requestRender(); } catch (_) {} await settle(); }
+        }
+        try { requestRender(); } catch (_) {}
+      } while (ovAgain);
+    } finally { ovBusy = false; }
+  }
+  window.__moGeoOverlay = { show: (k, on) => { if (on) showKinds.add(k); else showKinds.delete(k); return refreshOverlays(); }, count: () => overlayObjs.length, kinds: () => [...showKinds] };      // (tests/e2e-geo-overlay.mjs)
   // What a mesh's scan result depends on: its vertices and triangles. A tool that edits a mesh in place bumps the attribute's version;
   // one that makes a new mesh gives it a new uuid. Either way the fingerprint changes and only that mesh is scanned again.
   const verOf = (a) => a ? (a.version || 0) + (a.data ? a.data.version || 0 : 0) : -1;
@@ -39823,6 +39977,9 @@ const _ModelInspector = (() => {
     // sheet, a part made of loose bodies or a fine fillet has them by design, and they are not errors.
     const per = { inside, flip, degenerate: deg, dup, nonman: non, nmv };
     for (const r of scan.rows) r.per = per[r.key] ? per[r.key].per : null;   // how much of it each part has, for the list under the row
+    scan.kinds = {};
+    for (const K of GEO_KINDS) { let n = 0; for (const { r, parts } of results.values()) n += (K.count(r) || 0) * parts.length; scan.kinds[K.key] = n; }
+    if (showKinds.size) setTimeout(refreshOverlays, 0);      // (what is drawn follows the scan: after a fix the faults that are gone go too)
     geoSig = geoSignature();
     render();
   }
@@ -39857,7 +40014,7 @@ const _ModelInspector = (() => {
     const count = r.n === null ? '—' : fmtNum(r.n);
     const parts = r.unit && r.ids && r.ids.length ? ' <span class="mi2-parts">' + fmtNum(new Set(r.ids).size) + ' part' + (new Set(r.ids).size === 1 ? '' : 's') + '</span>' : '';
     const key = (r._g || '') + ':' + r.key, canOpen = !!(r.ids && r.ids.length), isOpen = canOpen && openRows.has(key);
-    return '<div class="mi2-row t-' + r.tone + (isOpen ? ' open' : '') + '">' +
+    return '<div class="mi2-row t-' + r.tone + (isOpen ? ' open' : '') + (canOpen ? ' can-open' : '') + '">' +
       (canOpen ? '<button type="button" class="mi2-x" data-mi2="expand" data-k="' + esc(key) + '" title="' + (isOpen ? 'Hide the parts' : 'Show the parts') + '" aria-expanded="' + isOpen + '"><i data-lucide="chevron-right"></i></button>' : '<span class="mi2-x"></span>') +
       '<span class="mi2-dot" title="' + esc(TONE[r.tone]) + '"></span>' +
       '<div class="mi2-main"><div class="mi2-l">' + esc(r.label) + '</div><div class="mi2-n">' + esc(r.note || '') + '</div></div>' +
@@ -39905,6 +40062,13 @@ const _ModelInspector = (() => {
       if (scan) h += '<div class="mi2-rows">' + rowsS.map((r, i) => row(r, i)).join('') + '</div>';
       h += '<div class="mi2-scanrow"><span>' + (scan ? 'The scan reads every mesh once.' : 'Looks at every mesh once for mesh errors: faces turned the wrong way, doubled and empty triangles, edges shared by three or more faces.') + '</span><button type="button" class="mi2-go" data-mi2="scan">' + (scan ? 'Scan again' : 'Scan the geometry') + '</button></div>';
     }
+    h += '<div class="mi2-sec">Show in the view <span class="mi2-sub">' + (showKinds.size ? fmtNum(showKinds.size) + ' on' : 'draw the faults on the model') + '</span></div><div class="mi2-show">' +
+      GEO_KINDS.map(K => {
+        const n = scan && scan.kinds ? scan.kinds[K.key] : null, on = showKinds.has(K.key), none = n === 0 && !on;
+        return '<button type="button" class="mi2-chip' + (on ? ' on' : '') + (none ? ' none' : '') + '" data-mi2="show" data-k="' + K.key + '" aria-pressed="' + on + '" style="--c:var(' + K.color + ')"' + (none ? ' disabled' : '') + ' title="' + esc(K.note) + '">' +
+          '<span class="mi2-sw"></span><span class="mi2-cl">' + esc(K.label) + '</span><span class="mi2-cn">' + (n === null ? '' : fmtNum(n)) + '</span></button>';
+      }).join('') + '</div>' +
+      (showKinds.size ? '<div class="mi2-scanrow"><span>' + (scan ? 'Lines and points show through the model; filled triangles sit on it.' : 'The scan runs first.') + '</span><button type="button" data-mi2="hideall">Hide all</button></div>' : '');
     body.innerHTML = h;
     try { _lucide(); } catch (_) {}
     sig = signature();
@@ -39926,76 +40090,25 @@ const _ModelInspector = (() => {
   };
   const signature = () => geoSignature() + ':' + state.parts.filter(p => p.visible === false).length;
   let geoSig = '';
-  function css() {
-    if (document.getElementById('mi2-style')) return;
-    const st = document.createElement('style'); st.id = 'mi2-style';
-    st.textContent = `
-      #_model-inspector .dlg-body{padding:0}
-      .mi2{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--tx)}
-      .mi2-file{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--s2)}
-      .mi2-file>i,.mi2-file>svg{width:22px;height:22px;color:var(--tx3);flex:0 0 22px}
-      .mi2-file>div{min-width:0;flex:1}
-      .mi2-fn{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .mi2-fs{color:var(--tx3);font-size:11px;margin-top:2px}
-      .mi2-sec{margin:12px 0 4px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--tx3)}
-      .mi2-sub{text-transform:none;letter-spacing:0;margin-left:8px;opacity:.8}
-      .mi2-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-      .mi2-stat{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:10px;background:var(--s1);min-width:0}
-      .mi2-stat span{font-size:10px;color:var(--tx3)}
-      .mi2-stat b{font-weight:400;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .mi2-stat em{font-style:normal;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
-      .mi2-none{color:var(--tx3);padding:4px 8px}
-      .mi2-rows{display:flex;flex-direction:column;gap:2px}
-      .mi2-row{display:grid;grid-template-columns:16px 10px minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:8px 8px 8px 4px;border-radius:9px}
-      .mi2-x{width:16px;height:16px;padding:0;border:0;border-radius:var(--r-xs);background:transparent;color:var(--tx3);cursor:pointer;display:flex;align-items:center;justify-content:center}
-      button.mi2-x:hover{background:var(--s3);color:var(--tx)}
-      .mi2-x svg{width:12px;height:12px;transition:transform 120ms ease}
-      .mi2-row.open .mi2-x svg{transform:rotate(90deg)}
-      .mi2-plist{display:flex;flex-direction:column;gap:1px;margin:0 0 6px 30px;padding-left:8px;border-left:1px solid var(--s3);max-height:260px;overflow-y:auto}
-      .mi2-pi{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;height:24px;padding:0 8px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--tx2);font:inherit;font-size:11px;cursor:pointer;text-align:left}
-      .mi2-pi:hover{background:var(--s3);color:var(--tx)}
-      .mi2-pi.on{background:var(--ac-soft);color:var(--tx);box-shadow:inset 2px 0 0 var(--ac)}
-      .mi2-pi.off .mi2-pn{opacity:.55}
-      .mi2-pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .mi2-pv{color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
-      .mi2-row:hover{background:var(--s1)}
-      .mi2-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3)}
-      .mi2-row.t-ok .mi2-dot{background:var(--ok)}
-      .mi2-row.t-warn .mi2-dot{background:var(--wn)}
-      .mi2-row.t-bad .mi2-dot{background:var(--er)}
-      .mi2-row.t-info .mi2-dot{background:var(--ac-text)}
-      .mi2-l{color:var(--tx)}
-      .mi2-n{color:var(--tx3);font-size:11px;line-height:1.4;margin-top:1px}
-      .mi2-c{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:96px}
-      .mi2-c b{font-weight:400;font-size:13px}
-      .mi2-c em{font-style:normal;color:var(--tx3);font-size:10px}
-      .mi2-parts{display:block;color:var(--tx3);font-size:10px}
-      .mi2-row.t-ok .mi2-c b{color:var(--tx3)}
-      .mi2-b{display:flex;gap:6px;justify-content:flex-end;min-width:0}
-      .mi2 button[data-mi2]:not(.mi2-pi):not(.mi2-x){height:24px;padding:0 10px;border:0;border-radius:7px;background:var(--s3);color:var(--tx2);font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
-      .mi2 button[data-mi2]:not(.mi2-pi):not(.mi2-x):hover{background:var(--s5);color:var(--tx)}
-      .mi2-ref{flex:0 0 auto}
-      .mi2-scanrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px;color:var(--tx3);font-size:11px}
-      .mi2 .mi2-go{background:var(--btn-primary-bg)!important;color:var(--btn-primary-fg)!important}
-      .mi2-prog{height:3px;border-radius:2px;background:var(--s4);overflow:hidden;margin:6px 8px 0}
-      .mi2-prog i{display:block;height:100%;background:var(--ac);transition:width 120ms linear}
-    `;
-    document.head.appendChild(st);
-  }
+  function css() { /* the styles are in index.html: "Model inspector" */ }
   function open() {
     css();
     if (!pop) {
       pop = _DraggablePopup.create({
         id: '_model-inspector', title: 'Model inspector', subtitle: 'What the model is, and what is wrong with it', iconName: 'bug',
-        width: 640, height: 640, minWidth: 460, minHeight: 360, bodyHtml: '<div class="mi2" id="mi2-body"></div>', bodyScroll: true,
-        onClose: () => { clearInterval(timer); timer = 0; abort = true; },
+        width: 640, height: 740, minWidth: 460, minHeight: 360, bodyHtml: '<div class="mi2" id="mi2-body"></div>', bodyScroll: true,
+        onClose: () => { clearInterval(timer); timer = 0; abort = true; showKinds.clear(); refreshOverlays(); },
       });
       body = pop.body.querySelector('#mi2-body') || pop.body;
       body.addEventListener('click', (e) => {
-        const b = e.target.closest && e.target.closest('[data-mi2]'); if (!b) return;
+        let b = e.target.closest && e.target.closest('[data-mi2]');
+        if (!b) { const rw = e.target.closest && e.target.closest('.mi2-row'); b = rw && rw.querySelector('[data-mi2="expand"]'); }      // (the whole strip opens its parts, not only the arrow)
+        if (!b) return;
         const act = b.dataset.mi2;
         if (act === 'refresh') { render(); return; }
         if (act === 'scan') { runScan(); return; }
+        if (act === 'show') { const k = b.dataset.k; if (showKinds.has(k)) showKinds.delete(k); else showKinds.add(k); render(); refreshOverlays(); return; }
+        if (act === 'hideall') { showKinds.clear(); render(); refreshOverlays(); return; }
         if (act === 'stop') { abort = true; return; }
         if (act === 'expand') { const k = b.dataset.k; if (openRows.has(k)) openRows.delete(k); else openRows.add(k); render(); return; }
         if (act === 'part') { selectParts([+b.dataset.id], false); markSelected(); return; }   // a click highlights it in the viewport
@@ -40407,11 +40520,49 @@ function _matDockFilterSort(mats) {
   return out;                                  // 'used' is the order they arrive in
 }
 let _matDockWired = false;
+// Empty space in the Materials list: a click lets go of every picked material, a drag draws a square and picks the materials it
+// touches (with Shift, Ctrl or Cmd held it adds to what is picked). A press on a material is not this (it picks it, or drags it
+// onto the view); neither is the bar above the list or the scroll bar.
+function _wireMatMarquee() {
+  const list = document.getElementById('mat-list'), host = list && list.closest('.pop-section');
+  if (!list || !host || host._marquee) return;
+  host._marquee = true;
+  host.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('.mat-cell, .mat-row, .mat-list-bar, button, input, select, textarea')) return;
+    const hr = host.getBoundingClientRect();
+    if (e.clientX > hr.left + host.clientWidth || e.clientY > hr.top + host.clientHeight) return;      // (the scroll bar)
+    const add = e.shiftKey || e.ctrlKey || e.metaKey, base = add ? new Set(_matPanelSelected) : new Set();
+    const x0 = e.clientX, y0 = e.clientY;
+    let box = null, moved = false;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const move = (ev) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+      moved = true;
+      if (!box) { box = document.createElement('div'); box.className = 'mat-marquee'; document.body.appendChild(box); }
+      const x1 = clamp(ev.clientX, hr.left, hr.right), y1 = clamp(ev.clientY, hr.top, hr.bottom);
+      const l = Math.min(x0, x1), t = Math.min(y0, y1), r = Math.max(x0, x1), b = Math.max(y0, y1);
+      box.style.left = l + 'px'; box.style.top = t + 'px'; box.style.width = (r - l) + 'px'; box.style.height = (b - t) + 'px';
+      const next = new Set(base);
+      for (const c of list.querySelectorAll('.mat-cell, .mat-row')) { const q = c.getBoundingClientRect(); if (c._mat && q.left < r && q.right > l && q.top < b && q.bottom > t) next.add(c._mat); }
+      if (next.size === _matPanelSelected.size && [...next].every(m => _matPanelSelected.has(m))) return;
+      _matPanelSelected.clear(); for (const m of next) _matPanelSelected.add(m);
+      _refreshPanelSelection();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      if (box) box.remove();
+      if (!moved && !add && _matPanelSelected.size) { _matPanelSelected.clear(); _refreshPanelSelection(); }
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+    e.preventDefault();
+  });
+}
 function _wireMatDock() {
   if (_matDockWired) return;
   const search = document.getElementById('mat-search'), sort = document.getElementById('mat-sort'), insp = document.getElementById('mat-inspector');
   if (!search || !sort || !insp) return;
   _matDockWired = true;
+  _wireMatMarquee();
   try { const saved = localStorage.getItem('stepopt-mat-sort'); if (saved && [...sort.options].some(o => o.value === saved)) sort.value = saved; } catch (_) {}
   let t = 0;
   search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(_populateMaterialsList, 90); });
@@ -40495,15 +40646,17 @@ function _renderMatInspector() {
     L('Triangles') + `<span class="mi-wide">${fmtNum(tris)}${share >= 0.05 ? ' · ' + share.toFixed(share < 10 ? 1 : 0) + '% of the model' : ''}</span>`;
   const bar = (v) => `<span class="mi-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></i></span><span class="mi-num">${(+v).toFixed(2)}</span>`;
   const nMat = infos.length;
+  // The buttons are icons in one row (the name is the tooltip and the screen reader label)
+  const ib = (key, icon, label, title, extra = '', off = false) => `<button class="btn mi-ib${extra}" data-mi="${key}" title="${title}" aria-label="${label}"${off ? ' disabled' : ''}>${_ico(icon)}</button>`;
   const actions = (one) =>
     `<div class="mi-actions">` +
-      (one ? `<button class="btn" data-mi="edit" title="Open the material editor (same as a double-click)">Edit…</button>` : '') +
-      `<button class="btn" data-mi="select" title="Select every part that uses ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Select parts</button>` +
-      `<button class="btn" data-mi="isolate" title="Show only the parts that use ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Isolate</button>` +
+      (one ? ib('edit', 'pencil', 'Edit', 'Edit: open the material editor (same as a double-click)') : '') +
+      ib('select', 'mouse-pointer-2', 'Select parts', `Select parts: every part that uses ${one ? 'this material' : 'these materials'}`, '', !parts) +
+      ib('isolate', 'focus', 'Isolate', `Isolate: show only the parts that use ${one ? 'this material' : 'these materials'}`, '', !parts) +
+      (one ? ib('assign', 'paint-bucket', 'Assign', `Assign: give this material to the ${nSel} selected part${nSel === 1 ? '' : 's'}`, '', !nSel) : '') +
+      (one ? ib('duplicate', 'copy-plus', 'Duplicate', 'Duplicate this material (Ctrl+D)') : '') +
+      ib('delete', 'trash-2', 'Delete', `Delete ${one ? 'this material' : nMat + ' materials'}: its parts are left with none`, ' mi-danger') +
       (!one ? `<button class="btn mi-merge-btn" data-mi="merge" title="Merge the picked materials, keeping the first (Ctrl+M)">Merge ${nMat} materials</button>` : '') +
-      (one ? `<button class="btn" data-mi="assign" title="Give this material to the ${nSel} selected part${nSel === 1 ? '' : 's'}"${nSel ? '' : ' disabled'}>Assign${nSel ? ' to ' + fmtNum(nSel) : ''}</button>` : '') +
-      (one ? `<button class="btn" data-mi="duplicate" title="Duplicate this material (Ctrl+D)">Duplicate</button>` : '') +
-      `<button class="btn mi-danger" data-mi="delete" title="Delete ${one ? 'this material' : 'these materials'}: its parts are left with none">Delete${one ? '' : ' ' + nMat}</button>` +
     `</div>`;
   if (infos.length > 1) {
     // What Merge makes: the first picked material takes every part of the others (see the Merge handler), so the result is that
@@ -40867,12 +41020,10 @@ function _renderMatListRows(list, mats) {
         <span class="mat-row-name">${escapeHtml(name)}</span>
         <span class="mat-row-meta">${hex} · ${info.count}</span>
       </span>
-      <button class="mat-row-edit" title="Edit material"><i data-lucide="sliders-horizontal"></i></button>
     `;
     if (!previewUrl) _matLazy(row.querySelector('.mat-row-thumb'), m, 'mat-row-thumb', '');
     if (_matPanelSelected.has(m)) row.classList.add('selected');
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.mat-row-edit')) return;
       const multi = e.ctrlKey || e.metaKey || e.shiftKey;
       if (multi) {
         if (_matPanelSelected.has(m)) _matPanelSelected.delete(m);
@@ -40895,10 +41046,6 @@ function _renderMatListRows(list, mats) {
       e.preventDefault();
       const nameEl = e.target.closest('.mat-row-name');
       if (nameEl) { e.stopPropagation(); _renameMaterialInline(nameEl, m); return; }
-      _openMaterialEditor(info);
-    });
-    row.querySelector('.mat-row-edit')?.addEventListener('click', (e) => {
-      e.stopPropagation();
       _openMaterialEditor(info);
     });
     list.appendChild(row);
@@ -44864,6 +45011,101 @@ document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   try { _openCommandsMenu(t.closest('button') || t, { x: e.clientX, y: e.clientY }); } catch (err) { console.warn('[toolbar menu]', err); }
 });
+// A right-click on Animate, Library, Materials or "…" in the toolbar opens a short list of what is useful at that button (the other buttons
+// keep the list of every command). Each row takes its key from the command it runs; a row that cannot run now says why.
+(function _toolbarButtonMenus() {
+  const act = (id) => () => { try { _Actions.list.find(x => x.id === id)?.run(); } catch (e) { console.warn('[toolbar menu]', id, e); } };
+  const kb = (id) => _Actions.list.find(x => x.id === id)?.kbd;
+  const row = (icon, label, id, off) => ({ icon, label, kbd: kb(id), off: off || false, fn: act(id) });
+  const click = (id) => () => document.getElementById(id)?.click();
+  const picked = () => [...state.selected].filter(i => { const p = getPart(i); return p && !p.deleted && !p.isCloner; });
+  const shown = (id) => !!document.getElementById(id)?.classList.contains('show');
+  const MENUS = {
+    'tg-animate': () => {
+      const I = _Anim.ctl.info(), has = I.n > 0, ids = picked(), noSel = ids.length ? false : 'Select something first', none = has ? false : 'Nothing is animated yet';
+      const add = (type) => () => { try { _Anim.api.add({ ids, type }); } catch (e) { toast('Could not animate', String(e && e.message || e), 'warn'); } };
+      return [
+        { icon: 'tv-minimal-play', label: shown('vp-animate-pop') ? 'Close the timeline' : 'Open the timeline', kbd: 'Shift+A', fn: click('tg-animate') },
+        '---',
+        { icon: I.playing ? 'pause' : 'play', label: I.playing ? 'Pause' : 'Play', off: none, fn: () => _Anim.ctl.toggle() },
+        { icon: 'skip-back', label: 'Back to the start', off: none, fn: () => _Anim.ctl.rewind() },
+        { icon: 'gauge', label: 'Speed', off: none, sub: _Anim.ctl.rates.map(r => ({ label: r + '×' + (r === I.rate ? '   ✓' : ''), fn: () => _Anim.ctl.setRate(r) })) },
+        { icon: 'repeat', label: 'When it ends', off: none, sub: [['Loop', 'loop'], ['Ping-pong', 'pingpong'], ['Stop', 'once']].map(([l, m]) => ({ label: l + (I.mode === m ? '   ✓' : ''), fn: () => _Anim.ctl.setMode(m) })) },
+        '---',
+        { icon: 'plus', label: 'Add to the selection', off: noSel, sub: [['Spin', 'spin'], ['Swing', 'swing'], ['Noise', 'noise'], ['Oscillate', 'oscillate']].map(([l, t]) => ({ label: l, fn: add(t) })) },
+        row('sliders-horizontal', 'Animate the selection…', 'animate', noSel),
+        { icon: 'eraser', label: 'Remove from the selection', off: noSel || none, fn: () => { try { _Anim.api.remove({ ids }); } catch (_) {} } },
+        { icon: 'trash-2', label: 'Remove every animation', danger: true, off: none, fn: () => { try { _Anim.api.clear(); } catch (_) {} } },
+        '---',
+        row('film', 'Turntable video…', 'turntable', state.parts.some(p => !p.deleted) ? false : 'The scene is empty'),
+      ];
+    },
+    'tg-library': () => {
+      const P = _libPrefs(), part = (k) => ({ label: _primitiveDefaultName(k), fn: () => { try { _libAdd(k); } catch (e) { toast('Could not add that part', String(e && e.message || e), 'error'); } } });
+      return [
+        { icon: 'shapes', label: _libOpen() ? 'Close the library' : 'Open the library', kbd: 'Shift+L', fn: click('tg-library') },
+        '---',
+        { icon: 'history', label: 'Recently used', off: P.recent.length ? false : 'Nothing used yet', sub: P.recent.map(part) },
+        { icon: 'star', label: 'Favourites', off: P.fav.length ? false : 'Star a part in the library first', sub: P.fav.map(part) },
+        '---',
+        ..._LIB_SHELVES.map(([name, kinds]) => ({ icon: 'plus', label: 'Add: ' + name, sub: kinds.map(part) })),
+        '---',
+        { icon: 'layout-grid', label: P.view === 'small' ? 'Large tiles' : 'Small tiles', fn: () => { const q = _libPrefs(); q.view = q.view === 'small' ? 'grid' : 'small'; _libSave(q); try { _libRender(); } catch (_) {} } },
+        { icon: 'eraser', label: 'Clear recently used', off: P.recent.length ? false : 'Nothing used yet', fn: () => { const q = _libPrefs(); q.recent = []; _libSave(q); try { _libRender(); } catch (_) {} } },
+      ];
+    },
+    'tg-materials': () => {
+      const noSel = picked().length ? false : 'Select something first', empty = state.parts.some(p => !p.deleted) ? false : 'The scene is empty';
+      return [
+        { icon: 'swatch-book', label: shown('vp-materials-pop') ? 'Close materials' : 'Open materials', kbd: 'Shift+M', fn: click('tg-materials') },
+        '---',
+        row('plus', 'New material', 'matNew'),
+        row('sparkles', 'New material from a preset…', 'matPresets'),
+        '---',
+        row('palette', 'Quick colour wheel', 'quickColour', noSel),
+        row('pipette', 'Select by colour', 'selColour', noSel),
+        row('combine', 'Merge parts of the same colour', 'mergeColour', empty),
+        row('layers', 'Merge by material or group…', 'mergeBy', empty),
+      ];
+    },
+    'vp-cmdk': () => {
+      let recent = []; try { const v = JSON.parse(localStorage.getItem('stepopt-cmdk-recent') || '[]'); recent = (Array.isArray(v) ? v : []).map(id => _Actions.list.find(x => x.id === id)).filter(Boolean).slice(0, 6); } catch (_) {}
+      return [
+        { icon: 'search', label: _CmdK.isOpen() ? 'Close command search' : 'Open command search', kbd: kb('palette'), fn: () => { if (_CmdK.isOpen()) _CmdK.hide(); else _CmdK.show(); } },
+        { icon: 'history', label: 'Recent commands', off: recent.length ? false : 'Nothing used yet', sub: recent.map(x => ({ label: x.label, fn: () => { try { x.run(); } catch (e) { console.warn('[recent]', x.id, e); } } })) },
+        '---',
+        row('sliders-horizontal', 'Search options', 'searchSettings'),
+        row('keyboard', 'Keyboard shortcuts', 'shortcuts'),
+        row('circle-help', 'Help & docs', 'help'),
+      ];
+    },
+    'vp-more': () => [
+      row('search', 'Search commands…', 'palette'),
+      { icon: 'list', label: 'All commands', fn: () => { const b = document.getElementById('vp-more'); if (b) { _openCommandsMenu(b); b.classList.add('active'); } } },
+      '---',
+      row('monitor-cog', 'Viewport settings', 'viewportSettings'),
+      row('settings', 'Settings', 'settings'),
+      row('keyboard', 'Keyboard shortcuts', 'shortcuts'),
+      row('circle-help', 'Help & docs', 'help'),
+      row('terminal', 'Log console', 'console'),
+    ],
+  };
+  for (const [id, build] of Object.entries(MENUS)) {
+    const b = document.getElementById(id); if (!b) continue;
+    b.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try {
+        const m = $('ctx-menu'); if (!m) return;
+        _ctxBuild(build(), 0, 0);
+        m.classList.remove('is-commands');
+        const r = b.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+        m.style.maxHeight = Math.max(160, r.top - 66) + 'px';
+        m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+        m.style.top = Math.max(8, r.top - Math.min(h, r.top - 66) - 10) + 'px';
+      } catch (err) { console.warn('[toolbar menu]', id, err); }
+    });
+  }
+})();
 // Capture phase: tree-row click handlers (and others in the sidebar) call
 // stopPropagation() so the menu never closed when the user clicked a row
 // while it was open. Capture fires top-down BEFORE descendants can stop the
@@ -45622,7 +45864,7 @@ const _Anim = installAnim({
   state, _MotionPerf, _UndoOps,
   get camera() { return camera; }, get renderer() { return renderer; }, get controls() { return controls; },
   get _Elements() { return _Elements; }, get _DraggablePopup() { return _DraggablePopup; },
-  _finalizeUndo: (...a) => _finalizeUndo(...a), _libShow: (...a) => _libShow(...a), _lucide: (...a) => _lucide(...a), _openTurntableDialog: (...a) => _openTurntableDialog(...a), _partWorldBoxOwn: (...a) => _partWorldBoxOwn(...a), _promoteInstanceToMesh: (...a) => _promoteInstanceToMesh(...a), _treeGroupDescendants: (...a) => _treeGroupDescendants(...a), applyExplode: (...a) => applyExplode(...a), applySelectionColors: (...a) => applySelectionColors(...a), getPart: (...a) => getPart(...a), onResize: (...a) => onResize(...a), pushUndo: (...a) => pushUndo(...a), rebuildTreeSelectionOnly: (...a) => rebuildTreeSelectionOnly(...a), refreshPropertiesPanel: (...a) => refreshPropertiesPanel(...a), requestRender: (...a) => requestRender(...a), revealSelectedInTree: (...a) => revealSelectedInTree(...a), selectPart: (...a) => selectPart(...a), toast: (...a) => toast(...a), updateGizmo: (...a) => updateGizmo(...a),
+  _finalizeUndo: (...a) => _finalizeUndo(...a), _libShow: (...a) => _libShow(...a), _lucide: (...a) => _lucide(...a), _ctxBuild: (...a) => _ctxBuild(...a), _openTurntableDialog: (...a) => _openTurntableDialog(...a), _partWorldBoxOwn: (...a) => _partWorldBoxOwn(...a), _promoteInstanceToMesh: (...a) => _promoteInstanceToMesh(...a), _treeGroupDescendants: (...a) => _treeGroupDescendants(...a), applyExplode: (...a) => applyExplode(...a), applySelectionColors: (...a) => applySelectionColors(...a), getPart: (...a) => getPart(...a), onResize: (...a) => onResize(...a), pushUndo: (...a) => pushUndo(...a), rebuildTreeSelectionOnly: (...a) => rebuildTreeSelectionOnly(...a), refreshPropertiesPanel: (...a) => refreshPropertiesPanel(...a), requestRender: (...a) => requestRender(...a), revealSelectedInTree: (...a) => revealSelectedInTree(...a), selectPart: (...a) => selectPart(...a), toast: (...a) => toast(...a), updateGizmo: (...a) => updateGizmo(...a),
 });
 
 // Section view: one plane through the whole scene (section-plane.js). The frame loop draws through it while it is on.
@@ -46964,7 +47206,7 @@ function _focusImportedParts(before) {
 
 // Scroll the tree to the first selected part and pulse-highlight it.
 function revealSelectedInTree() {
-  if (_nothingSelected()) return;
+  if (_nothingSelected() || state._animMode) return;      // (not while the Animate window is open: the list on the left stays as it is)
   const firstId = state.selected.values().next().value;
   // Its row, if it is one that shows: not filtered out by a search, not inside a collapsed group.
   const find = () => { const r = _treeRowOf('part', firstId); return r && !r.classList.contains('is-hidden') && !r.classList.contains('is-gone') ? r : null; };
@@ -52423,6 +52665,7 @@ refreshPropertiesPanel = function() {
 // =================================================================
 function _scrollTreeToPart(partId) {
   if (partId == null || Number.isNaN(partId)) return;
+  if (state._animMode) return;      // (the list on the left stays as it is while the Animate window is open)
   const treeEl = document.getElementById('tree');
   if (!treeEl) return;
   let node = _treeRowOf('part', partId);
@@ -58851,7 +59094,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const $id = (id) => document.getElementById(id);
     const sec = (n) => document.querySelector(`.section-cmd[data-cmd="${n}"]`);
     let _mr = null;
-    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=8'));
+    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=9'));
     const parseNum = (el, d) => { const v = parseFloat(String(el && el.value).replace(',', '.')); return isFinite(v) ? v : d; };
 
     // A row of choices (.cmd-seg) that sets one field of `o`.
@@ -62447,7 +62690,7 @@ const _Elements = (() => {
       // (always the Model icon: while Edit mesh is on, the three buttons under it show which piece mode it is)
       const ico = b.querySelector('.em-ico'); if (ico && ico.dataset.m !== 'model') { ico.innerHTML = ICON.model; ico.dataset.m = 'model'; }
       b.classList.toggle('active', false);
-      b.title = m === 'model' ? 'Model mode: a click picks a whole part. Click for ' + NAME[mode] + ', hold for all four modes' : 'Back to Model mode: a click picks a whole part (4)';
+      b.title = b.classList.contains('is-prim') ? 'Bake geo first: a library shape is edited with its settings. Press Bake geo under them to turn it into a mesh you can edit.' : m === 'model' ? 'Model mode: a click picks a whole part. Click for ' + NAME[mode] + ', hold for all four modes' : 'Back to Model mode: a click picks a whole part (4)';
       b.setAttribute('aria-label', 'Model mode');
     }
   }
@@ -62508,9 +62751,9 @@ const _Elements = (() => {
     if (state._animMode) return;      // (no Edit mesh while the Animate window is open)
     if (_Photo.on) { try { toast('Edit mesh', 'Leave Photo mode first.', 'info', 1800); } catch (_) {} return; }      // (nor in Photo mode: it is for looking, and its marks would be in the picture)
     if (!active && !(state.selected && state.selected.size)) { try { toast('Edit mesh', 'Select a part first.', 'info', 1800); } catch (_) {} return; }      // (nothing to edit: the button is grey and the keys 1 2 3 do nothing either)
+    // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first), so Edit mesh does not open on it
+    { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length && !active) { try { toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {} return; } }
     const was = mode; mode = m; save();
-    // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first)
-    try { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length) toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {}
     if (!active) { _CmdCards.open('elements'); return; }
     if (was !== m) { hover = null; for (const [, e] of live()) e.dirty = true; }
     changed();

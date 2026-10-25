@@ -147,6 +147,25 @@ console.log('everything at once');
   expect('missing + flipped + doubled + empty', run(m), { openEdges: 3, holes: 1, duplicate: 1, degenerate: 1, closedPieces: 0 }, ['openEdges', 'holes', 'duplicate', 'degenerate', 'closedPieces']);
 }
 
+console.log('detail: where the faults are');
+{
+  const eq = (name, got, want) => expect(name, { v: JSON.stringify(got) }, { v: JSON.stringify(want) });
+  const plain = run(cube(), { detail: true });
+  eq('no faults, nothing listed', Object.values(plain.detail).map(a => a.length), Object.values(plain.detail).map(() => 0));
+  const hole = run(cube({ dropFaces: [0] }), { detail: true });
+  expect('a cube with its bottom off: 4 open edges, 6 numbers each', { n: hole.detail.openEdges.length, c: hole.openEdges }, { n: 24, c: 4 });
+  const flip = run(cube({ flipTris: [4] }), { detail: true });
+  expect('one turned triangle: its edges and the two triangles round each', { e: flip.detail.inconsistentEdges.length / 6, t: flip.detail.inconsistentTris.length > 0 }, { e: flip.inconsistent, t: true });
+  const inside = run(cube({ inward: true }), { detail: true });
+  expect('an inside-out cube lists all twelve triangles', { n: inside.detail.insideOutTris.length, io: inside.insideOut }, { n: 12, io: 1 });
+  const m = cube(); m.idx.push(0, 0, 1);       // a triangle with two corners in one place
+  const deg = run(m, { detail: true });
+  eq('a triangle with no area is listed by its number', deg.detail.degenerate, [12]);
+  const d = cube(); d.idx.push(d.idx[0], d.idx[1], d.idx[2]);
+  eq('the same triangle twice is listed by its number', run(d, { detail: true }).detail.duplicate, [12]);
+  eq('without detail nothing is listed', run(cube({ dropFaces: [0] })).detail, undefined);
+}
+
 console.log('speed');
 {
   const s = sphere(500, 1000), t0 = performance.now(), r = run(s), ms = performance.now() - t0;

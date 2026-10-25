@@ -68,7 +68,7 @@ try {
   check('the time moves while it plays', t1 !== t2, { t1, t2 });
   await click('ac-play'); await sleep(300);
   check('a click pauses it: the button offers Play', await q("document.getElementById('ac-play').title") === 'Play');
-  check('paused: the pill at the top is gone', await q("document.getElementById('vp-animate-pill').hidden"));
+  check('paused: the pill at the top stays and says Paused', await q("(() => { const t = document.getElementById('vp-animate-pill'); return !t.hidden && /Paused/.test(t.textContent); })()"));
   const p1 = await txt('ac-elapsed'); await sleep(600);
   check('paused: the time stays', (await txt('ac-elapsed')) === p1);
   // a press on the miniature puts the playhead there (40% of 5 s = 2 s). Since v0.35.3 the card no longer opens itself (it starts folded like

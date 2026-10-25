@@ -104,7 +104,7 @@ const edit = async () => {
   // settings, the way the controls do it
   const setCtl = (id, v) => evalJS(`(() => { const el = document.getElementById(${JSON.stringify(id)}); if (!el) return false; if (el.type === 'checkbox') { el.checked = ${JSON.stringify(v)}; } else el.value = ${JSON.stringify(v)}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
   const done = {};
-  for (const [id, v] of [['scene-scale', '2'], ['scene-up-axis', 'y'], ['display-units', 'cm'], ['grid-cell', '25'], ['light-exposure', '1.6'], ['light-sun', '1.3'], ['light-ambient', '0.7'], ['light-azi', '120'], ['light-ele', '30'], ['toggle-shadows', true], ['toggle-fps', true], ['bg-mode', 'light']]) done[id] = await setCtl(id, v);
+  for (const [id, v] of [['scene-scale', '2'], ['scene-up-axis', 'y'], ['display-units', 'cm'], ['grid-cell', '25'], ['light-exposure', '1.6'], ['light-sun', '1.3'], ['light-ambient', '0.7'], ['light-azi', '120'], ['light-ele', '30'], ['toggle-fps', true], ['bg-mode', 'light']]) done[id] = await setCtl(id, v);
   console.log('   controls set', JSON.stringify(done));
   await evalJS(`(() => { const st = window.state; const ps = st.parts.filter(p => !p.deleted && p.mesh);
     ps[0].name = 'RENAMED_PART'; ps[1].locked = true; ps[2].flagged = true; ps[3].visible = false; if (ps[3].mesh) ps[3].mesh.visible = false; ps[4].shadeAngle = 12;

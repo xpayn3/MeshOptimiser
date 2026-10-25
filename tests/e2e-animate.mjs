@@ -71,7 +71,7 @@ try {
   const p1 = await mw(id1); await sleep(500); const p2 = await mw(id1);
   check('paused: the part stays where it is', p1 === p2);
   // (paused, the pill goes away since v0.34.0: it is played again from the card in the right sidebar or the timeline)
-  check('paused: the pill goes away', await evalJS("document.getElementById('vp-animate-pill').hidden === true"));
+  check('paused: the pill stays and says Paused', await evalJS("(() => { const p = document.getElementById('vp-animate-pill'); return !p.hidden && /Paused/.test(p.textContent); })()"));
   await evalJS("document.querySelector('#vp-animate-pill [data-a=\"toggle\"]').click()"); await sleep(200);
   check('the button on the pill plays it again', /Playing/.test(await evalJS("document.getElementById('vp-animate-pill').textContent")));
   await evalJS("document.querySelector('#vp-animate-pill [data-a=\"exit\"]').click()"); await sleep(200);
@@ -88,7 +88,8 @@ try {
   await sleep(600);
   check('the Animate window opens', await evalJS("document.getElementById('_anim-dialog')?.classList.contains('show') === true"));
   check('one pill says Animate mode, in the row of the other status pills', await evalJS("(() => { const t = document.getElementById('vp-animate-pill'); return !t.hidden && /Animate mode/.test(t.textContent) && t.parentElement.id === 'vp-mode-pills' && !document.getElementById('anim-mode') && !document.getElementById('anim-tag'); })()"));
-  check('no gizmo while the Animate window is open', await evalJS("!window.state.gizmo.object && !(window.state.gizmoHelper && window.state.gizmoHelper.visible)"));
+  await call('select_parts', { ids: [id1], mode: 'replace' }); await sleep(700);
+  check('the gizmo stays on a selected part while the Animate window is open', await evalJS("!!window.state.gizmo.object"));
   const listTxt = await evalJS("document.getElementById('anim-list')?.textContent || ''");
   check('the window lists the animated part with its properties', /120 rpm/.test(listTxt) && /Spin/.test(listTxt), listTxt);
   const playLab = await evalJS("document.getElementById('anim-pb-play')?.getAttribute('aria-label') || ''");
@@ -151,7 +152,7 @@ try {
   check('nothing is animated after clear', (await call('animate_parts', { action: 'list' })).s === 'Nothing is animated.');
   // — a path (a wave goes there and back) and a spin held to a quarter turn with ping-pong —
   const restP = await mw(id1);
-  r = await call('animate_parts', { action: 'add', ids: [id1], type: 'path', shape: 'wave', plane: 'XZ', size_percent: 80, seconds: 1 });
+  r = await call('animate_parts', { action: 'add', ids: [id1], type: 'path', shape: 'wave', plane: 'XZ', size_mm: 80, seconds: 1 });
   check('animate_parts add path', r.ok && r.j && r.j.settings.shape === 'wave', r);
   check('adding an animation does not start it playing', (await evalJS("window.__moAnimStats().playing")) === false);      // (it never plays by itself: Play is the user's)
   check('the path moves the part', await changed(id1, restP));
@@ -164,13 +165,13 @@ try {
   check('clear: back at the start', (await mw(id1)) === restP);
   // — noise with its own settings: a kind, amplitude, axes, detail, a seed —
   const restN = await mw(id1);
-  r = await call('animate_parts', { action: 'add', ids: [id1], type: 'noise', noise_type: 'random', shift_percent: 12, turn_degrees: 20, shift_axes: 'x', turn_axes: 'z', detail: 3, roughness_percent: 40, seed: 7, speed: 2 });
+  r = await call('animate_parts', { action: 'add', ids: [id1], type: 'noise', noise_type: 'random', shift_mm: 12, turn_degrees: 20, shift_axes: 'x', turn_axes: 'z', detail: 3, roughness_percent: 40, seed: 7, speed: 2 });
   check('animate_parts add noise with its settings', r.ok && r.j && r.j.settings.type === 'random' && r.j.settings.sx === 'x' && r.j.settings.rx === 'z' && r.j.settings.detail === 3 && r.j.settings.seed === 7, r);
   check('the noise moves the part', await changed(id1, restN));
   r = await call('animate_parts', { action: 'list' });
   check('the list shows the noise settings', r.ok && /random/.test(r.s) && /detail 3/.test(r.s) && /seed 7/.test(r.s), r.s);
   await call('select_parts', { ids: [id1] }); await sleep(700);
-  check('the card of the window lists the layers with their basic values only', await evalJS("(() => { const l = [...document.querySelectorAll('#_anim-dialog .anim-lay')]; return l.length >= 1 && l.some(x => /Noise/.test(x.textContent) && /\\d%/.test(x.textContent) && /\\d×/.test(x.textContent) && !/seed/.test(x.textContent)); })()"));
+  check('the card of the window lists the layers with their basic values only', await evalJS("(() => { const l = [...document.querySelectorAll('#_anim-dialog .anim-lay')]; return l.length >= 1 && l.some(x => /Noise/.test(x.textContent) && /\\d mm/.test(x.textContent) && /\\d×/.test(x.textContent) && !/seed/.test(x.textContent)); })()"));
   await call('animate_parts', { action: 'clear' }); await sleep(200);
   check('clear: back at the start', (await mw(id1)) === restN);
   // — an instanced part (no mesh of its own until it is promoted) can be animated too —
@@ -202,12 +203,18 @@ try {
   const st = await evalJS("window.__moAnimStats()");
   console.log('frame cost with every group animated:', JSON.stringify(st));
   check('a frame of many animated parts costs little', st.parts_moved_per_frame > 20 && st.ms_per_frame < 25, st);
+  check('the clock has run', st.time > 0, st);
+  await evalJS("document.querySelector('#vp-animate-pill [data-a=toggle]').click()"); await sleep(250);
+  check('pausing keeps the pill, and it says Paused', await evalJS("(() => { const p = document.getElementById('vp-animate-pill'); return !p.hidden && /Paused/.test(p.textContent); })()"));
+  await evalJS("document.querySelector('#vp-animate-pill [data-a=exit]').click()"); await sleep(300);
+  const st0 = await evalJS("window.__moAnimStats()");
+  check('leaving Animate mode pauses and jumps back to the first frame', st0.playing === false && st0.time === 0, st0);
   await call('animate_parts', { action: 'clear' }); await sleep(300);
   // — bad calls are refused —
   check('animate_parts with nothing to animate is refused', !(await call('animate_parts', { action: 'add', ids: [999999] })).ok);
   check('animate_parts with a bad action is refused', !(await call('animate_parts', { action: 'dance', ids: [id1] })).ok);
   // — the video plays the animations —
-  r = await call('animate_parts', { action: 'add', ids: [id1], type: 'noise', shift_percent: 20 });
+  r = await call('animate_parts', { action: 'add', ids: [id1], type: 'noise', shift_mm: 20 });
   r = await call('turntable_video', { seconds: 2, width: 320, height: 180, fps: 24 });
   check('turntable_video with an animation', r.ok && r.j && r.j.file, r);
   await sleep(300);

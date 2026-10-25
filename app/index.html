@@ -296,6 +296,8 @@
   --z-popover:1500;
   /* Search results: the colour of an icon by the kind of result (Settings › Search › Coloured icons) */
   --cat-file:#4db5ff; --cat-view:#35c9c0; --cat-selection:#a78bfa; --cat-edit:#fbbf24; --cat-app:#9aa3b2;
+  /* the faults of a mesh, as the Model inspector draws them on the model (geo-overlay.js) */
+  --geo-open:var(--wn); --geo-nonman:var(--er); --geo-flip:var(--cat-answer); --geo-inside:var(--cat-library); --geo-degen:var(--cat-view); --geo-dup:var(--cat-tool); --geo-pinch:var(--cat-selection); --geo-sliver:var(--cat-controls);
   --cat-part:#10b981; --cat-library:#fb923c; --cat-settings:#8b9bff; --cat-answer:#f472b6; --cat-controls:#7dd3fc; --cat-tool:#e879f9;
   --anim-spin:#5aa2ff; --anim-swing:#b49aff; --anim-noise:#44d4a0; --anim-path:#f08cc0; --anim-oscillate:#f5b95a;      /* (the colour of each kind of animation: its card, its clip on the timeline) */
   --z-tooltip:10000;
@@ -464,6 +466,93 @@ body.uv-split #resize-r{grid-column:4}
 .off-row:hover .off-tri{color:var(--tx2)}
 .off-row.selected .off-tri{color:var(--ac-text)}
 .off-empty{display:none}
+/* Model inspector (the window of Inspect model): what the model is, then what is wrong with it. Cards on the window, rows divided by hairlines,
+   a quiet colour for each check (dot, number), the parts of a check indented under its name. Tokens only: Settings › Appearance moves all of it. */
+#_model-inspector .dlg-body{padding:0}
+.mi2{--mi-x:var(--space-2xl);padding:var(--space-3xl) var(--mi-x) var(--space-4xl);display:flex;flex-direction:column;gap:var(--space-md);font-size:var(--fs-sm);color:var(--tx)}
+.mi2-file{display:flex;align-items:center;gap:var(--space-xl);padding-bottom:var(--space-xl)}
+.mi2-file>i,.mi2-file>svg{box-sizing:content-box;flex:0 0 var(--icon-lg);width:var(--icon-lg);height:var(--icon-lg);padding:var(--space-lg);border-radius:var(--r-xl);background:var(--s2);color:var(--tx2)}
+.mi2-file>div{min-width:0;flex:1}
+.mi2-fn{font-size:var(--fs-xl);font-weight:var(--fw-medium,500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi2-fs{color:var(--tx3);font-size:var(--fs-xs);margin-top:var(--space-2xs);font-variant-numeric:tabular-nums}
+.mi2-sec{display:flex;align-items:center;gap:var(--space-lg);margin:var(--space-2xl) 0 var(--space-xs);font-size:var(--fs-10);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--tx3)}
+.mi2-sec::after{content:"";flex:1;height:1px;background:var(--hairline)}
+.mi2-sub{text-transform:none;letter-spacing:0;font-size:var(--fs-xs);color:var(--tx3);white-space:nowrap}
+.mi2-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-md)}
+.mi2-stat{display:flex;flex-direction:column;gap:var(--space-2xs);padding:var(--space-lg) var(--space-xl);border-radius:var(--r-lg);background:var(--s1);box-shadow:inset 0 0 0 1px var(--hairline);min-width:0}
+.mi2-stat span{font-size:var(--fs-xs);color:var(--tx3)}
+.mi2-stat b{font-weight:var(--fw-regular);font-size:var(--fs-2xl);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi2-stat em{font-style:normal;font-size:var(--fs-xs);color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:var(--space-3xl)}
+.mi2-none{color:var(--tx3);padding:var(--space-md) var(--space-lg)}
+.mi2-rows{display:flex;flex-direction:column;border-radius:var(--r-lg);background:var(--s1);box-shadow:inset 0 0 0 1px var(--hairline);overflow:hidden}
+.mi2-row{--tone:var(--tx3);display:grid;grid-template-columns:var(--icon-md) var(--space-md) minmax(0,1fr) auto auto;align-items:center;column-gap:var(--space-lg);padding:var(--space-lg) var(--space-xl) var(--space-lg) var(--space-md);transition:var(--tr-bg)}
+.mi2-rows>.mi2-row+.mi2-row,.mi2-rows>.mi2-plist+.mi2-row{box-shadow:inset 0 1px 0 var(--hairline)}
+.mi2-row.can-open{cursor:pointer}
+.mi2-row.can-open:hover{background:var(--hairline)}
+.mi2-row.can-open:hover .mi2-x{color:var(--tx)}
+.mi2-row.t-ok{--tone:var(--ok)}
+.mi2-row.t-warn{--tone:var(--wn)}
+.mi2-row.t-bad{--tone:var(--er)}
+.mi2-row.t-info{--tone:var(--ac-text)}
+.mi2-dot{width:var(--space-md);height:var(--space-md);border-radius:var(--r-pill);background:var(--tone);box-shadow:0 0 0 var(--space-xs) color-mix(in srgb,var(--tone) 18%,transparent)}
+.mi2-x{width:var(--icon-md);height:var(--icon-md);padding:0;border:0;border-radius:var(--r-xs);background:transparent;color:var(--tx3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:var(--tr-bg-fg)}
+button.mi2-x:hover{background:var(--s3);color:var(--tx)}
+.mi2-x svg{width:var(--icon-xs);height:var(--icon-xs);transition:transform var(--dur-fast) var(--ease-out)}
+.mi2-row.open .mi2-x svg{transform:rotate(90deg)}
+.mi2-l{color:var(--tx);font-size:var(--fs-md)}
+.mi2-n{color:var(--tx3);font-size:var(--fs-xs);line-height:var(--lh-note);margin-top:var(--space-2xs)}
+.mi2-c{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:var(--space-5xl)}
+.mi2-c b{font-weight:var(--fw-regular);font-size:var(--fs-xl);color:var(--tone)}
+.mi2-row.t-ok .mi2-c b{color:var(--tx3)}
+.mi2-c em{font-style:normal;color:var(--tx3);font-size:var(--fs-10)}
+.mi2-parts{display:block;color:var(--tx3);font-size:var(--fs-10)}
+.mi2-b{display:flex;gap:var(--space-sm);justify-content:flex-end;min-width:0}
+.mi2-plist{display:flex;flex-direction:column;gap:var(--space-2xs);margin:0;padding:var(--space-sm) var(--space-md) var(--space-md) calc(var(--space-md) + var(--icon-md) + var(--space-lg) + var(--space-md) + var(--space-lg));max-height:280px;overflow-y:auto;overscroll-behavior:contain;background:var(--blk-20)}
+.mi2-pi{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-xl);min-height:var(--btn-h-sm);padding:0 var(--space-lg);border:0;border-radius:var(--r-md);background:transparent;color:var(--tx2);font:inherit;font-size:var(--fs-sm);font-weight:var(--fw-regular);cursor:pointer;text-align:left;transition:var(--tr-bg-fg)}
+.mi2-pi:hover{background:var(--hairline);color:var(--tx)}
+.mi2-pi.on,.mi2-pi.on:hover{background:var(--ac-tint-15);box-shadow:inset 0 0 0 1px var(--ac-line);color:var(--tx)}
+.mi2-pi.off .mi2-pn{opacity:var(--op-55)}
+.mi2-pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi2-pv{color:var(--tx3);font-size:var(--fs-xs);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mi2-pi.on .mi2-pv{color:var(--ac-text)}
+.mi2 button[data-mi2]:not(.mi2-pi):not(.mi2-x):not(.mi2-chip){height:var(--btn-h-sm);padding:0 var(--space-xl);border:0;border-radius:var(--btn-r-sm);background:var(--s3);color:var(--tx-control);font:inherit;font-size:var(--fs-sm);cursor:pointer;white-space:nowrap;transition:var(--tr-bg-fg)}
+.mi2 button[data-mi2]:not(.mi2-pi):not(.mi2-x):not(.mi2-chip):hover{background:var(--s5);color:var(--tx-control-hover)}
+.mi2 button[data-mi2="fix"]{background:var(--ac-soft);color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-line)}
+.mi2 button[data-mi2="fix"]:hover{background:var(--ac-tint-15);color:var(--ac-text)}
+.mi2-ref{flex:0 0 auto}
+.mi2-scanrow{display:flex;align-items:center;justify-content:space-between;gap:var(--space-xl);padding:var(--space-md) var(--space-xs);color:var(--tx3);font-size:var(--fs-xs);line-height:var(--lh-note)}
+.mi2 .mi2-go{background:var(--btn-primary-bg)!important;color:var(--btn-primary-fg)!important;box-shadow:none!important}
+.mi2 .mi2-go:hover{background:var(--btn-primary-bg-hover)!important}
+.mi2-show{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-sm)}
+.mi2-chip{--c:var(--tx3);display:flex;align-items:center;gap:var(--space-lg);min-height:var(--btn-h-md);padding:0 var(--space-xl);border:0;border-radius:var(--r-lg);background:var(--s1);box-shadow:inset 0 0 0 1px var(--hairline);color:var(--tx2);font:inherit;font-size:var(--fs-sm);text-align:left;cursor:pointer;transition:var(--tr-bg-fg)}
+.mi2-chip:hover{background:var(--s3);color:var(--tx)}
+.mi2-chip.on{background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 45%,transparent);color:var(--tx)}
+.mi2-chip.none{opacity:var(--op-45);cursor:default}
+.mi2-sw{flex:0 0 auto;width:var(--space-md);height:var(--space-md);border-radius:var(--r-pill);background:var(--c);box-shadow:0 0 0 var(--space-xs) color-mix(in srgb,var(--c) 18%,transparent)}
+.mi2-cl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi2-cn{flex:0 0 auto;color:var(--tx3);font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+.mi2-chip.on .mi2-cn{color:var(--tx2)}
+.mi2-prog{height:var(--space-xs);border-radius:var(--r-pill);background:var(--s3);overflow:hidden;margin:var(--space-sm) 0 0}
+.mi2-prog i{display:block;height:100%;border-radius:var(--r-pill);background:var(--ac);transition:width var(--dur-fast) linear}
+/* History card: the steps Ctrl+Z goes back to, newest first (history-card.js). Done steps are plain, the one the model is at is lit,
+   steps that were undone are dimmed above it. */
+#history-section .section-b{display:flex;flex-direction:column;gap:var(--space-md)}
+.hist-status{font-size:var(--fs-sm);color:var(--tx3);font-variant-numeric:tabular-nums}
+.hist-list{display:flex;flex-direction:column;gap:var(--space-2xs);max-height:334px;overflow-y:auto;overscroll-behavior:contain;margin:0 -6px;padding:0 var(--space-sm) 0 0}
+.hist-list:empty{display:none}
+.hist-list.is-busy{pointer-events:none;opacity:var(--op-6)}
+.hist-row{flex:0 0 auto;display:grid;grid-template-columns:var(--icon-md) minmax(0,1fr) auto auto auto;column-gap:var(--space-lg);align-items:center;height:32px;padding:0 var(--space-lg) 0 var(--space-sm);border:0;border-radius:var(--r-md);background:none;color:var(--tx2);font:inherit;font-size:var(--fs-md);text-align:left;cursor:pointer;transition:var(--tr-bg)}
+.hist-row:hover{background:var(--hairline);color:var(--tx)}
+.hist-row i,.hist-row svg{width:var(--icon-md);height:var(--icon-md);color:var(--icon-fg)}
+.hist-row.is-now,.hist-row.is-now:hover{background:var(--ac-tint-15);box-shadow:inset 0 0 0 1px var(--ac-line);color:var(--tx)}
+.hist-row.is-now i,.hist-row.is-now svg{color:var(--ac-text)}
+.hist-row.is-undone{color:var(--tx3)}
+.hist-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-meta,.hist-time{color:var(--tx3);font-size:var(--fs-xs);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hist-row.is-now .hist-time{color:var(--ac-text)}
+.hist-meta:empty{display:none}
+.hist-tag{padding:var(--space-2xs) var(--space-sm);border-radius:var(--r-pill);background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);font-size:var(--fs-10);white-space:nowrap}
+.hist-base{margin-top:var(--space-xs)}
 #offenders-body:has(.off-list:empty) .off-empty{display:block}
 
 /* Toolbar */
@@ -555,7 +644,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 #transform-panel .tform-head .tform-reset{font:inherit;font-weight:var(--fw-medium);text-transform:none;letter-spacing:0;color:var(--tx3);background:transparent;border:1px solid var(--s3);cursor:pointer;transition:background var(--dur-fast) ease,color var(--dur-fast) ease,border-color var(--dur-fast) ease}
 #transform-panel .tform-head .tform-reset:hover{color:var(--tx);background:var(--s2);border-color:var(--s5)}
 #transform-panel .tform-head .tform-actions{display:inline-flex;align-items:center;gap:var(--space-sm)}
-#transform-panel .tform-head #tform-scale-toggle.is-on,#transform-panel .tform-head #tform-scale-toggle.is-on:hover{color:var(--ac-text);background:var(--ac-soft);border-color:transparent}
+#transform-panel .tform-col-label[data-tform-col="scale"]{cursor:pointer}
 /* Transposed layout: rows = X/Y/Z, columns = Position/Rotation/Size.
    Same shape as Cinema 4D's transform inspector. The first column is a
    thin axis tag (X/Y/Z); the header row labels each transform channel. */
@@ -1376,15 +1465,13 @@ body.msr-mode #canvas{cursor:crosshair}
    right-sidebar materials list (.mat-row)
    so users get a consistent row layout when they flip from grid to list. */
 #vp-materials-pop .mat-list-view{display:flex;flex-direction:column;gap:0}
+.mat-marquee{position:fixed;z-index:var(--z-toolbar);pointer-events:none;box-sizing:border-box;background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:var(--r-xs)}
 #vp-materials-pop .mat-row{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) var(--space-xs);cursor:pointer;font-size:var(--fs-12);border-radius:var(--r-sm);transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);user-select:none;border:1px solid transparent}
 #vp-materials-pop .mat-row:hover{background:var(--s2)}
 #vp-materials-pop .mat-row .mat-row-thumb{width:26px;height:26px;border-radius:var(--r-sm);flex-shrink:0;box-shadow:0 1px 3px var(--blk-30);overflow:hidden;display:block;object-fit:cover}
 #vp-materials-pop .mat-row .mat-row-info{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #vp-materials-pop .mat-row .mat-row-name{color:var(--tx);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 #vp-materials-pop .mat-row .mat-row-meta{display:block;font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
-#vp-materials-pop .mat-row .mat-row-edit{background:transparent;border:1px solid var(--s3);color:var(--tx2);padding:var(--space-xs) var(--space-sm);border-radius:var(--r-sm);cursor:pointer;flex-shrink:0;transition:var(--tr-bg-bd-fg);display:inline-flex;align-items:center;justify-content:center}
-#vp-materials-pop .mat-row .mat-row-edit:hover{background:var(--s3);color:var(--tx);border-color:var(--s5)}
-#vp-materials-pop .mat-row .mat-row-edit i,#vp-materials-pop .mat-row .mat-row-edit svg{width:var(--icon-sm);height:var(--icon-sm)}
 #vp-materials-pop .mat-row.selected{background:var(--ac-soft);border-color:var(--ac);box-shadow:0 0 0 1px var(--ac)}
 #vp-materials-pop .mat-row.usedby-selection .mat-row-thumb{box-shadow:inset 0 0 0 1px var(--ac-tint-55),0 0 0 2px var(--ac-tint-20)}
 
@@ -1658,7 +1745,8 @@ body.msr-mode #canvas{cursor:crosshair}
 .brn-preview-table tr.error{background:color-mix(in srgb,var(--er) 6%,transparent)}
 .brn-preview-table tr.unchanged{opacity:var(--op-5)}
 .brn-preview-table tr.skipped{opacity:var(--op-35)}
-.brn-preview-table td{padding:var(--space-5) var(--space-xl);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+.brn-preview-table td{padding:var(--space-5) var(--space-xl);vertical-align:top;white-space:nowrap}
+.brn-preview-table td:not(.kind,.arrow){white-space:normal;overflow-wrap:anywhere;line-height:var(--lh-note)}
 .brn-preview-table td.kind{color:var(--tx3);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:var(--tracking-wide);width:60px;font-family:inherit}
 .brn-preview-table td.arrow{color:var(--tx3);width:24px;text-align:center}
 .brn-preview-table td.new{color:var(--ac-text)}
@@ -2123,6 +2211,8 @@ button.sc-row-keys:hover{background:var(--s5)}
 #export-modal.show .exp-win{transform:translateY(0) scale(1);opacity:1}
 .exp-sidebar{width:212px;flex:0 0 212px;background:var(--surface-inset);border-right:1px solid var(--surface-line);overflow-y:auto;padding:var(--space-3xl) var(--space-md) var(--space-xl)}
 .exp-side-h{padding:0 var(--space-lg) var(--space-xl);font-size:var(--fs-2xl);font-weight:var(--fw-semibold);color:var(--tx-control-hover)}
+/* the title of the Export window: in the serif of the other window titles, Light, as the Settings panes are */
+:is(.exp-side-h,#_a#_b#_c){font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:28px;line-height:1.1;letter-spacing:-.005em;color:var(--tx)}
 .exp-cat-label{font-size:var(--fs-11);font-weight:var(--fw-medium);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3);padding:var(--space-3xl) var(--space-lg) var(--space-5)}
 #format-grid>.exp-cat-label:first-child{padding-top:var(--space-2xs)}
 .fmt-card{all:unset;display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-sm) var(--space-lg);border-radius:var(--r-lg);cursor:pointer;width:100%;box-sizing:border-box;transition:var(--tr-bg)}
@@ -2555,6 +2645,12 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* What is selected reads bright; the groups above it are a clear step down. */
 .tree-node.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac) 40%, var(--white))}
 .tree-node.ancestor-selected .tree-typeicon{color:color-mix(in srgb, var(--ac) 70%, var(--white))}
+/* Animate mode: the list on the left keeps its plain look while clips are picked on the timeline (no blue rows, no lit names) */
+body.anim-mode .tree-node.selected,body.anim-mode .tree-node.is-group.selected{background:none;--row-tint:transparent}
+body.anim-mode .tree-node.selected:hover,body.anim-mode .tree-node.is-group.selected:hover{background:var(--s1);--row-tint:var(--wht-4)}
+body.anim-mode .tree-node.selected .tree-label,body.anim-mode .tree-node.ancestor-selected .tree-label{color:var(--tx2)}
+body.anim-mode .tree-node.is-group.selected .tree-label,body.anim-mode .tree-node.is-group.ancestor-selected .tree-label{color:var(--tree-group-fg)}
+body.anim-mode .tree-node.selected .tree-typeicon,body.anim-mode .tree-node.ancestor-selected .tree-typeicon{color:inherit}
 
 
 /* ── Viewport toolbars, Plasticity-style ─────────────────────────────────
@@ -3024,7 +3120,7 @@ body.photo-mode .photo-moved-note{display:block}
 .mat-size-pop .msp-sm{width:var(--icon-xs);height:var(--icon-xs)}
 .mat-size-pop .msp-lg{width:var(--icon-lg);height:var(--icon-lg)}
 #vp-materials-pop.mat-dock .mat-cell .mat-name{font-size:var(--fs-11)}
-#vp-materials-pop.mat-dock .mat-list-view{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 18px;align-content:start}
+#vp-materials-pop.mat-dock .mat-list-view{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,210px));gap:0 var(--space-md);justify-content:start;align-content:start}
 #vp-materials-pop.mat-dock .mat-empty{padding:26px var(--space-md);color:var(--tx3);text-align:center}
 
 /* inspector: what the picked material is, and where it is used */
@@ -3043,7 +3139,9 @@ body.photo-mode .photo-moved-note{display:block}
 .mat-inspector .mi-bar i{display:block;height:100%;background:var(--tx3);border-radius:var(--r-2xs)}
 .mat-inspector .mi-chip{display:inline-block;width:12px;height:12px;border-radius:var(--r-xs);vertical-align:-2px;margin-right:var(--space-sm);box-shadow:0 0 0 1px var(--s6)}
 .mat-inspector .mi-wide{grid-column:2 / 4;color:var(--tx2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mat-inspector .mi-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin:var(--space-2xs) 0 var(--space-xs)}
+.mat-inspector .mi-actions{display:flex;flex-wrap:wrap;gap:var(--space-sm);margin:var(--space-2xs) 0 var(--space-xs)}
+.mat-inspector .mi-actions .mi-ib{flex:1 1 0;min-width:0;padding:0}
+.mat-inspector .mi-actions .mi-ib .ti{width:var(--icon-md);height:var(--icon-md)}
 .mat-inspector .mi-actions .btn[data-mi=assign]:not(:disabled){background:var(--ac);border-color:transparent;color:var(--white)}
 .mat-inspector .mi-actions .btn{min-height:var(--btn-h-sm);height:var(--btn-h-sm);font-size:var(--fs-12);justify-content:center;padding:0 var(--space-md)}
 @media (max-width:1100px){.mat-inspector{display:none}}
@@ -3074,7 +3172,7 @@ body.photo-mode .photo-moved-note{display:block}
 #vp-materials-pop :is(#mat-act-merge,#mat-act-duplicate,#mat-act-delete){display:none}      /* (they stay as the engine: the inspector's Duplicate, Delete and Merge press them) */
 .mat-inspector .mi-actions .mi-danger{color:var(--er)}
 .mat-inspector .mi-actions .mi-danger:hover:not(:disabled){background:var(--er-tint-10);border-color:var(--er-line);color:var(--er)}
-.mat-inspector .mi-actions .mi-merge-btn{grid-column:1 / -1;background:var(--ac);border-color:transparent;color:var(--white)}
+.mat-inspector .mi-actions .mi-merge-btn{flex:1 1 100%;background:var(--ac);border-color:transparent;color:var(--white)}
 .mat-inspector .mi-merge{display:flex;flex-direction:column;gap:var(--space-md);margin:var(--space-lg) 0;padding:var(--space-lg) 0;border-top:1px solid var(--s2);border-bottom:1px solid var(--s2)}
 .mat-inspector .mi-merge-h{color:var(--tx3);font-size:var(--fs-11)}
 .mat-inspector .mi-merge-note{color:var(--tx3);font-size:var(--fs-11);line-height:1.45}
@@ -3115,10 +3213,10 @@ body.photo-mode .photo-moved-note{display:block}
      the pointer is on it. (The parts tree is the long one: a model can have
      tens of thousands of rows, and dragging the bar is how you cross them.) */
   :is(.prop-mat-strip,.lib-tabs,#cmdk-list,.wl-recents,.lib-inspector .li-params,.shade-row)::-webkit-scrollbar{display:none}
-:is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar{width:var(--sb-w-wide);height:var(--sb-w-wide)}
-  :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb{border-width:4px;border-radius:var(--r-sm);min-height:44px;min-width:44px;background:var(--sb-thumb-wide);background-clip:padding-box}
-  :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb:hover{border-width:3px;background:var(--sb-thumb-wide-hover);background-clip:padding-box}
-  :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb:active{border-width:3px;background:var(--sb-thumb-active);background-clip:padding-box}
+:is(#tree,#tree-hscroll,.off-list,.hist-list,.mi2-plist)::-webkit-scrollbar{width:var(--sb-w-wide);height:var(--sb-w-wide)}
+  :is(#tree,#tree-hscroll,.off-list,.hist-list,.mi2-plist)::-webkit-scrollbar-thumb{border-width:4px;border-radius:var(--r-sm);min-height:44px;min-width:44px;background:var(--sb-thumb-wide);background-clip:padding-box}
+  :is(#tree,#tree-hscroll,.off-list,.hist-list,.mi2-plist)::-webkit-scrollbar-thumb:hover{border-width:3px;background:var(--sb-thumb-wide-hover);background-clip:padding-box}
+  :is(#tree,#tree-hscroll,.off-list,.hist-list,.mi2-plist)::-webkit-scrollbar-thumb:active{border-width:3px;background:var(--sb-thumb-active);background-clip:padding-box}
   /* The left sidebar's bar is a thin line (2px) until the pointer is anywhere over the sidebar, then it opens up to the full bar. The
      strip stays 14px wide in both states, so nothing shifts: only how much of it the thumb fills changes. */
   :is(#tree,#tree-hscroll)::-webkit-scrollbar-thumb{border-width:6px}
@@ -3473,6 +3571,9 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58p
    active move / rotate / scale tool and for selection). */
 :is(.vpc:is(.tr,.tl) .vpb.active:not([id^="gz-"]),#_a#_b){background:var(--s6);color:var(--tx-control-hover)}
 :is(.vpc:is(.tr,.tl) .vpb.active:not([id^="gz-"]),#_a#_b):hover{background:var(--s6)}
+/* The command search, while its window is open: filled with the accent blue and a white icon, like the selection tool. */
+:is(.vpc .vpb#vp-cmdk.active,#_a#_b){background:var(--ac);color:var(--white);box-shadow:none}
+:is(.vpc .vpb#vp-cmdk.active,#_a#_b):hover{background:var(--ac)}
 /* Advanced options inside a command panel: an accordion, closed by default.
    A dot on its title means something in it is not at its default. */
 .cmd-adv{margin-top:var(--space-lg);border-top:1px solid var(--surface-line)}
@@ -3790,9 +3891,9 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 @media (prefers-reduced-motion:reduce){.set-card-h svg{transition:none}}
 .set-empty{padding:40px 0;text-align:center;color:var(--tx3);font-size:var(--fs-12)}
 /* one row style for everything in a section: label left, control right */
-.set-pane-b>.toggle,.set-pane-b>.field,.set-pane-b>div>.toggle,.set-pane-b>div>.field,.set-pane-b .pop-section>.toggle,.set-pane-b .pop-section>.field,.set-row{
+.set-card-bi>.toggle,.set-card-bi>.field,.set-card-bi>div>.toggle,.set-card-bi>div>.field,.set-card-bi .pop-section>.toggle,.set-card-bi .pop-section>.field,.set-pane-b>.toggle,.set-pane-b>.field,.set-pane-b>div>.toggle,.set-pane-b>div>.field,.set-pane-b .pop-section>.toggle,.set-pane-b .pop-section>.field,.set-row{
   display:flex;align-items:center;justify-content:space-between;gap:18px;min-height:38px;box-sizing:border-box;padding:var(--space-sm) 0;margin:0!important;border-top:1px solid var(--hairline);font-size:var(--fs-13);color:var(--tx-control)}
-.set-pane-b>:first-child,.set-pane-b>div:first-child>:first-child,.set-group-title+.toggle,.set-group-title+.field,.set-group-title+.set-row{border-top:0}
+.set-pane-b>:first-child,.set-pane-b>div:first-child>:first-child,.set-card-bi>:first-child,.set-card-bi>div:first-child>:first-child,.set-group-title+.toggle,.set-group-title+.field,.set-group-title+.set-row{border-top:0}
 .set-pane-b .field>label{flex:1 1 auto;min-width:0;margin:0;font-size:var(--fs-13);font-weight:var(--fw-regular);color:var(--tx-control);justify-content:flex-start;gap:var(--space-md)}
 .set-pane-b .toggle>span:first-child,.set-row>span:first-child{flex:1 1 auto;min-width:0;font-weight:var(--fw-regular)}
 .set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text]){flex:0 0 230px;width:230px;box-sizing:border-box}
@@ -3850,11 +3951,49 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 :is(.set-pane-h,#_a#_b){margin-bottom:var(--space-md);font-size:var(--fs-xl);font-weight:var(--fw-semibold)}
 /* the title of a Settings pane (General, Appearance, ...) is in the serif of the other window titles, Light */
 :is(.set-pane-h,#_a#_b#_c){font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:28px;line-height:1.1;letter-spacing:-.005em;margin-bottom:var(--space-md)}
-.set-pane-b>.toggle,.set-pane-b>.field,.set-pane-b>div>.toggle,.set-pane-b>div>.field,.set-pane-b .pop-section>.toggle,.set-pane-b .pop-section>.field,.set-row{min-height:56px;padding:var(--space-xl) 0}
+.set-card-bi>.toggle,.set-card-bi>.field,.set-card-bi>div>.toggle,.set-card-bi>div>.field,.set-card-bi .pop-section>.toggle,.set-card-bi .pop-section>.field,.set-pane-b>.toggle,.set-pane-b>.field,.set-pane-b>div>.toggle,.set-pane-b>div>.field,.set-pane-b .pop-section>.toggle,.set-pane-b .pop-section>.field,.set-row{min-height:56px;padding:var(--space-xl) 0}
 .set-pane-b .toggle>span:first-child,.set-row>span:first-child,.set-pane-b .field>label{color:var(--tx-control-hover);font-weight:var(--fw-medium)}
 .set-help{margin-top:var(--space-xs);font-size:var(--fs-12)}
 .set-group-title{margin:28px 0 var(--space-md);font-size:var(--fs-13);font-weight:var(--fw-semibold);letter-spacing:0;text-transform:none;color:var(--tx-control-hover)}
 .set-jump{display:none}      /* (no chip bar of jump links above a section) */
+/* Settings cards, redrawn: a surface per group with a live summary in its header, a body that folds with a motion, switches shown as tiles
+   where there are many, and the cards of a pane coming in one after the other. Tokens only. */
+#settings-modal .set-card:not(.set-card-plain){margin:0 0 var(--space-xl);padding:0;border:0;border-radius:var(--r-xl);background:var(--s1);box-shadow:inset 0 0 0 1px var(--hairline);overflow:hidden}
+#settings-modal .set-card:not(.set-card-plain)+.set-card{border-top:0}
+#settings-modal .set-card-h{height:var(--btn-h-lg);padding:0 var(--space-xl);gap:var(--space-lg);border-radius:0;font-weight:var(--fw-medium);transition:var(--tr-bg)}
+#settings-modal .set-card-h:hover{background:var(--hairline)}
+#settings-modal .set-card:not(.is-fold) .set-card-h{box-shadow:inset 0 -1px 0 var(--hairline)}
+#settings-modal .set-card-h svg{flex:0 0 var(--icon-xs);width:var(--icon-xs);height:var(--icon-xs);transition:transform var(--dur-base) var(--ease-out)}
+.set-card-n{flex:0 0 auto;padding:var(--space-2xs) var(--space-md);border-radius:var(--r-pill);background:var(--s3);color:var(--tx2);font-size:var(--fs-11);font-variant-numeric:tabular-nums;transition:var(--tr-bg-fg)}
+.set-card-n:empty{display:none}
+.set-card-n.is-all{background:var(--ac-soft);color:var(--ac-text)}
+.set-card-n.is-none{color:var(--tx3)}
+.set-card-b{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--dur-base) var(--ease-out)}
+.set-card-bi{min-height:0;overflow:hidden;padding:0 var(--space-xl)}
+#settings-modal .set-card.is-fold>.set-card-b{display:grid;grid-template-rows:0fr}
+#settings-modal .set-main.searching .set-card.is-fold>.set-card-b{grid-template-rows:1fr}
+#settings-modal .set-main.searching .set-card:not(.set-card-plain){border-radius:0;background:none;box-shadow:none;overflow:visible}
+.set-card.is-fold .set-card-bi{visibility:hidden}
+.set-main.searching .set-card.is-fold .set-card-bi{visibility:visible}
+.set-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:var(--space-md);padding:var(--space-xl) 0 var(--space-lg)}
+#settings-modal .set-tiles>.toggle.set-row{min-height:0;margin:0;padding:var(--space-lg) var(--space-xl);border:0!important;border-radius:var(--r-lg);background:var(--s2);box-shadow:inset 0 0 0 1px var(--hairline);transition:var(--tr-bg),box-shadow var(--dur-fast) var(--ease-out)}
+#settings-modal .set-tiles>.toggle.set-row:hover{background:var(--s3)}
+#settings-modal .set-tiles>.toggle.set-row:has(input:checked){background:var(--ac-soft);box-shadow:inset 0 0 0 1px var(--ac-line)}
+#settings-modal .set-tiles>.toggle.set-row .set-help{display:none}
+#settings-modal .set-tiles>.toggle.set-row>span:first-child{font-size:var(--fs-sm)}
+.set-card-tools{display:flex;align-items:center;gap:var(--space-sm);padding:0 0 var(--space-xl)}
+.set-tile-desc{flex:1 1 auto;min-width:0;font-size:var(--fs-xs);color:var(--tx3);line-height:var(--lh-note);min-height:var(--space-4xl)}
+.set-mini{flex:0 0 auto;height:var(--btn-h-sm);padding:0 var(--space-xl);border:0;border-radius:var(--btn-r-sm);background:var(--s3);color:var(--tx-control);font:inherit;font-size:var(--fs-sm);cursor:pointer;transition:var(--tr-bg-fg)}
+.set-mini:hover{background:var(--s5);color:var(--tx-control-hover)}
+@media (prefers-reduced-motion:no-preference){
+  @keyframes set-card-in{from{opacity:0;transform:translateY(var(--space-md))}}
+  #settings-modal .set-pane.active .set-card{animation:set-card-in var(--dur-slow) var(--ease-out) both}
+  #settings-modal .set-pane.active .set-card:nth-child(2){animation-delay:40ms}
+  #settings-modal .set-pane.active .set-card:nth-child(3){animation-delay:80ms}
+  #settings-modal .set-pane.active .set-card:nth-child(4){animation-delay:120ms}
+  #settings-modal .set-pane.active .set-card:nth-child(n+5){animation-delay:160ms}
+}
+@media (prefers-reduced-motion:reduce){.set-card-b,.set-card-h svg{transition:none}}
 .mode-seg{flex:0 0 auto;display:inline-flex;gap:var(--space-2xs);padding:var(--space-2xs);border-radius:var(--r-pill);background:var(--s2)}
 .mode-seg button{all:unset;box-sizing:border-box;width:36px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-pill);color:var(--tx3);cursor:pointer;transition:var(--tr-bg-fg)}
 .mode-seg svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -4322,7 +4461,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .in-list{max-height:calc(var(--cmd-row-h) * 7);overflow-y:auto;margin:0 calc(var(--space-md) * -1) var(--space-lg)}
 .fa-row>.in-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fa-row>.in-name+small{flex:0 0 auto}
-.in-row{min-height:var(--cmd-row-h)}
+.in-row{min-height:var(--cmd-row-h);align-items:center}
 .in-acts{margin-bottom:var(--space-xl)}
 .fa-row.in-row>b{min-width:4ch;text-align:left;color:var(--tx3)}
 .fa-row.in-row>.in-name{color:var(--tx)}
@@ -4904,7 +5043,7 @@ html,body{user-select:none;-webkit-user-select:none}
 :is(.exp-num,#_brn-dialog .brn-f input[type=number],#_flat-dialog .flat-row input[type=number]){padding-top:calc(var(--num-drop) * 2)}
 .exp-name-box{padding:0}
 .exp-name-box input{font-size:var(--ctl-fs);padding:0 var(--ctl-px);height:100%}
-.exp-name-box .exp-name-ext{font-size:var(--fs-11)}
+.exp-name-box .exp-name-ext{font-size:var(--fs-11);background:none;border-left:0;padding:0 var(--ctl-px) 0 var(--space-md);color:var(--tx3)}      /* (the extension reads as the end of the field: no lighter block and no seam beside the name) */
 /* Appearance (Settings › Appearance; appearance.js sets the tokens) */
 html.no-motion *,html.no-motion *::before,html.no-motion *::after{animation-duration:.001ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.001ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
 #settings-modal .set-row.set-stack,.vp-cam-pop .set-row.set-stack{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--space-lg)}
@@ -5650,12 +5789,16 @@ body.anim-mode #vp-mode-bar,body.photo-mode #vp-mode-bar{display:none}      /* (
 /* ── Animate timeline: a drawer along the bottom of the viewport, like the materials dock ─────────────────────────────────────────
    Transport and time in its head, the animated objects as rows with a bar for each motion, a ruler with the playhead, and the settings
    of the motion on the right (the same ones the small Animate window has). Its pop-out button turns it into that small window. */
-:root{--adk-hw:210px;--adk-iw:340px}
+:root{--adk-hw:280px;--adk-iw:340px}
 #vp-animate-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--dock-h),80vh);
   display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:none;outline:none;
   z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
   font:12px/1.5 var(--font-sans);container:adkdock / inline-size}
 #vp-animate-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
+/* the Animate dock runs under the left sidebar too (the timeline wants the width); the sidebar ends where the dock begins */
+#vp-animate-pop:not(.is-float){left:0}
+#sidebar-left{transition:opacity var(--dur-slow) var(--ease-std) 60ms,transform 320ms var(--ease-std),margin-bottom var(--dur-200) var(--ease-out)}
+body.anim-dock-open:not(:has(#vp-animate-pop.is-float)) #sidebar-left{margin-bottom:calc(min(var(--dock-h),80vh) + 22px)}
 /* going from one open bottom dock to another: the one that goes fades out and the new one fades in, in place; no slide (body.dock-swap, set by app.js for the moment of the switch) */
 body.dock-swap :is(#vp-materials-pop.mat-dock,#vp-library-pop,#vp-animate-pop):not(.is-float){transform:none!important;opacity:0;transition:opacity 0s linear var(--dur-160),visibility 0s linear var(--dur-160)!important}      /* (the dock that goes stays solid until the new one is in: nothing shows through) */
 body.dock-swap :is(#vp-materials-pop.mat-dock,#vp-library-pop,#vp-animate-pop).show:not(.is-float){opacity:1;z-index:calc(var(--z-toolbar) + 1);transition:opacity var(--dur-160) ease,visibility 0s!important}      /* (and the new one fades in over it) */
@@ -5745,7 +5888,10 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58
 #vp-animate-pop .adk-zoom input[type=range]{width:90px}
 #vp-animate-pop .adk-zoom svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 #vp-animate-pop.is-off .adk-time,#vp-animate-pop.is-off .adk-len{opacity:var(--op-45)}
-.adk-body{flex:1 1 auto;min-height:0;display:flex}
+.adk-body{flex:1 1 auto;min-height:0;display:flex;position:relative}
+.adk-names-grip{position:absolute;top:0;bottom:0;left:calc(var(--adk-hw) - 3px);width:6px;cursor:col-resize;z-index:9;background:linear-gradient(90deg,transparent 2px,var(--ac) 2px 4px,transparent 4px);opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
+.adk-names-grip:hover,.adk-names-grip.dragging{opacity:1}
+#vp-animate-pop.no-left .adk-names-grip{display:none}
 .adk-scroll.alt-hand{cursor:grab}
 .adk-scroll.is-panning,.adk-scroll.is-panning *{cursor:grabbing!important;user-select:none}
 .adk-scroll{flex:1 1 auto;min-width:0;overflow:auto;position:relative;background:linear-gradient(90deg,var(--bg2) calc(var(--adk-hw) - 1px),var(--bd) calc(var(--adk-hw) - 1px) var(--adk-hw),var(--bg1) var(--adk-hw));scrollbar-width:auto;scrollbar-color:auto;overscroll-behavior:contain}
@@ -7786,6 +7932,8 @@ window.moSplash = function (msg, pct) {
           <button class="btn primary" type="button" data-axis-act="centre" data-pv-primary data-cmd-primary title="Move the pivot to the part's middle and reset its rotation"><i data-lucide="crosshair"></i>Centre pivot</button>
           <div class="pv-head"><span>Pivot to</span></div>
           <div class="ax-chips">
+            <button type="button" class="btn" data-axis-act="axis-bottom" title="The pivot goes to the middle of the part's lowest face: the foot it stands on"><i data-lucide="arrow-down-to-line"></i>Bottom</button>
+            <button type="button" class="btn" data-axis-act="axis-top" title="The pivot goes to the middle of the part's highest face"><i data-lucide="arrow-up-to-line"></i>Top</button>
             <button type="button" class="btn" data-axis-act="axis-origin" title="The pivot goes to 0, 0, 0"><i data-lucide="axis-3d"></i>Origin</button>
             <button type="button" class="btn" data-axis-act="axis-selection" title="The pivot of every selected part goes to the middle of the selection"><i data-lucide="box-select"></i>Selection</button>
             <button type="button" class="btn" data-axis-act="axis-active" title="Move the pivot to the last picked part's pivot"><i data-lucide="mouse-pointer-click"></i>Last picked</button>
@@ -7868,6 +8016,7 @@ window.moSplash = function (msg, pct) {
             <div class="toggle" title="Re-join and re-triangulate the flat face round each hole"><span id="fh-tidy-lbl">Leftover vertices</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="Remove closed pieces sealed inside the part"><span id="fh-enclosed-lbl">Inner pieces</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
             <div class="toggle" title="Flatten raised details lower than the limit into their face"><span id="fh-raised-lbl">Raised details</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Also find holes in curved surfaces: tubes, fillets, domes. The hole is closed with a patch that runs straight across it, so a wide hole in a tight curve ends up a little flat"><span id="fh-curved-lbl">Curved surfaces</span><label><input type="checkbox" id="fh-curved" aria-labelledby="fh-curved-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="Keep big openings, like a washer's bore"><span id="fh-shape-lbl">Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" aria-labelledby="fh-shape-lbl" checked><span class="switch"></span></label></div>
             <div class="cmd-num" title="Tallest raised detail that is flattened"><span>Height up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm</span></label></div>
             <div class="cmd-num" title="Holes narrower than this are left alone"><span>Smallest hole</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-min" value="0"><span>mm</span></label></div>
@@ -8299,7 +8448,6 @@ window.moSplash = function (msg, pct) {
       <div class="tform-head">
         <span class="tform-title"><i data-lucide="move-3d"></i>Transform</span>
         <span class="tform-actions">
-          <button class="tform-reset" id="tform-scale-toggle" type="button" aria-pressed="false" title="Show Scale (1 is as it came) instead of Size">Scale</button>
           <button class="tform-reset" id="tform-reset" title="Reset position, rotation and size">Reset</button>
         </span>
       </div>
@@ -8307,7 +8455,7 @@ window.moSplash = function (msg, pct) {
         <span></span>
         <span class="tform-col-label" data-tform-col="pos" title="Position, in scene units. Right-click for Copy / Paste XYZ">Position</span>
         <span class="tform-col-label" data-tform-col="rot" title="Rotation, in degrees. Right-click for Copy / Paste XYZ">Rotation</span>
-        <span class="tform-col-label" data-tform-col="scale" title="Size of the part along its own axes, in scene units. Right-click for Copy / Paste XYZ">Size</span>
+        <span class="tform-col-label" data-tform-col="scale" title="Size of the part along its own axes, in scene units. Click to show its Scale instead (1 is as it came). Right-click for Copy / Paste XYZ">Size</span>
         <span class="tform-row-label x">X</span>
         <span class="tform-num" data-for="tform-px"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other" id="tform-px" data-axis="px" step="0.1" placeholder="0"><span class="tform-unit">mm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
         <span class="tform-num" data-for="tform-rx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other" id="tform-rx" data-axis="rx" step="1" placeholder="0"><span class="tform-unit">°</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
@@ -8405,6 +8553,22 @@ window.moSplash = function (msg, pct) {
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="field" style="margin:0" title="How alike Select similar goes"><div id="sim-strict-scrub"></div></div>
         <div class="field-help" id="sim-strict-help" style="margin:0"></div>
+      </div>
+    </div>
+
+    <div class="side-group">Edit</div>
+
+    <div class="section" id="history-section">
+      <div class="section-h"><i class="sec-ico" data-lucide="history"></i><span>History</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="btn-row">
+          <button class="btn" id="history-undo" type="button" disabled title="Undo the last step (Ctrl+Z)"><i data-lucide="undo-2"></i>Undo</button>
+          <button class="btn" id="history-redo" type="button" disabled title="Redo the step you took back (Ctrl+Y)"><i data-lucide="redo-2"></i>Redo</button>
+        </div>
+        <div class="hist-status" id="history-status" role="status" aria-live="polite">Nothing done yet.</div>
+        <div class="hist-list" id="history-list" role="listbox" aria-label="Steps, newest first"></div>
+        <button class="btn" id="history-clear" type="button" disabled title="Forget the steps and free their memory"><i data-lucide="eraser"></i>Clear history</button>
+        <div class="field-help" id="history-foot" style="margin:0"></div>
       </div>
     </div>
 
@@ -8533,7 +8697,7 @@ window.moSplash = function (msg, pct) {
         </div>
         </div>
         <div class="toggle"><span id="toggle-snap-grid-lbl">Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid" aria-labelledby="toggle-snap-grid-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" style="margin-bottom:0" title="The sun casts shadows of the parts on each other"><span id="toggle-shadows-lbl">Shadows</span><label><input type="checkbox" id="toggle-shadows" aria-labelledby="toggle-shadows-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" style="margin-bottom:0" title="The sun casts shadows of the parts on each other"><span id="toggle-shadows-lbl">Shadows</span><label><input type="checkbox" id="toggle-shadows" aria-labelledby="toggle-shadows-lbl" autocomplete="off"><span class="switch"></span></label></div>
             <div class="field" style="margin-top:12px;margin-bottom:0"><select id="bg-mode" aria-label="Background" title="Background" class="mac-sel"><option value="dark">Dark background</option><option value="grad">Studio gradient background</option><option value="gray">Neutral grey background</option><option value="white">White background</option><option value="hdri">HDRI environment</option></select></div>
             <div id="hdri-controls" style="display:none;flex-direction:column;gap:var(--space-sm);margin-top:var(--space-md);padding:0">
               <div class="prop-material-row" id="hdri-strip-row"><div class="prop-mat-strip" id="hdri-strip" role="list" aria-label="Environments">
@@ -9055,6 +9219,17 @@ window.moSplash = function (msg, pct) {
 
         <div class="exp-group-title" id="exp-fmt-group">Format options</div>
         <div class="toggle exp-row" id="exp-mat-row" title="Write the colours, pictures and shading of the materials. Off: every part is one plain grey, with no pictures, no colours on the points and no UVs"><span class="exp-row-l" id="exp-mat-lbl"><b>Include materials</b><small>Colours, textures and shading · off: one plain grey</small></span><label><input type="checkbox" id="exp-materials" aria-labelledby="exp-mat-lbl" checked><span class="switch"></span></label></div>
+        <div class="field exp-row" id="exp-texsize-row" title="Draw every picture larger than this smaller before it is written, keeping its proportions. The scene is not touched."><span class="exp-row-l" id="exp-texsize-lbl"><b>Texture size</b><small>Longest side of each picture · smaller file</small></span>
+          <select id="exp-texsize" aria-labelledby="exp-texsize-lbl" class="mac-sel">
+            <option value="0" selected>As they are</option>
+            <option value="4096">4096 px</option>
+            <option value="2048">2048 px</option>
+            <option value="1024">1024 px</option>
+            <option value="512">512 px</option>
+            <option value="256">256 px</option>
+          </select>
+        </div>
+        <div class="toggle exp-row" id="exp-texwebp-row" title="Write every picture as WebP, usually a third of the JPEG or PNG. Needs a viewer that reads EXT_texture_webp (browsers, three.js, Blender 4+)"><span class="exp-row-l" id="exp-texwebp-lbl"><b>Pictures as WebP</b><small>Smaller than JPEG or PNG · the viewer must read WebP</small></span><label><input type="checkbox" id="exp-texwebp" aria-labelledby="exp-texwebp-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-anim-row" style="display:none" title="Write the Animate timeline as glTF animation"><span class="exp-row-l" id="exp-anim-lbl"><b>Include animation</b><small>The Animate timeline, as keyframes · GLB and glTF</small></span><label><input type="checkbox" id="exp-anim" aria-labelledby="exp-anim-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-draco-row" title="Compress vertex data with Draco; GLB only"><span class="exp-row-l" id="exp-draco-lbl"><b>Draco compression</b><small>Shrinks the file 5–20× · slower to write</small></span><label><input type="checkbox" id="exp-draco" aria-labelledby="exp-draco-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-meshopt-row" title="Compress vertex data with Meshopt; GLB only"><span class="exp-row-l" id="exp-meshopt-lbl"><b>Meshopt compression</b><small>Quick to decode · larger than Draco · the viewer must read it</small></span><label><input type="checkbox" id="exp-meshopt" aria-labelledby="exp-meshopt-lbl"><span class="switch"></span></label></div>
@@ -9737,7 +9912,7 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=115"></script>
-<script type="module" src="js/app.js?v=20261172-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1-campop1-campop2-campop3-campop4-campop5-campop6-lensmm1-texball1-texfmt1-texthumb1-matheld1-texsets1-mateditreopen1-clnbox1-texask1-texdrop1-estnode1-isoundo1-isoundo2-matundo1-texthumb2-texsmall1-texsmall2-alignsel1-texsmall3-copyshadow1-copyshadow2-links1-valrows1-three186-photoacc1-sun1-orthokey2-bvhv1-pfalign1-pffast1-pfcur1-pfpan1-pfgrab1-modring1-pfgrid1-pfsel1-rcstats1-rcaxis1-ktx186-bool1-spare1-pffollow3-pfmore4-bar79-libadd1-segstretch1-treeglide0-shadescrub1-animbar1-sunlayer1-photobar2-aaset1-exw1-cadlight1-anim1-anim2-dotcrowd4-round3d0-mirror1-focusring1-ring2-mirrortog1-lensrings1-lensrings2-lensrings3-lensrings4-5-6-snap1-nodolly-perf-uisound1-uisound2-3-blackui1-qr2-qcblack-qcnoband-click2-snap25-vkey-sound3-idlesleep-tock-metal-tickclick-noloop-propcard1-section1-rcbuild1-qrmark1-flagbar1-bake3-slide1-maps1-slide2-slide3-slide4-slide5-slide6-slide7-slide8-slide9-slide10-flat1-look1-bakeicon1-uvsplit24-diag1-chip1-state2-settle1-ascii1-wrap2-pfhist6-pivot1-pf1-names1-tfside1-heavy1-notop1-chips1-welcome1-pivot1-cadkeep1-engine1-rangegrp1-treetx1-batch1-grpundo1-rst3-hard1-grppiv1-uvpaint1-rst4-need1-uvc1-pwf2-selmore1-tfflat1-heavyback1-tfhead1-heavylist4-lens1-xray1-xrayb1-flagrow1-flagseg2-ffback3-inst3-sim1-revslide1"></script>
+<script type="module" src="js/app.js?v=expfont1-expext1-setpad3-primedit1-setcards1-scenesave1-shoff2-mirow1-geoov1-miredesign1-animcopy1-animtree1-animclip3-animgizmo1-animrest1-cmdkfill1-cmdkmenu1-cmdkglow1-tbmenu1-mmpos1-hist1-texsz1-pvbt1-20261172-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10-gz2-al3-fl1-nm1-sn1-lp2-gl1-sm1-bg1-ex3-nt3-ph1-cl3-sc19-ep4-cz6-idl1-vis2-hfc1-stl2-dec1-crease1-undo1-campop1-campop2-campop3-campop4-campop5-campop6-lensmm1-texball1-texfmt1-texthumb1-matheld1-texsets1-mateditreopen1-clnbox1-texask1-texdrop1-estnode1-isoundo1-isoundo2-matundo1-texthumb2-texsmall1-texsmall2-alignsel1-texsmall3-copyshadow1-copyshadow2-links1-valrows1-three186-photoacc1-sun1-orthokey2-bvhv1-pfalign1-pffast1-pfcur1-pfpan1-pfgrab1-modring1-pfgrid1-pfsel1-rcstats1-rcaxis1-ktx186-bool1-spare1-pffollow3-pfmore4-bar79-libadd1-segstretch1-treeglide0-shadescrub1-animbar1-sunlayer1-photobar2-aaset1-exw1-cadlight1-anim1-anim2-dotcrowd4-round3d0-mirror1-focusring1-ring2-mirrortog1-lensrings1-lensrings2-lensrings3-lensrings4-5-6-snap1-nodolly-perf-uisound1-uisound2-3-blackui1-qr2-qcblack-qcnoband-click2-snap25-vkey-sound3-idlesleep-tock-metal-tickclick-noloop-propcard1-section1-rcbuild1-qrmark1-flagbar1-bake3-slide1-maps1-slide2-slide3-slide4-slide5-slide6-slide7-slide8-slide9-slide10-flat1-look1-bakeicon1-uvsplit24-diag1-chip1-state2-settle1-ascii1-wrap2-pfhist6-pivot1-pf1-names1-tfside1-heavy1-notop1-chips1-welcome1-pivot1-cadkeep1-engine1-rangegrp1-treetx1-batch1-grpundo1-rst3-hard1-grppiv1-uvpaint1-rst4-need1-uvc1-pwf2-selmore1-tfflat1-heavyback1-tfhead1-heavylist4-lens1-xray1-xrayb1-flagrow1-flagseg2-ffback3-inst3-sim1-revslide1-curved4"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

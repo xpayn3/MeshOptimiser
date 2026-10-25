@@ -39,7 +39,8 @@ export function imageHasAlpha(img) {
 
 // Sets userData.mimeType on every texture of the meshes under root that has none, and returns undo(). A picture used by several
 // textures is judged once, and as the colour map ("map") if it is one anywhere, so it is written once. hasAlpha is for tests.
-export function setExportTextureFormats(root, { hasAlpha = imageHasAlpha } = {}) {
+// force ('image/webp', say) is written even where a picture already says its format; undo() puts the old one back.
+export function setExportTextureFormats(root, { hasAlpha = imageHasAlpha, force = '' } = {}) {
   const uses = new Map();                                     // texture -> is it a colour map somewhere
   const add = (t, colour) => { if (t && t.isTexture && t.image) uses.set(t, uses.get(t) || colour); };
   root.traverse((o) => {
@@ -54,6 +55,7 @@ export function setExportTextureFormats(root, { hasAlpha = imageHasAlpha } = {})
   const byImage = new Map(), changed = [];
   for (const [t] of uses) {
     const u = t.userData || (t.userData = {});
+    if (force) { changed.push([t, u.mimeType]); u.mimeType = force; continue; }
     if (u.mimeType) continue;                                 // (GLTFLoader's: the format the glTF held it in)
     let mime = byImage.get(t.image);
     if (!mime) {
@@ -63,7 +65,46 @@ export function setExportTextureFormats(root, { hasAlpha = imageHasAlpha } = {})
       byImage.set(t.image, mime);
     }
     u.mimeType = mime;
-    changed.push(t);
+    changed.push([t, undefined]);
   }
-  return () => { for (const t of changed) delete t.userData.mimeType; };
+  return () => { for (const [t, was] of changed) { if (was === undefined) delete t.userData.mimeType; else t.userData.mimeType = was; } };
+}
+
+// Draws every picture longer than max px on its long side at the size that keeps its proportions (GLTFExporter's own maxTextureSize
+// cuts each side to max, which squashes a 4096 x 2048 map into a square), by swapping texture.image for the smaller canvas while the
+// file is written. A picture used by several textures is drawn once. Raw data (DataTexture), compressed textures and pictures that
+// are not larger are left as they are. Returns undo(), which puts the first pictures back; stats.shrunk counts the pictures drawn.
+// makeCanvas(w, h) is for tests.
+export function shrinkExportTextures(root, max, { makeCanvas = null, stats = null } = {}) {
+  const undo = [];
+  if (!(max >= 1)) return () => {};
+  const mk = makeCanvas || ((w, h) => typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h }));
+  const small = new Map(), seen = new Set();
+  root.traverse((o) => {
+    if (!o.material) return;
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+      if (!m) continue;
+      for (const k of Object.keys(m)) {
+        const t = m[k];
+        if (!t || !t.isTexture || !t.image || seen.has(t)) continue;
+        seen.add(t);
+        const im = t.image, w = im.naturalWidth || im.videoWidth || im.width, h = im.naturalHeight || im.videoHeight || im.height;
+        if (im.data || t.isCompressedTexture || !w || !h || Math.max(w, h) <= max) continue;
+        let c = small.get(im);
+        if (c === undefined) {
+          const f = max / Math.max(w, h), cw = Math.max(1, Math.round(w * f)), ch = Math.max(1, Math.round(h * f));
+          try {
+            c = mk(cw, ch);
+            const x = c.getContext('2d');
+            x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+            x.drawImage(im, 0, 0, cw, ch);
+          } catch (_) { c = null; }
+          small.set(im, c);
+          if (c && stats) stats.shrunk = (stats.shrunk || 0) + 1;
+        }
+        if (c) { undo.push([t, im]); t.image = c; }
+      }
+    }
+  });
+  return () => { for (const [t, im] of undo) t.image = im; };
 }

@@ -19,6 +19,38 @@ export function installHoleFillCard(app) {
   // or on every visible part when nothing is selected. One undo step.
   // Remove holes shows in the status bar's Tasks list while it runs (not when it is a step of something that already has the loader up:
   // that task is listed as it is).
+  // A curved hole is closed with a patch that has vertices of its own (res.newPositions). The mesh gets them, each taking its other
+  // attributes (UVs, colours) from the three nearest rim vertices, and the rim's normals are turned to the surface's. A part that still
+  // has its CAD faces keeps the flat patch (its record is by triangle, and a new vertex has no face).
+  const _canGrow = (geom) => {
+    try { if (_Brep.record(geom)) return false; } catch (_) { return false; }
+    return Object.values(geom.attributes).every(a => a && !a.isInterleavedBufferAttribute && a.array);
+  };
+  function _growGeometry(src, res) {
+    const g = src.clone(), k = res.newPositions.length / 3, base = g.attributes.position.count;
+    for (const name of Object.keys(g.attributes)) {
+      const a = g.attributes[name], size = a.itemSize, arr = new a.array.constructor((base + k) * size);
+      arr.set(a.array);
+      const whole = !(arr instanceof Float32Array);
+      for (let i = 0; i < k; i++) for (let c = 0; c < size; c++) {
+        let val;
+        if (name === 'position' && size === 3) val = res.newPositions[i * 3 + c];
+        else if (name === 'normal' && size === 3 && !whole) val = res.newNormals[i * 3 + c];
+        else {
+          val = 0;
+          for (let j = 0; j < 3; j++) val += res.newW[i * 3 + j] * a.array[res.newSrc[i * 3 + j] * size + c];
+          if (whole) val = Math.round(val);
+        }
+        arr[(base + i) * size + c] = val;
+      }
+      g.setAttribute(name, new THREE.BufferAttribute(arr, size, a.normalized));
+    }
+    const nA = g.attributes.normal;
+    if (nA && nA.itemSize === 3 && nA.array instanceof Float32Array && res.fixIds) {
+      for (let i = 0; i < res.fixIds.length; i++) nA.setXYZ(res.fixIds[i], res.fixNormals[i * 3], res.fixNormals[i * 3 + 1], res.fixNormals[i * 3 + 2]);
+    }
+    return g;
+  }
   async function _fillHoles() { return _Job.run('Remove holes', () => _fillHoles_job(), { task: false }); }
   async function _fillHoles_job() {
     const task = app.loaderBusy() ? () => {} : (patch) => _Tasks.set('fillholes', patch);
@@ -37,7 +69,7 @@ export function installHoleFillCard(app) {
     const adv = { ..._fillHoleOpts(), ...(over && over.adv ? over.adv : {}) };
     if (!adv.through && !adv.blind && !adv.open && !adv.raised) { toast('Remove holes', 'Every kind of hole is switched off under Advanced', 'warn', 3500); return; }
     if (adv.minSize >= maxSize) { toast('Remove holes', 'The smallest hole to fill is not below the largest', 'warn', 3500); return; }
-    const optsFor = (scale) => ({ ...adv, maxSize: maxSize / scale, minSize: adv.minSize / scale, raisedMax: adv.raisedMax / scale, maxDepth: adv.maxDepth > 0 ? adv.maxDepth / scale : 0 });
+    const optsFor = (scale) => ({ ...adv, maxSize: maxSize / scale, minSize: adv.minSize / scale, raisedMax: adv.raisedMax / scale, maxDepth: adv.maxDepth > 0 ? adv.maxDepth / scale : 0, surfaceTol: adv.move > 0 ? adv.move / scale : 0 });
     const picked = !!(state.selected && state.selected.size);
     const targets = (over && over.targets ? over.targets : (picked ? [...state.selected].map(id => getPart(id)) : state.parts))
       .filter(p => p && !p.deleted && (picked || p.visible !== false));
@@ -87,7 +119,7 @@ export function installHoleFillCard(app) {
         const cadPlane = _Brep.planePoly(j.geom), cadPoly = cadPlane ? cadPlane.slice() : null;     // (the CAD plane faces, when the part came from a STEP with them)
         const transfer = index ? [positions.buffer, index.buffer] : [positions.buffer];
         if (cadPoly) transfer.push(cadPoly.buffer);
-        return { msg: { op: (over && over.op) || 'fill', positions, index, opts: { ...optsFor(j.scale), cadPoly } }, transfer };
+        return { msg: { op: (over && over.op) || 'fill', positions, index, opts: { ...optsFor(j.scale), cadPoly, newVertices: !cadPoly && _canGrow(j.geom) } }, transfer };
       }).then(reply => {
         if (reply && reply.ok) found.set(j.key, reply.res);
         finished++;
@@ -107,7 +139,7 @@ export function installHoleFillCard(app) {
           hit = null;
           try {
             let index = geom.index ? geom.index.array : null;
-            const res = found.get(key) || ((over && over.op === 'marks') ? findSurfaceMarks : fillFlatHoles)(plainPositions(posAttr), index, { ...optsFor(scale), cadPoly: _Brep.planePoly(geom) });
+            const res = found.get(key) || ((over && over.op === 'marks') ? findSurfaceMarks : fillFlatHoles)(plainPositions(posAttr), index, { ...optsFor(scale), cadPoly: _Brep.planePoly(geom), newVertices: !_Brep.planePoly(geom) && _canGrow(geom) });
             if (over && over.dryRun) hit = { out: null, res, dry: true };            // (counted below, nothing built)
             else if (res.holes > 0 || res.rimVertices > 0 || res.floating > 0 || res.enclosed > 0) {
               let src = geom;
@@ -116,6 +148,7 @@ export function installHoleFillCard(app) {
                 for (let v = 0; v < index.length; v++) index[v] = v;
                 src = geom.clone(); src.setIndex(new THREE.BufferAttribute(index, 1));
               }
+              if (res.newPositions && res.newPositions.length) src = _growGeometry(src, res);
               let kept = null;                                                  // (the CAD faces, when the part has them, go on to the new shape)
               try { kept = _brepAfterFill(geom, index, res, geom.groups, posAttr); } catch (_) { kept = null; }
               const out = _geomFromIndexParts(src, kept ? kept.parts : applyHoleFill(index, res, geom.groups));
@@ -273,7 +306,7 @@ export function installHoleFillCard(app) {
   }
   // Advanced options of Remove holes (the accordion in its panel). Defaults
   // reproduce what the tool did before the options existed.
-  const _FH_DEF = { size: '12', min: '0', depth: '10', flat: '0.57', through: true, blind: true, open: true, shape: true, raised: true, rise: '0.5', tidy: true, seal: true, enclosed: true, move: '0.5' };
+  const _FH_DEF = { size: '12', min: '0', depth: '10', flat: '0.57', through: true, blind: true, open: true, curved: true, shape: true, raised: true, rise: '0.5', tidy: true, seal: true, enclosed: true, move: '0.5' };
   const _fhEl = (k) => document.getElementById(k === 'size' ? 'fill-holes-size' : 'fh-' + k);
   function _fillHoleOpts() {
     const num = (k, lo, hi) => { const v = parseFloat(String(_fhEl(k)?.value ?? '').replace(',', '.')); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : parseFloat(_FH_DEF[k]); };
@@ -283,7 +316,7 @@ export function installHoleFillCard(app) {
       minSize: num('min', 0, 1e6),
       depthFactor: num('depth', 1, 100),
       cosTol: Math.abs(flat - 0.57) < 1e-9 ? 0.99995 : Math.cos(flat * Math.PI / 180),
-      through: on('through'), blind: on('blind'), open: on('open'), tidy: on('tidy'), rimVertices: true, cleanup: on('tidy'), floating: on('tidy'), seal: on('seal'), move: num('move', 0, 100),
+      through: on('through'), blind: on('blind'), open: on('open'), curved: on('curved'), tidy: on('tidy'), rimVertices: true, cleanup: on('tidy'), floating: on('tidy'), seal: on('seal'), move: num('move', 0, 100),
       // pieces of the mesh that end up sealed inside the closed part (the balls of a valve, a pin in a bore): never visible again, so they go
       enclosed: on('enclosed'),
       // lettering and logos that stand proud of a face, up to this height (mm)
