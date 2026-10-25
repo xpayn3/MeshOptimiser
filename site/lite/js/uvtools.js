@@ -23,7 +23,7 @@ export function hasUsableUV(uv, count) {
 }
 
 // Corners at the same place with the same UV become one point (an indexed mesh splits a corner for its normal, not for its UV).
-function weldCorners(positions, uv, n) {
+export function weldCorners(positions, uv, n) {
   let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
   for (let i = 0; i < n; i++) {
     const x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2];

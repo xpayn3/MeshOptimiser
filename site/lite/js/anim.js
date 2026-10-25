@@ -9,6 +9,7 @@ const { state, _MotionPerf, _UndoOps } = app;
 const _finalizeUndo = (...a) => app._finalizeUndo(...a);
 const _libShow = (...a) => app._libShow(...a);
 const _lucide = (...a) => app._lucide(...a);
+const _ctxBuild = (...a) => app._ctxBuild(...a);
 const _openTurntableDialog = (...a) => app._openTurntableDialog(...a);
 const _partWorldBoxOwn = (...a) => app._partWorldBoxOwn(...a);
 const _promoteInstanceToMesh = (...a) => app._promoteInstanceToMesh(...a);
@@ -32,9 +33,9 @@ return (() => {
     type: 'spin',
     spin: { axis: 'Z', dir: -1, rpm: 60 },                           // dir -1 is clockwise seen from the tip of the axis (the arrow of the gizmo)
     swing: { axis: 'Z', amp: 45, period: 2 },                        // degrees each way, seconds for there and back
-    noise: { type: 'wave', pos: 5, rot: 10, speed: 1, seed: 1, detail: 1, rough: 50, sx: 'xyz', rx: 'xyz' },   // wave / random / steps; % of the object's size, degrees, times, a number, layers of finer noise, how strong they are in %, the axes that shift and turn
-    path: { shape: 'circle', plane: 'XY', size: 50, period: 6 },     // % of the object's size, seconds for one round
-    oscillate: { wave: 'sine', period: 1, tx: 0, ty: 0, tz: 20, ax: 0, ay: 0, az: 0, spread: 0, lag: 0, ratio: 3.5 },   // wave; seconds for one to-and-fro; shift of each axis in % of the object's size; turn of each axis in degrees; lag between the axes and of the turn behind the shift, in degrees of the cycle; rod length over crank length (piston)
+    noise: { type: 'wave', pos: 5, rot: 10, speed: 1, seed: 1, detail: 1, rough: 50, sx: 'xyz', rx: 'xyz' },   // wave / random / steps; mm, degrees, times, a number, layers of finer noise, how strong they are in %, the axes that shift and turn
+    path: { shape: 'circle', plane: 'XY', size: 100, period: 6 },    // mm across, seconds for one round
+    oscillate: { wave: 'sine', period: 1, tx: 0, ty: 0, tz: 20, ax: 0, ay: 0, az: 0, spread: 0, lag: 0, ratio: 3.5 },   // wave; seconds for one to-and-fro; shift of each axis in mm; turn of each axis in degrees; lag between the axes and of the turn behind the shift, in degrees of the cycle; rod length over crank length (piston)
     loop: { mode: 'loop', repeat: 0, delay: 0, from: 0, to: 100 },   // loop points in % of the cycle
   };
   // Pose and Look are made of keys, not of a cycle: they are drawn on the timeline as diamonds, and are not among the motions the window offers.
@@ -46,8 +47,9 @@ return (() => {
   const tracks = { explode: null, camera: null };                // the scene's own tracks: { keys: [{ id, t, v, e }], muted }
   const sceneN = () => (tracks.explode && tracks.explode.keys.length ? 1 : 0) + (tracks.camera && tracks.camera.keys.length ? 1 : 0);
   const anyAnim = () => items.size > 0 || sceneN() > 0;
-  const LIMITS = { rpm: [1, 600], amp: [1, 180], period: [0.2, 60], pos: [0, 50], rot: [0, 90], speed: [0.1, 5], seed: [1, 99], detail: [1, 4], rough: [0, 100], size: [5, 200], tx: [0, 100], ty: [0, 100], tz: [0, 100], ax: [0, 180], ay: [0, 180], az: [0, 180], spread: [0, 360], lag: [0, 360], ratio: [1.5, 8], repeat: [0, 999], delay: [0, 60], from: [0, 100], to: [0, 100] };
-  const cfg = JSON.parse(JSON.stringify(DEFAULTS));
+  const LIMITS = { rpm: [1, 600], amp: [1, 180], period: [0.2, 60], pos: [0, 1000], rot: [0, 90], speed: [0.1, 5], seed: [1, 99], detail: [1, 4], rough: [0, 100], size: [1, 5000], tx: [0, 1000], ty: [0, 1000], tz: [0, 1000], ax: [0, 180], ay: [0, 180], az: [0, 180], spread: [0, 360], lag: [0, 360], ratio: [1.5, 8], repeat: [0, 999], delay: [0, 60], from: [0, 100], to: [0, 100] };
+  const MM_KEYS = new Set(['noise.pos', 'path.size', 'oscillate.tx', 'oscillate.ty', 'oscillate.tz']);      // (the positions: in mm since the saved defaults and scene files carry u / v 2)
+  const cfg = JSON.parse(JSON.stringify(DEFAULTS)); cfg.u = 2;
   const clampKey = (k, v) => { const L = LIMITS[k]; v = +v; if (!Number.isFinite(v)) return null; return L ? Math.max(L[0], Math.min(L[1], v)) : v; };
   try {
     const o = JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -55,6 +57,7 @@ return (() => {
       if (TYPES[o.type]) cfg.type = o.type;
       for (const g of ['spin', 'swing', 'noise', 'path', 'oscillate', 'loop']) for (const k of Object.keys(DEFAULTS[g])) {
         const v = o[g] && o[g][k]; if (v == null) continue;
+        if (o.u !== 2 && MM_KEYS.has(g + '.' + k)) continue;      // (kept in % of the size before mm: not carried over)
         cfg[g][k] = typeof DEFAULTS[g][k] === 'number' ? (clampKey(k, v) ?? DEFAULTS[g][k]) : String(v);
       }
       if (![1, -1].includes(cfg.spin.dir)) cfg.spin.dir = -1;
@@ -93,13 +96,15 @@ return (() => {
 
   // What one pass over the animated objects needs again and again (a frame of the animation, a seek, a refresh), worked out once: partsRoot's
   // world matrix, the inverse of its rotation (for the exploded offsets), whether the view is exploded, and the inverse of each parent's matrix.
-  const FR = { R: new THREE.Matrix4(), rot3: new THREE.Matrix3(), exploded: false, parents: new Map() };
+  const FR = { R: new THREE.Matrix4(), Ri: new THREE.Matrix4(), rot3: new THREE.Matrix3(), exploded: false, exSig: '', parents: new Map() };
   const IDENT = new THREE.Matrix4();
   const beginFrame = () => {
     if (state.partsRoot) state.partsRoot.updateWorldMatrix(true, false);
     FR.R.copy(state.partsRoot ? state.partsRoot.matrixWorld : IDENT);
     FR.rot3.setFromMatrix4(FR.R).invert();
+    FR.Ri.copy(FR.R).invert();
     const e = state.explode; FR.exploded = !!(e && (e.x || e.y || e.z));
+    FR.exSig = FR.exploded ? e.x + ',' + e.y + ',' + e.z : '';
     FR.parents.clear();
   };
   const parentInv = (par) => {
@@ -196,7 +201,7 @@ return (() => {
       case 'noise': {
         const fn = NOISE[p.type] || smooth;
         const t = fn === smooth ? te * p.speed * Math.PI : te * p.speed * 1.5;      // (a speed of 1 is about half a shake a second, or a new random value every two thirds of a second)
-        const sh = p.pos / 100 * size, rt = p.rot * D2R, oct = Math.max(1, Math.min(4, Math.round(p.detail || 1))), rg = (p.rough == null ? 50 : p.rough) / 100;
+        const sh = p.pos, rt = p.rot * D2R, oct = Math.max(1, Math.min(4, Math.round(p.detail || 1))), rg = (p.rough == null ? 50 : p.rough) / 100;
         const n = (ch) => fbm(fn, t, ch, p.seed, oct, rg), sx = p.sx == null ? 'xyz' : p.sx, rx = p.rx == null ? 'xyz' : p.rx;
         out.pos.set(sx.includes('x') ? n(0) * sh : 0, sx.includes('y') ? n(1) * sh : 0, sx.includes('z') ? n(2) * sh : 0);
         E1.set(rx.includes('x') ? n(3) * rt : 0, rx.includes('y') ? n(4) * rt : 0, rx.includes('z') ? n(5) * rt : 0, 'XYZ');
@@ -204,7 +209,7 @@ return (() => {
         break;
       }
       case 'oscillate': {
-        const f = OSC[p.wave] || OSC.sine, th = te * 2 * Math.PI / Math.max(0.05, p.period), sp = p.spread * D2R, lg = p.lag * D2R, n = Math.max(1.5, p.ratio || 3.5), sh = size / 100;
+        const f = OSC[p.wave] || OSC.sine, th = te * 2 * Math.PI / Math.max(0.05, p.period), sp = p.spread * D2R, lg = p.lag * D2R, n = Math.max(1.5, p.ratio || 3.5), sh = 1;
         out.pos.set(p.tx * sh * f(th, n), p.ty * sh * f(th + sp, n), p.tz * sh * f(th + 2 * sp, n));
         E1.set(p.ax * D2R * f(th + lg, n), p.ay * D2R * f(th + lg + sp, n), p.az * D2R * f(th + lg + 2 * sp, n), 'XYZ');
         out.quat.setFromEuler(E1);
@@ -212,8 +217,7 @@ return (() => {
       }
       case 'keys': {
         const v = keyEval(lay.keys, lay.t, mixNum); if (!v) break;
-        const sh = size / 100;
-        out.pos.set(v.mx * sh, v.my * sh, v.mz * sh);
+        out.pos.set(v.mx, v.my, v.mz);      // (mm)
         E1.set(v.rx * D2R, v.ry * D2R, v.rz * D2R, 'XYZ');
         out.quat.setFromEuler(E1);
         break;
@@ -221,7 +225,7 @@ return (() => {
       case 'path': {
         const sh = SHAPES[p.shape] || SHAPES.circle;
         curveOf(lay).getPointAt(Math.min(1, Math.max(0, phase(lay, !sh.closed))), V1);
-        out.pos.copy(V1).multiplyScalar(p.size / 100 * size * 0.5);
+        out.pos.copy(V1).multiplyScalar(p.size * 0.5);      // (mm across)
         break;
       }
     }
@@ -377,6 +381,57 @@ return (() => {
     if (up) out.premultiply(up);
     return out;
   }
+  // A part moved by the user while it is animated (dragged, typed, undone, aligned, placed: anything that changes where its mesh is, other
+  // than this file) keeps its new place: it becomes the part's rest, and the animation goes on from there. Every part this file puts
+  // somewhere is noted (PLACED: its place in the root frame, without the exploded offset); at the start of a pass, a part that is somewhere
+  // else has been moved by someone else (MOVED: where to, and by how much). The check is made once for the pass, before any object places a
+  // part: a part that two objects hold (a group inside a group) is put by each in turn, and the one that goes last is what is noted.
+  const PLACED = new Map(), MOVED = new Map();
+  let placedEx = '';
+  const sameM = (x, y, eps) => { const p = x.elements, q = y.elements; for (let i = 0; i < 16; i++) if (Math.abs(p[i] - q[i]) > eps * (1 + Math.abs(q[i]))) return false; return true; };
+  const rootPoseOf = (mesh, id, out) => {
+    mesh.updateWorldMatrix(true, false);
+    out.multiplyMatrices(FR.Ri, mesh.matrixWorld);
+    if (id != null && FR.exploded) { exOff(id, OFF); out.premultiply(M1.makeTranslation(-OFF.x, -OFF.y, -OFF.z)); }
+    return out;
+  };
+  const notePlaced = (id, mesh) => { PLACED.set(id, rootPoseOf(mesh, id, PLACED.get(id) || new THREE.Matrix4())); placedEx = FR.exSig; };
+  const forgetPlaced = (rec) => { for (const id of rec.rests.keys()) PLACED.delete(id); rec.lastG = rec.lastPW = null; };
+  const idsOf = (rec) => rec.kind === 'part' ? [rec.partId] : rec.members;
+  function detectMoved(recs) {
+    MOVED.clear();
+    if (!PLACED.size || placedEx !== FR.exSig) return;      // (an explode that has changed since: the offsets are not the ones the places were noted with)
+    const cur = new THREE.Matrix4();
+    for (const rec of recs) for (const id of idsOf(rec)) {
+      if (MOVED.has(id)) continue;
+      const was = PLACED.get(id), p = live(id); if (!was || !p) continue;
+      rootPoseOf(p.mesh, id, cur);
+      if (!sameM(cur, was, 1e-6)) MOVED.set(id, { cur: cur.clone(), d: cur.clone().multiply(new THREE.Matrix4().copy(was).invert()) });
+    }
+  }
+  const MV_D = new THREE.Matrix4(), MV_I = new THREE.Matrix4();
+  function adoptPart(rec) {
+    const mv = MOVED.get(rec.partId); if (!mv) return;
+    MV_D.copy(mv.d);
+    if (rec.lastPW) MV_D.premultiply(MV_I.copy(rec.lastPW).invert()).multiply(rec.lastPW);      // (seen from what the part follows)
+    rec.rests.set(rec.partId, MV_D.clone().multiply(rec.rests.get(rec.partId)));
+  }
+  // A group: if every part moved the same way (the whole group was moved), the rests and the middle the group turns about go with it; if only
+  // some did, each of those is put where it stands now, taken back through the motion the group had when it was last placed.
+  function adoptGroup(rec) {
+    if (!MOVED.size || !rec.lastG) return;
+    const ch = []; let n = 0;
+    for (const id of rec.members) { if (!live(id)) continue; n++; const mv = MOVED.get(id); if (mv) ch.push({ id, cur: mv.cur, d: mv.d }); }
+    if (!ch.length) return;
+    if (ch.length === n && ch.every(c => sameM(c.d, ch[0].d, 1e-5))) {
+      const d = ch[0].d, q = new THREE.Quaternion();
+      for (const [id, r] of [...rec.rests]) rec.rests.set(id, d.clone().multiply(r));
+      rec.C.applyMatrix4(d); d.decompose(V1, q, new THREE.Vector3()); rec.Q.premultiply(q);
+    } else {
+      MV_I.copy(rec.lastG).invert();
+      for (const c of ch) rec.rests.set(c.id, MV_I.clone().multiply(c.cur));
+    }
+  }
   function applyRec(rec) {
     const PW = parentDelta(rec, 0);
     deltaOf(rec, DELTA);
@@ -386,13 +441,17 @@ return (() => {
       // undone. The record used to be dropped on the first pass, with the only copy of the rest, so undo brought the part back frozen mid-turn.
       const p = live(rec.partId); if (!p) return getPart(rec.partId) ? -1 : 0;
       // rest · T(c) · delta · T(−c): the turn is about the middle of the part's own geometry
+      adoptPart(rec);
       const R0 = restE(rec.partId, rec);
       rigidPartMotion(R0, rec.c, DELTA, M5); M5.multiply(R0);      // (the motion first as a rigid transform, then the part's rest under it)
       if (PW) M5.premultiply(PW);
       place(p.mesh, M5);
+      notePlaced(rec.partId, p.mesh);
+      if (PW) (rec.lastPW || (rec.lastPW = new THREE.Matrix4())).copy(PW); else rec.lastPW = null;
       return 1;
     }
     // a group: T(C) · F · delta · F⁻¹ · T(−C), then each part from where it started
+    adoptGroup(rec);
     F4.makeRotationFromQuaternion(rec.Q);
     G4.makeTranslation(rec.C.x, rec.C.y, rec.C.z).multiply(F4).multiply(DELTA);
     F4.invert(); G4.multiply(F4).multiply(T4.makeTranslation(-rec.C.x, -rec.C.y, -rec.C.z));
@@ -407,6 +466,10 @@ return (() => {
       m.updateMatrixWorld(true);
       n++;
     }
+    if (n) {
+      for (const id of rec.members) { const p = live(id); if (p) notePlaced(id, p.mesh); }
+      (rec.lastG || (rec.lastG = new THREE.Matrix4())).copy(G4);
+    }
     return n || (gone ? -1 : 0);      // (a group whose members are all deleted waits for them, as a part does)
   }
   // one pass over some objects (all of them, or the one that changed); an object that has nothing left to move is dropped
@@ -414,10 +477,13 @@ return (() => {
   function applyAll(recs) {
     beginFrame();
     let n = 0;
-    for (const rec of (recs || items.values())) { const k = applyRec(rec); if (k === 0) items.delete(rec.key); else if (k > 0) n += k; }
+    const list = [...(recs || items.values())];
+    detectMoved(list);
+    for (const rec of list) { const k = applyRec(rec); if (k === 0) items.delete(rec.key); else if (k > 0) n += k; }
+    MOVED.clear();
     return n;
   }
-  const apply = (rec) => { beginFrame(); return applyRec(rec) > 0; };
+  const apply = (rec) => { beginFrame(); detectMoved([rec]); const r = applyRec(rec) > 0; MOVED.clear(); return r; };
   function tick(now) {
     raf = 0;
     if (suspended || held || paused || !anyAnim()) return;
@@ -450,7 +516,7 @@ return (() => {
     try { window.dispatchEvent(new Event('mo-anim')); } catch (_) {}      // (the Animation card in the right sidebar follows it)
     let el = document.getElementById('vp-animate-pill');
     if (!el) return;
-    const mode = !!state._animMode, running = anyAnim() && !dismissed && !suspended && !held && !paused;      // (the pill says Playing and is gone when it is paused: play it again from the card in the right sidebar or the timeline)
+    const mode = !!state._animMode, running = anyAnim() && !dismissed && !suspended && !held;      // (the pill stays when it is paused and says Paused, with its play button; Exit closes it)
     el.hidden = !(mode || running);
     if (el.hidden) return;
     if (!el._wired) {
@@ -481,7 +547,8 @@ return (() => {
     }
     el.title = 'Open the Animate window';
   }
-  function exit() { paused = true; dismissed = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); sync(); }
+  // Leaving Animate mode puts everything back at the first frame (time 0, scene tracks too), as it was before the first play.
+  function exit() { paused = true; dismissed = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } try { seekTo(0); } catch (e) { console.warn('[animate] rewind on exit:', e); } updateTag(); sync(); }
   // The playhead of the timeline: where the animation of the selection is in its cycle (only while the window is open and it runs).
   function headTick() {
     headRaf = 0;
@@ -646,7 +713,7 @@ return (() => {
     commitSoon('Edit motion');
   }
   // (a deleted part's hidden mesh goes back to rest too, so an undo of the delete finds it there)
-  function dropRec(rec) { restoreLook(rec); for (const id of rec.rests.keys()) { const p = getPart(id); if (p && p.mesh) place(p.mesh, restE(id, rec)); } }
+  function dropRec(rec) { forgetPlaced(rec); restoreLook(rec); for (const id of rec.rests.keys()) { const p = getPart(id); if (p && p.mesh) place(p.mesh, restE(id, rec)); } }
   function dropAll(recs) { beginFrame(); for (const rec of recs) dropRec(rec); }
   // Take a kind of layer (or everything) off the given keys; an object with no layer left goes back to where it started.
   function remove(keys, type) {
@@ -698,7 +765,7 @@ return (() => {
     updateTag();
   }
   function resume() { if (!suspended) return; suspended = false; applyAll(); try { requestRender(); } catch (_) {} loop(); }
-  function reset() { for (const rec of items.values()) { try { restoreLook(rec); } catch (_) {} } items.clear(); tracks.explode = null; tracks.camera = null; selLids.clear(); selKeys.clear(); selLid = 0; base = EMPTY; clearTimeout(cTimer); cTimer = 0; ver++; clock = 0; suspended = false; paused = false; dismissed = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } sync(); }
+  function reset() { PLACED.clear(); for (const rec of items.values()) { try { restoreLook(rec); } catch (_) {} } items.clear(); tracks.explode = null; tracks.camera = null; selLids.clear(); selKeys.clear(); selLid = 0; base = EMPTY; clearTimeout(cTimer); cTimer = 0; ver++; clock = 0; suspended = false; paused = false; dismissed = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } sync(); }
   // For the file export: step through the timeline and write down where every animated part is at each frame (its world matrix), as
   // Float32 arrays, together with where it is at rest. Parts that never move are left out. The parts go back to rest afterwards.
   // `fps` is lowered when the timeline is long or many parts move, to keep the file at a size that opens.
@@ -761,7 +828,7 @@ return (() => {
     switch (lay.type) {
       case 'spin':  return `Spin · ${p.axis} · ${p.dir < 0 ? 'clockwise' : 'counter-clockwise'} · ${p.rpm} rpm${loopTxt()}`;
       case 'swing': return `Swing · ${p.axis} · ±${p.amp}° · ${f1(p.period)} s`;
-      case 'noise': return `Noise · ${p.type === 'random' ? 'random' : p.type === 'steps' ? 'steps' : 'wave'} · shift ${p.pos}% ${(p.sx == null ? 'xyz' : p.sx).toUpperCase() || '–'} · turn ${p.rot}° ${(p.rx == null ? 'xyz' : p.rx).toUpperCase() || '–'} · ${f1(p.speed)}× · detail ${p.detail || 1} · seed ${p.seed}`;
+      case 'noise': return `Noise · ${p.type === 'random' ? 'random' : p.type === 'steps' ? 'steps' : 'wave'} · shift ${p.pos} mm ${(p.sx == null ? 'xyz' : p.sx).toUpperCase() || '–'} · turn ${p.rot}° ${(p.rx == null ? 'xyz' : p.rx).toUpperCase() || '–'} · ${f1(p.speed)}× · detail ${p.detail || 1} · seed ${p.seed}`;
       case 'oscillate': { const ax = (a, b, c) => ['X', 'Y', 'Z'].filter((_, i) => [a, b, c][i] > 0).join('') || '–'; return `Oscillate · ${p.wave} · shift ${ax(p.tx, p.ty, p.tz)} · turn ${ax(p.ax, p.ay, p.az)} · ${f1(p.period)} s`; }
       case 'path':  return `Path · ${p.shape === 'figure8' ? 'figure 8' : p.shape} · ${p.plane} · ${p.size}% · ${f1(p.period)} s${loopTxt()}`;
     }
@@ -773,7 +840,7 @@ return (() => {
     switch (lay.type) {
       case 'spin': return `${p.axis} · ${p.rpm} rpm`;
       case 'swing': return `${p.axis} · ±${p.amp}° · ${f1(p.period)} s`;
-      case 'noise': return `${p.pos}% · ${p.rot}° · ${f1(p.speed)}×`;
+      case 'noise': return `${p.pos} mm · ${p.rot}° · ${f1(p.speed)}×`;
       case 'oscillate': return `${p.wave} · ${f1(p.period)} s`;
       case 'path': return `${p.shape === 'figure8' ? 'figure 8' : p.shape} · ${f1(p.period)} s`;
     }
@@ -931,7 +998,7 @@ return (() => {
         <div class="anim-props" data-for="noise">
           <div class="anim-row"><span class="anim-l">Type</span><select class="mac-sel" data-p="noise.type" aria-label="Kind of noise"><option value="wave">Wave</option><option value="random">Smooth random</option><option value="steps">Steps</option></select></div>
           <div class="anim-sub">Amplitude</div>
-          ${rng('noise.pos', 'Position', 0, 50, 1, '%')}<div class="anim-row"><span class="anim-l">Axes</span>${tog('noise.sx')}</div>
+          ${rng('noise.pos', 'Position', 0, 200, 0.5, ' mm')}<div class="anim-row"><span class="anim-l">Axes</span>${tog('noise.sx')}</div>
           ${rng('noise.rot', 'Rotation', 0, 90, 1, '°')}<div class="anim-row"><span class="anim-l">Axes</span>${tog('noise.rx')}</div>
           <div class="anim-sub">Character</div>
           ${rng('noise.speed', 'Frequency', 0.1, 5, 0.1, '×')}${rng('noise.detail', 'Detail', 1, 4, 1, '')}${rng('noise.rough', 'Roughness', 0, 100, 1, '%')}
@@ -939,7 +1006,7 @@ return (() => {
         <div class="anim-props" data-for="oscillate">
           <div class="anim-row"><span class="anim-l">Wave</span><select class="mac-sel" data-p="oscillate.wave" aria-label="Wave"><option value="sine">Sine</option><option value="piston">Piston (crank and rod)</option><option value="eased">Eased</option><option value="triangle">Triangle</option></select></div>
           <div class="anim-sub">Shift (% of the size)</div>
-          ${xyz(['oscillate.tx', 'oscillate.ty', 'oscillate.tz'], 0, 100, '%')}
+          ${xyz(['oscillate.tx', 'oscillate.ty', 'oscillate.tz'], 0, 500, ' mm')}
           <div class="anim-sub">Turn (degrees each way)</div>
           ${xyz(['oscillate.ax', 'oscillate.ay', 'oscillate.az'], 0, 180, '°')}
           <div class="anim-sub">Timing</div>
@@ -947,7 +1014,7 @@ return (() => {
         <div class="anim-props" data-for="path">
           <div class="anim-row"><span class="anim-l">Shape</span><select class="mac-sel" data-p="path.shape" aria-label="Shape of the path"><option value="circle">Circle</option><option value="figure8">Figure of eight</option><option value="square">Rounded square</option><option value="wave">Wave</option><option value="line">Line</option></select></div>
           <div class="anim-row anim-row-bare" role="group" aria-label="Plane"><span class="anim-l">Plane</span>${seg('path.plane', [['XY', 'XY'], ['XZ', 'XZ'], ['YZ', 'YZ']])}</div>
-          ${rng('path.size', 'Size', 5, 200, 1, '%')}${rng('path.period', 'Time', 0.5, 60, 0.5, ' s')}</div>
+          ${rng('path.size', 'Size', 5, 1000, 1, ' mm')}${rng('path.period', 'Time', 0.5, 60, 0.5, ' s')}</div>
       </div>
       <div class="anim-card" data-for="spin path">
         <div class="anim-row anim-row-bare" role="group" aria-label="Loop"><span class="anim-l">Loop</span>${seg('loop.mode', [['loop', 'Loop'], ['pingpong', 'Ping-pong'], ['once', 'Once']])}</div>
@@ -1149,7 +1216,15 @@ return (() => {
   // The scene file: what is animated is found again by its name (the ids of parts can change when a file is opened).
   function serialize() {
     if (!items.size && !sceneN()) return undefined;
-    return JSON.parse(JSON.stringify({ v: 1, dur, recs: [...items.values()].map(recData), tracks }, jsonRep));
+    return JSON.parse(JSON.stringify({ v: 2, dur, recs: [...items.values()].map(recData), tracks }, jsonRep));
+  }
+  // A layer saved when positions were a % of the object's size (its box diagonal, rec.size): turned into mm, once.
+  function legacyMm(l, size) {
+    const k = (Number.isFinite(size) && size > 0 ? size : 1) / 100, p = l.p;
+    if (l.type === 'noise' && p) p.pos = Math.round(p.pos * k * 100) / 100;
+    else if (l.type === 'path' && p) p.size = Math.round(p.size * k * 100) / 100;
+    else if (l.type === 'oscillate' && p) for (const c of ['tx', 'ty', 'tz']) p[c] = Math.round(p[c] * k * 100) / 100;
+    else if (l.type === 'keys' && Array.isArray(l.keys)) for (const key of l.keys) if (key.v) for (const c of ['mx', 'my', 'mz']) if (typeof key.v[c] === 'number') key.v[c] = Math.round(key.v[c] * k * 100) / 100;
   }
   function deserialize(data) {
     if (!data || !Array.isArray(data.recs)) return 0;
@@ -1159,6 +1234,7 @@ return (() => {
     for (const r of data.recs) {
       const t = targetOf(r); const rec = t && makeRec(t); if (!rec || items.has(rec.key)) continue;
       rec.layers = withIds(r.layers); items.set(rec.key, rec); keyMap.set(r.key, rec.key); n++;
+      if (!(data.v >= 2)) for (const l of rec.layers) legacyMm(l, rec.size);      // (a file from before positions were in mm)
     }
     for (const r of data.recs) { const rec = items.get(keyMap.get(r.key)); const pk = r.parent && keyMap.get(r.parent); if (rec) rec.parent = pk && pk !== rec.key ? pk : null; }
     for (const nm of ['explode', 'camera']) { const tr = data.tracks && data.tracks[nm]; tracks[nm] = tr && Array.isArray(tr.keys) && tr.keys.length ? { keys: tr.keys.map(k => ({ ...k, id: nid(), v: { ...k.v } })), muted: !!tr.muted } : null; }
@@ -1296,6 +1372,47 @@ return (() => {
     if (!n) return;
     ver++; applyAll(); sync(true); commit('Duplicate clip');
   }
+  // Copy and paste of clips (Ctrl+C and Ctrl+V while the Animate window is open): the picked clips, or every animation of the picked objects,
+  // are copied whole (settings, loop, keys, where they start and end); a paste puts them on the objects that are picked now, the first of them
+  // at the playhead and the others as far after it as they were after it. The parts themselves are not copied while the window is open.
+  let clipBoard = null;
+  function copyClips() {
+    let list = clipsSelected();
+    if (!list.length) { list = []; for (const t of targets()) { const rec = items.get(t.key); if (rec) for (const lay of rec.layers) list.push({ rec, lay }); } }
+    if (!list.length) return false;
+    clipBoard = list.map(({ lay }) => JSON.parse(JSON.stringify(lay, jsonRep)));
+    toast('Copied', clipBoard.length + (clipBoard.length === 1 ? ' clip' : ' clips'), 'info', 1600);
+    return true;
+  }
+  function pasteClips() {
+    if (!clipBoard || !clipBoard.length) return false;
+    const ts = targets();
+    if (!ts.length) { toast('Paste', 'Select an object to paste the clips on', 'info', 2600); return true; }
+    const start = (b) => b.keys ? (b.keys.length ? b.keys[0].t : 0) : (b.loop.delay || 0);
+    const t0 = Math.min(...clipBoard.map(start)), dt = clock - t0;
+    const wasEmpty = !items.size; if (wasEmpty) clock = 0;
+    let n = 0, locked = 0; const fresh = [];
+    for (const t of ts) {
+      let rec = items.get(t.key);
+      if (!rec) {
+        if (t.kind === 'part' && t.p.locked) { locked++; continue; }
+        rec = makeRec(t); if (!rec) { locked++; continue; }
+        items.set(t.key, rec);
+      }
+      for (const src of clipBoard) {
+        const B = JSON.parse(JSON.stringify(src)); B.id = nid(); B.t = clock; delete B.axisVec;
+        if (B.keys) for (const k of B.keys) { k.id = nid(); k.t = Math.max(0, k.t + dt); }
+        else { B.loop.delay = Math.max(0, (B.loop.delay || 0) + dt); if (B.end != null) B.end = B.end + dt; }
+        rec.layers.push(B); fresh.push(B.id); n++;
+      }
+    }
+    if (!n) { if (locked) toast('Paste', 'Those parts are locked: unlock them to animate', 'warn', 3000); return true; }
+    if (wasEmpty) { paused = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+    dismissed = false; ver++; try { applyAll(); requestRender(); } catch (_) {}
+    selLids.clear(); for (const id of fresh) selLids.add(id); selKeys.clear();
+    loop(); sync(true); commit('Paste clips');
+    return true;
+  }
   const FPS = { e: 0, at: 0 };
   function fpsNote(ms) { if (ms > 1 && ms < 500) FPS.e = FPS.e ? FPS.e * 0.9 + ms * 0.1 : ms; }
   let draft = tlp.draft === true;
@@ -1315,7 +1432,9 @@ return (() => {
   // bar that starts at its delay and runs to the end of its repeats (or to the end of the timeline, faded, when it goes on for ever);
   // the marks inside it are the cycles. Drag a clip to move it, its edges to trim it. Pose, Look, Explode and Camera are made of keys,
   // the diamonds: drag one to move it in time, press the ruler to scrub.
-  const HWF = 210, HWN = 44;      // the width of the column of names: full, or just the icons when the left panel is folded
+  // the width of the column of names: full (280 px, or as dragged by its edge and kept), or just the icons when the left panel is folded
+  const HWN = 44, HWF0 = 280, HW_KEY = 'stepopt-anim-names-w';
+  let HWF = (() => { try { const v = parseInt(localStorage.getItem(HW_KEY), 10); return v >= 140 && v <= 640 ? v : HWF0; } catch (_) { return HWF0; } })();
   let HW = showL ? HWF : HWN;
   const fmtTC = (t) => { t = Math.max(0, t); const m = Math.floor(t / 60); return m + ':' + (t - m * 60).toFixed(2).padStart(5, '0'); };
   const parseTC = (s) => { s = String(s).trim(); if (!s) return null; let v = 0; for (const x of s.split(':')) { const n = parseFloat(x); if (!Number.isFinite(n)) return null; v = v * 60 + n; } return v; };
@@ -1430,7 +1549,7 @@ return (() => {
     const rg = (kv, label, min, max, step, unit) => `<div class="anim-row"><span class="anim-l">${label}</span><div class="anim-speed"><input type="range" data-kv="${kv}" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span class="anim-v" data-kl="${kv}" data-u="${unit || ''}"></span></div></div>`;
     const TITLE = { pose: 'Pose key', look: 'Look key', explode: 'Explode key', camera: 'Camera key' }[loc.kind];
     let rows = '';
-    if (loc.kind === 'pose') rows = '<div class="anim-sub">Move, % of its size</div>' + rg('mx', 'X', -100, 100, 0.5, '%') + rg('my', 'Y', -100, 100, 0.5, '%') + rg('mz', 'Z', -100, 100, 0.5, '%')
+    if (loc.kind === 'pose') rows = '<div class="anim-sub">Move, in mm</div>' + rg('mx', 'X', -500, 500, 0.5, ' mm') + rg('my', 'Y', -500, 500, 0.5, ' mm') + rg('mz', 'Z', -500, 500, 0.5, ' mm')
       + '<div class="anim-sub">Turn</div>' + rg('rx', 'X', -720, 720, 1, '°') + rg('ry', 'Y', -720, 720, 1, '°') + rg('rz', 'Z', -720, 720, 1, '°');
     else if (loc.kind === 'look') rows = rg('o', 'Opacity', 0, 1, 0.01, '%') + rg('tm', 'Tint', 0, 1, 0.01, '%') + '<div class="anim-row"><span class="anim-l">Colour</span><div class="anim-speed"><input type="color" class="adk-col" data-kv="c" aria-label="Tint colour"></div></div>';
     else if (loc.kind === 'explode') rows = rg('x', 'X', 0, 300, 1, '%') + rg('y', 'Y', 0, 300, 1, '%') + rg('z', 'Z', 0, 300, 1, '%') + '<div class="anim-row"><span class="anim-l"></span><button type="button" class="cq-btn adk-kbtn" data-kact="capture">Use the explode of the view</button></div>';
@@ -1502,6 +1621,55 @@ return (() => {
     d.snap.hidden = false; d.snap.style.transform = 'translateX(' + (t * pps).toFixed(1) + 'px)';
   }
   // Press on a clip: move it (all the selected ones go with it), or trim one edge of it.
+  // Right-click on a clip of the timeline: copy its properties, paste them on another clip (of any object; a clip of another kind becomes
+  // this kind, unless the object has one already), or add it as a new animation on this object; switch it off; remove it.
+  let clipCopy = null;      // { type, p, loop }: what was copied (the timing of the clip, its delay and trim, is not part of it)
+  const KIND = (t) => (TYPES[t] || [t])[0];
+  function copyClip(lay) {
+    if (!lay || lay.keys) return;
+    clipCopy = { type: lay.type, p: JSON.parse(JSON.stringify(lay.p)), loop: { mode: lay.loop.mode, repeat: lay.loop.repeat, from: lay.loop.from, to: lay.loop.to } };
+    toast('Copied', KIND(lay.type) + ' properties', 'info', 1600);
+  }
+  function pasteOnto(list) {
+    if (!clipCopy) return;
+    let n = 0; const recs = new Set();
+    for (const { rec, lay } of list) {
+      if (lay.keys) continue;
+      if (lay.type !== clipCopy.type) {
+        if (rec.layers.some(l => l !== lay && l.type === clipCopy.type)) continue;      // (the object has one of that kind already)
+        lay.type = clipCopy.type; delete lay.axisVec;
+      }
+      lay.p = JSON.parse(JSON.stringify(clipCopy.p));
+      Object.assign(lay.loop, clipCopy.loop);
+      recs.add(rec); n++;
+    }
+    if (!n) { toast('Nothing pasted', 'The objects already have an animation of that kind', 'info', 2600); return; }
+    ver++; try { applyAll([...recs]); requestRender(); } catch (_) {}
+    const cur = list.find(x => x.lay.id === selLid && !x.lay.keys) || list.find(x => !x.lay.keys);
+    if (cur) load(cur.lay);      // (the window's settings follow the clip that is selected, as they do when a clip is picked: else it shows the old ones, and the next change in it writes them back)
+    sync(true); commit('Paste animation properties');
+  }
+  function clipMenu(e, bar) {
+    const key = bar.dataset.key, lid = +bar.dataset.lid, rec = items.get(key), lay = rec && rec.layers.find(l => l.id === lid);
+    if (!lay) return;
+    e.preventDefault(); e.stopPropagation();
+    if (!selLids.has(lid)) selectLayer(key, lid, false);
+    const sel = clipsSelected(), list = sel.length > 1 && sel.some(x => x.lay === lay) ? sel : [{ rec, lay }];
+    const keyed = !!lay.keys, ts = targets();
+    const needCopy = clipCopy ? false : 'Copy the properties of a clip first';
+    _ctxBuild([
+      { icon: 'copy', label: list.length > 1 ? 'Copy ' + list.length + ' clips' : 'Copy clip', kbd: 'Ctrl+C', fn: () => copyClips() },
+      { icon: 'clipboard-paste', label: 'Paste clips on the selected objects', kbd: 'Ctrl+V', off: clipBoard ? false : 'Copy a clip first', fn: () => pasteClips() },
+      '---',
+      { icon: 'copy', label: 'Copy ' + KIND(lay.type) + ' properties', off: keyed ? 'A pose has no properties to copy' : false, fn: () => copyClip(lay) },
+      { icon: 'clipboard-paste', label: list.length > 1 ? 'Paste properties on ' + list.length + ' clips' : 'Paste properties', off: needCopy || (keyed ? 'A pose has no properties to paste on' : false), fn: () => pasteOnto(list) },
+      { icon: 'plus', label: 'Add as a new animation on this object', off: needCopy || (rec.layers.some(l => l.type === clipCopy.type) ? 'It has ' + KIND(clipCopy.type) + ' already: paste the properties on it' : false),
+        fn: () => { const nl = { id: nid(), type: clipCopy.type, p: JSON.parse(JSON.stringify(clipCopy.p)), loop: { ...DEFAULTS.loop, ...clipCopy.loop, delay: 0 }, t: clock }; rec.layers.push(nl); ver++; try { applyAll([rec]); requestRender(); } catch (_) {} selLids.clear(); selLids.add(nl.id); load(nl); sync(true); commit('Paste animation'); } },
+      '---',
+      { icon: lay.muted ? 'eye' : 'eye-off', label: lay.muted ? 'Switch on' : 'Switch off', fn: () => { lay.muted = !lay.muted; ver++; applyAll(); try { requestRender(); } catch (_) {} sync(true); commit('Switch'); } },
+      { icon: 'trash-2', label: 'Remove', danger: true, fn: () => remove([key], lay.type) },
+    ], e.clientX, e.clientY);
+  }
   function barPress(e, bar) {
     const key = bar.dataset.key, lid = +bar.dataset.lid, rec = items.get(key), lay = rec && rec.layers.find(l => l.id === lid);
     if (!lay) return;
@@ -1509,7 +1677,7 @@ return (() => {
     const mode = e.target.closest('.adk-bl') ? 'left' : e.target.closest('.adk-be') ? 'right' : 'move';
     const add = e.shiftKey;
     if (!selLids.has(lid) && !add) { selLids.clear(); selLids.add(lid); }
-    const group = mode === 'move' ? clipsSelected().filter(x => x.lay.id === lid || selLids.has(x.lay.id)) : [{ rec, lay }];
+    const group = clipsSelected().filter(x => x.lay.id === lid || selLids.has(x.lay.id));      // (the selected clips go together, whether the whole bar is dragged or one of its ends)
     if (!group.some(x => x.lay === lay)) group.push({ rec, lay });
     const D0 = durOf();
     const orig = group.map(x => ({ lay: x.lay, delay: x.lay.loop.delay || 0, skip: x.lay.skip || 0, end: x.lay.end, g: barGeom(x.lay, D0) }));
@@ -1652,6 +1820,7 @@ return (() => {
         ${B('adk-tr2', 'panel-right', 'Show or hide the settings')}${B('adk-pop', 'picture-in-picture-2', 'Pop out as a small window')}${B('adk-close', 'x', 'Close (Shift+A)')}
       </div>
       <div class="adk-body">
+        <div class="adk-names-grip" id="adk-names-grip" title="Drag to resize · double-click to reset"></div>
         <div class="adk-main">
         <div class="adk-scroll" id="adk-scroll"><div class="adk-inner" id="adk-inner">
           <div class="adk-ruler"><div class="adk-rh">${B('adk-tl', 'panel-left', 'Show or hide the list of objects')}<span id="adk-count"></span></div><div class="adk-rl" id="adk-rl"></div></div>
@@ -1802,6 +1971,7 @@ return (() => {
       const kf = e.target.closest('.adk-kf, .adk-kspan'); if (kf) { keyPress(e, kf); return; }
       const bar = e.target.closest('.adk-bar'); if (bar) barPress(e, bar);
     });
+    d.rows.addEventListener('contextmenu', (e) => { const bar = e.target.closest('.adk-bar'); if (bar) clipMenu(e, bar); });
     d.rows.addEventListener('dblclick', (e) => {
       const lane = e.target.closest('.adk-rl[data-kr]'); if (!lane || e.target.closest('.adk-kf')) return;
       addKeyAt(lane.closest('.adk-row'), (e.clientX - lane.getBoundingClientRect().left) / pps);
@@ -1915,6 +2085,19 @@ return (() => {
       paintSides(); renderRows();
     });
     paintSides();
+    {
+      const grip = g('adk-names-grip'); let from = null, raf = 0;
+      const set = (w, keep) => {
+        const hi = Math.max(200, Math.min(640, root.clientWidth - 360));
+        HWF = Math.max(140, Math.min(hi, Math.round(w)));
+        if (keep) { try { localStorage.setItem(HW_KEY, String(HWF)); } catch (_) {} }
+        paintSides(); if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderRows(); });
+      };
+      grip.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; from = { x: e.clientX, w: HWF }; try { grip.setPointerCapture(e.pointerId); } catch (_) {} grip.classList.add('dragging'); e.preventDefault(); });
+      grip.addEventListener('pointermove', (e) => { if (from) set(from.w + e.clientX - from.x, false); });
+      for (const t of ['pointerup', 'pointercancel']) grip.addEventListener(t, () => { if (!from) return; from = null; grip.classList.remove('dragging'); set(HWF, true); });
+      grip.addEventListener('dblclick', () => set(HWF0, true));
+    }
     g('adk-close').addEventListener('click', () => closeDock());
     g('adk-pop').addEventListener('click', () => toMini());
     // the height: the top edge
@@ -1995,6 +2178,26 @@ return (() => {
   function toggle() { if (!shown()) open(); else if (ui.dock && ui.dock.root.classList.contains('show')) closeDock(); else ui.mini.hide(); }
   // the button on the bottom toolbar and Shift+A
   { const b = $id('tg-animate'); if (b) b.addEventListener('click', (e) => { e.stopPropagation(); toggle(); }); }
+  // While the Animate window is open, Space plays and pauses wherever the focus is (not while typing in a field, or in a dialog or a menu).
+  // The key is taken before anything else sees it, and a button that had the focus is not pressed by it.
+  {
+    const typing = (t) => !!t && !!t.closest && !!t.closest('textarea, select, [contenteditable=""], [contenteditable="true"], input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=button])');
+    const away = (t) => !!t && !!t.closest && !!t.closest('.cq-bg, .dlg-bg.show, .modal-bg.show, #ctx-menu');
+    const mine = (e) => state._animMode && (e.key === ' ' || e.code === 'Space') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !typing(e.target) && !away(e.target) && !document.querySelector('.cq-bg');
+    document.addEventListener('keydown', (e) => {
+      if (!mine(e)) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!e.repeat && anyAnim()) { if (paused) play(); else pause(); }
+    }, true);
+    document.addEventListener('keyup', (e) => { if (mine(e)) { e.preventDefault(); e.stopPropagation(); } }, true);      // (a focused button would be pressed on the release)
+    // Ctrl+C and Ctrl+V copy and paste clips while the window is open (a copy with nothing animated picked is the app's own, of the parts)
+    document.addEventListener('keydown', (e) => {
+      if (!state._animMode || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || typing(e.target) || away(e.target)) return;
+      const k = String(e.key).toLowerCase();
+      if (k === 'c') { if (copyClips()) { e.preventDefault(); e.stopPropagation(); } else clipBoard = null; }
+      else if (k === 'v') { if (clipBoard && clipBoard.length) { e.preventDefault(); e.stopPropagation(); pasteClips(); } }
+    }, true);
+  }
   // ---- for Claude (the animate_parts tool): which parts or groups move in the video, and how ----
   const num = (v, k, d) => { const x = clampKey(k, v); return x == null ? d : x; };
   const pickEnum = (v, list, d) => { const x = String(v == null ? '' : v).toLowerCase(); return list.find(e => e.toLowerCase() === x) || d; };
@@ -2006,19 +2209,19 @@ return (() => {
     if (type === 'swing') { p.amp = num(a.angle_degrees, 'amp', D.swing.amp); p.period = num(a.seconds, 'period', D.swing.period); }
     if (type === 'noise') {
       p.type = pickEnum(a.noise_type, ['wave', 'random', 'steps'], D.noise.type);
-      p.pos = num(a.shift_percent, 'pos', D.noise.pos); p.rot = num(a.turn_degrees, 'rot', D.noise.rot); p.speed = num(a.speed, 'speed', D.noise.speed);
+      p.pos = num(a.shift_mm, 'pos', D.noise.pos); p.rot = num(a.turn_degrees, 'rot', D.noise.rot); p.speed = num(a.speed, 'speed', D.noise.speed);
       p.seed = Math.round(num(a.seed, 'seed', D.noise.seed)); p.detail = Math.round(num(a.detail, 'detail', D.noise.detail)); p.rough = num(a.roughness_percent, 'rough', D.noise.rough);
       const axes = (v, d) => v == null ? d : ['x', 'y', 'z'].filter(c => String(v).toLowerCase().includes(c)).join('');
       p.sx = axes(a.shift_axes, D.noise.sx); p.rx = axes(a.turn_axes, D.noise.rx);
     }
     if (type === 'oscillate') {
       p.wave = pickEnum(a.wave, ['sine', 'piston', 'eased', 'triangle'], D.oscillate.wave); p.period = num(a.seconds, 'period', D.oscillate.period);
-      const sh = Array.isArray(a.shift_xyz_percent) ? a.shift_xyz_percent : null, tr = Array.isArray(a.turn_xyz_degrees) ? a.turn_xyz_degrees : null;
+      const sh = Array.isArray(a.shift_xyz_mm) ? a.shift_xyz_mm : null, tr = Array.isArray(a.turn_xyz_degrees) ? a.turn_xyz_degrees : null;
       if (sh) { p.tx = num(sh[0], 'tx', 0); p.ty = num(sh[1], 'ty', 0); p.tz = num(sh[2], 'tz', 0); } else if (!tr) { p.tx = D.oscillate.tx; p.ty = D.oscillate.ty; p.tz = D.oscillate.tz; } else { p.tx = p.ty = p.tz = 0; }
       if (tr) { p.ax = num(tr[0], 'ax', 0); p.ay = num(tr[1], 'ay', 0); p.az = num(tr[2], 'az', 0); } else { p.ax = p.ay = p.az = 0; }
       p.spread = num(a.axis_lag_degrees, 'spread', D.oscillate.spread); p.lag = num(a.turn_lag_degrees, 'lag', D.oscillate.lag); p.ratio = num(a.rod_ratio, 'ratio', D.oscillate.ratio);
     }
-    if (type === 'path') { p.shape = pickEnum(a.shape, Object.keys(SHAPES), D.path.shape); p.plane = pickEnum(a.plane, ['XY', 'XZ', 'YZ'], D.path.plane).toUpperCase(); p.size = num(a.size_percent, 'size', D.path.size); p.period = num(a.seconds, 'period', D.path.period); }
+    if (type === 'path') { p.shape = pickEnum(a.shape, Object.keys(SHAPES), D.path.shape); p.plane = pickEnum(a.plane, ['XY', 'XZ', 'YZ'], D.path.plane).toUpperCase(); p.size = num(a.size_mm, 'size', D.path.size); p.period = num(a.seconds, 'period', D.path.period); }
     const L = { ...D.loop };
     L.mode = pickEnum(a.loop_mode, ['loop', 'pingpong', 'once'], L.mode);
     L.repeat = Math.round(num(a.repeats, 'repeat', L.repeat)); L.delay = num(a.delay_seconds, 'delay', L.delay);
@@ -2051,7 +2254,7 @@ return (() => {
       return { removed_from: keys.length };
     },
     clear() { const n = items.size; remove([...items.keys()]); return { removed_from: n }; },
-    stats() { return { animated: items.size, parts_moved_per_frame: stats.parts, ms_per_frame: Math.round(stats.ms * 100) / 100, playing: items.size > 0 && !paused, speed: rate }; },
+    stats() { return { animated: items.size, parts_moved_per_frame: stats.parts, ms_per_frame: Math.round(stats.ms * 100) / 100, playing: items.size > 0 && !paused, speed: rate, time: clock }; },
     list() {
       return [...items.values()].map(r => ({
         kind: r.kind === 'group' ? 'group' : 'part', name: r.label, id: r.kind === 'part' ? r.partId : undefined, parts: r.kind === 'group' ? r.members.length : undefined,
@@ -2084,6 +2287,7 @@ return (() => {
     fmt: (t) => fmtTC(t),
     rates: RATES,
   };
+  window.__moAnimTest = { api, ctl, refresh, sel: () => ({ lids: [...selLids], lid: selLid }) };      // (tests/e2e-animate-rest.mjs)
   return { ctl, open, closeAll, toggle, suspend, resume, reset, run, bake, remove, hold, seek, pause, play, exit, rewind, refresh, api, serialize, deserialize, hasScene: () => sceneN() > 0, count: () => items.size + sceneN(), isPlaying: () => anyAnim() && !paused, fps: () => projFps };
 })();
 }

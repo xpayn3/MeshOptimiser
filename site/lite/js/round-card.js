@@ -14,12 +14,12 @@
 // the card puts the view back as it was, unless it was changed by hand meanwhile.
 import { fillRoundGrooves, outlineRevolve, sweepBelt, revolveLoops, sweepLoops } from './revolve.js?v=9';
 import { withUvs } from './meshops.js?v=19';
-import { sectionView } from './section-view.js?v=8';      // (round-card: mirror toggle)
+import { sectionView } from './section-view.js?v=9';      // (round-card: mirror toggle)
 
 export function installRoundCard(app) {
   const {
     state, _Prefs, _CmdCards, initScrubber, toast, getPart, fmtNum, pushUndo, settle, setViewMode, _wireLimit,
-    _roundGeom, _stampGeometry, _refreshPartBBox, _decSnap, _getEdgesGeom, _cadEdgesPartSwapped, _uvSetsOf, _disposeEdgesFor, _safeDispose, _nextFrame,
+    _roundGeom, _stampGeometry, _refreshPartBBox, _decSnap, _getEdgesGeom, _cadEdgesPartSwapped, _uvSetsOf, _disposeEdgesFor, _safeDispose, _nextFrame, _Job, _swapPartGeometry,
   } = app;
   const NAMES = { exact: 'Round part: remove ridges', outline: 'Round part: make solid', belt: 'Belt: remove ribs' };
   const DEF = { mode: 'exact', widthShare: 0.15, segments: 0, smooth: 30 };           // (segments 0: the part's own, or 64 for Make solid)
@@ -70,7 +70,13 @@ export function installRoundCard(app) {
   }
 
   // ── the preview ──
+  // the undo and redo buttons in the preview's corner (shown while points are edited; lit when there is a step to go to)
+  function histMarks() {
+    const ed = !!(view && view.editing);
+    for (const k of ['undo', 'redo']) { const b = $i('rc-' + k); if (!b) continue; b.hidden = !ed; b.disabled = !(view && (k === 'undo' ? view.canUndo : view.canRedo)); }
+  }
   const viewOf = () => view || (view = sectionView($i('rc-svg'), {
+    onHistory: () => histMarks(),
     clampY: 0,
     mirrorY: () => (cur && cur.mode !== 'belt' && _Prefs.get('round.mirror') !== false ? 0 : null),      // (the other half of the part, drawn and not edited: a bolt reads as a bolt; the corner button switches it off)
     onEdit(shapes, fast, crossed) {
@@ -116,6 +122,7 @@ export function installRoundCard(app) {
     const r = $i('rc-edit-reset'); if (r) r.hidden = !on;
     const h = $i('rc-edit-hint'); if (h) h.textContent = on ? 'Built from the profile as edited by hand.' : '';      // (how to edit: the view's label)
     const b = $i('rc-edit'); if (b) b.classList.toggle('is-on', ed);
+    histMarks();
     for (const m of document.querySelectorAll('#rc-mode button')) m.classList.toggle('active', m.dataset.m === cur.mode);
     for (const b of document.querySelectorAll('#rc-axis button')) b.classList.toggle('active', b.dataset.a === (cur.o.axis || 'auto'));
     const t = $i('rc-title'); if (t) t.textContent = NAMES[cur.mode];
@@ -127,33 +134,47 @@ export function installRoundCard(app) {
   }
 
   // ── build ──
+  // The step this card applied was undone (Ctrl+Z): the card is as it was before Apply, and Apply builds it again. Redone: it is Done again.
+  document.addEventListener('mo-history', () => {
+    if (!cur) return;
+    const top = state.history[state.history.length - 1], setLbl = (t) => {
+      const lbl = $i('rc-run-lbl'); if (lbl) lbl.textContent = t;
+      const fl = document.querySelector('.section-cmd[data-cmd="round"] .cmd-ok span'); if (fl) fl.textContent = t;
+    };
+    if (cur.op && top !== cur.op && state.redo && state.redo.includes(cur.op)) {
+      clearTimeout(timer); cur.undone = cur.op; cur.op = null;
+      setLbl(cur.items.length > 1 ? 'Apply to ' + fmtNum(cur.items.length) : 'Apply'); say(''); preview();
+    } else if (!cur.op && cur.undone && top === cur.undone) {
+      cur.op = cur.undone; cur.undone = null; setLbl('Done'); preview();
+    }
+  });
   const alive = () => cur && cur.op && state.history[state.history.length - 1] === cur.op;
   const say = (t) => { const el = $i('rc-info'); if (el) el.textContent = t; };
-  async function build() {
+  // build is called by Apply, by the options and by the timer. While it works another call is kept for after (as it always was), and it
+  // takes the app's one-job lock, so another tool cannot start in between.
+  function build() { if (!cur) return Promise.resolve(); if (busy) { again = true; return Promise.resolve(); } return _Job.run(NAMES[cur.mode] || 'Round part', () => build_job()); }
+  async function build_job() {
     if (!cur) return;
     if (busy) { again = true; return; }
     if (cur.op && !alive()) { say('This step is no longer the last one (undo or redo moved past it), so the options change nothing now.'); return; }
     busy = true; again = false;
     const btn = $i('rc-run'); if (btn) btn.disabled = true;
     const freed = [], undoItems = [], bad = [];
+    const lblEl = $i('rc-run-lbl'), lblWas = lblEl ? lblEl.textContent : '';
     try {
       let n = 0;
       for (const it of cur.items) {
-        if (cur.items.length > 4) say('Building ' + (++n) + ' of ' + cur.items.length + '…');
+        { ++n; if (cur.items.length > 4 && lblEl) lblEl.textContent = 'Building ' + n + ' of ' + cur.items.length + '…'; }   // in the button, so the card keeps its height
         const p = getPart(it.partId); if (!p || p.deleted || !p.mesh) continue;
         if (it.crossed) { bad.push(it.name + ': its profile as edited crosses itself'); continue; }
         const r = it === itNow() && it.last && it.last.ok ? it.last : profileOf(it);
         if (!r || !r.ok) { bad.push(it.name + ': ' + ((r && r.why) || 'it could not be done')); continue; }
         let g; try { g = meshOf(it, r); } catch (e) { bad.push(it.name + ': ' + e.message); continue; }
         const before = cur.op ? null : _decSnap(p);
-        const out = _roundGeom(g, it.mat, p.mesh.geometry), old = p.mesh.geometry, oldHash = p.hash, hash = 'rp_' + (state._decSeq = (state._decSeq | 0) + 1);
-        try { _getEdgesGeom(out); } catch (_) {}
-        state.geomByHash.set(hash, out);
-        p.mesh.geometry = _stampGeometry(out); p.hash = hash;
-        p.triCount = g.index.length / 3; p.vertCount = g.positions.length / 3; it.trisAfter = p.triCount;
+        const out = _roundGeom(g, it.mat, p.mesh.geometry);
+        const { old, oldHash } = _swapPartGeometry(p, out, { prefix: 'rp' });
+        it.trisAfter = p.triCount;
         p.shadeAngle = cur.o.smooth;
-        _refreshPartBBox(p); p._fp = null; p._fpKey = null;
-        try { _cadEdgesPartSwapped(p); } catch (_) {}
         if (cur.op) {
           const u = cur.op.items.find(x => x.partId === it.partId);
           if (u) u.after = _decSnap(p);
@@ -168,7 +189,7 @@ export function installRoundCard(app) {
         if (state.viewMode !== 'wire') { cur.viewBefore = state.viewMode; try { setViewMode('wire'); } catch (_) {} }
         try { _wireLimit(cur.items.map(x => x.partId)); } catch (_) {}
       }
-    } finally { busy = false; if (btn) btn.disabled = false; }
+    } finally { busy = false; if (btn) btn.disabled = false; if (lblEl) lblEl.textContent = lblWas; }
     settle();
     (async () => { await _nextFrame(); await _nextFrame(); for (const g of freed) { try { _disposeEdgesFor(g, false); } catch (_) {} try { _safeDispose(g); } catch (_) {} } })();
     if (cur && cur.op) {
@@ -179,7 +200,7 @@ export function installRoundCard(app) {
     }
     if (bad.length) toast(NAMES[cur ? cur.mode : 'exact'], bad[0] + (bad.length > 1 ? ' (and ' + (bad.length - 1) + ' more)' : ''), 'warn', 6000);
     if (cur) preview();
-    if (again) build();
+    if (again) return build_job();      // (inside the job: asking build() again would be turned away by its own lock)
   }
 
   function changed(k, v, fromCtl) {
@@ -231,7 +252,8 @@ export function installRoundCard(app) {
     $i('rc-edit')?.addEventListener('click', () => { if (!cur) return; viewOf().setEdit(!view.editing); marks(); });
     // the other half on or off (remembered); the view fits again, the points as they are
     $i('rc-mirror')?.addEventListener('click', (e) => { e.currentTarget.blur(); if (!cur) return; _Prefs.set('round.mirror', _Prefs.get('round.mirror') === false); viewOf().fit(); marks(); });
-    $i('rc-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.crossed = false; viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
+    for (const k of ['undo', 'redo']) $i('rc-' + k)?.addEventListener('click', () => { if (!cur || !view) return; view[k](); $i('rc-svg')?.focus({ preventScroll: true }); });
+    $i('rc-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.crossed = false; viewOf().reset(null, true); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
     sec?.addEventListener('cmd-close', () => {
       clearTimeout(timer); clearTimeout(selTimer); scanSeq++;
       viewBack();

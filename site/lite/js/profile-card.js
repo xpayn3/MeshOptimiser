@@ -14,13 +14,13 @@
 import { cleanProfile } from './profile.js?v=8';
 import { matchSection, moveShapes } from './section2d.js?v=1';
 import { runMeshOp } from './meshops.js?v=19';
-import { sectionView } from './section-view.js?v=8';
+import { sectionView } from './section-view.js?v=9';
 
 // app: the objects and functions of app.js this card uses (see the call in app.js)
 export function installProfileCard(app) {
   const {
     state, _Prefs, _CmdCards, initScrubber, toast, getPart, fmtNum, requestRender, pushUndo, settle,
-    _roundGeom, _stampGeometry, _refreshPartBBox, _decSnap, _getEdgesGeom, _cadEdgesPartSwapped, _uvSetsOf, _disposeEdgesFor, _safeDispose, _nextFrame,
+    _roundGeom, _stampGeometry, _refreshPartBBox, _decSnap, _getEdgesGeom, _cadEdgesPartSwapped, _uvSetsOf, _disposeEdgesFor, _safeDispose, _nextFrame, _Job, _swapPartGeometry,
   } = app;
   const TITLE = 'Profile: clean outline';
   const DEF = { fill: true, machining: true, widthShare: 0.04, straightShare: 0.0002, smooth: 30, roundShare: 0, offsetShare: 0, chamberShare: 0, holeShare: 0, symmetric: false, match: true, mitre: 45 };      // (smooth: a part that has no Shading angle of its own)
@@ -66,7 +66,13 @@ export function installProfileCard(app) {
 
   // ── the preview, and the editor on it (section-view.js) ──
   let view = null;
+  // the undo and redo buttons in the preview's corner (shown while points are edited; lit when there is a step to go to)
+  function histMarks() {
+    const ed = !!(view && view.editing);
+    for (const k of ['undo', 'redo']) { const b = $i('pf-' + k); if (!b) continue; b.hidden = !ed; b.disabled = !(view && (k === 'undo' ? view.canUndo : view.canRedo)); }
+  }
   const viewOf = () => view || (view = sectionView($i('pf-svg'), {
+    onHistory: () => histMarks(),
     // (shapes null: the edit was taken back before there was one; crossed: an edge of it crosses another, drawn red, not built)
     onEdit(shapes, fast, crossed) {
       const it = itNow(); if (!it) return;
@@ -112,6 +118,7 @@ export function installProfileCard(app) {
     const r = $i('pf-edit-reset'); if (r) r.hidden = !on;
     const h = $i('pf-edit-hint'); if (h) h.textContent = !on ? '' : it.editFrom ? 'The same edit as ' + it.editFrom.name + ' (a matching profile); the section options no longer change it.' : 'Built from the section as edited by hand; the section options no longer change it.' + (it.copies ? ' The same edit goes to ' + fmtNum(it.copies) + ' matching ' + (it.copies === 1 ? 'profile' : 'profiles') + '.' : '');      // (how to edit: the view's label)
     const btn = $i('pf-edit'); if (btn) btn.classList.toggle('is-on', ed);
+    histMarks();
   }
 
   const mm = (v) => fmtNum(v >= 100 ? Math.round(v) : v >= 10 ? Math.round(v * 10) / 10 : Math.round(v * 100) / 100) + ' mm';
@@ -131,6 +138,20 @@ export function installProfileCard(app) {
       + row('Triangles', fmtNum(it.tris0) + ' → ' + fmtNum(it.trisAfter || trisOf(r)) + (cur.items.length > 1 ? ' (this part)' : ''));
   }
   const say = (t) => { const el = $i('pf-info'); if (el) el.textContent = t; };
+  // The step this card applied was undone (Ctrl+Z): the card is as it was before Apply, and Apply builds it again. Redone: it is Done again.
+  document.addEventListener('mo-history', () => {
+    if (!cur) return;
+    const top = state.history[state.history.length - 1], setLbl = (t) => {
+      const lbl = $i('pf-run-lbl'); if (lbl) lbl.textContent = t;
+      const fl = document.querySelector('.section-cmd[data-cmd="profile"] .cmd-ok span'); if (fl) fl.textContent = t;
+    };
+    if (cur.op && top !== cur.op && state.redo && state.redo.includes(cur.op)) {
+      clearTimeout(timer); cur.undone = cur.op; cur.op = null;
+      setLbl(cur.items.length > 1 ? 'Apply to ' + fmtNum(cur.items.length) : 'Apply'); say(''); preview();
+    } else if (!cur.op && cur.undone && top === cur.undone) {
+      cur.op = cur.undone; cur.undone = null; setLbl('Done'); preview();
+    }
+  });
   const alive = () => cur && cur.op && state.history[state.history.length - 1] === cur.op;
 
   // fast: while a point is dragged only the drawing changes (the rest when it is let go)
@@ -154,13 +175,16 @@ export function installProfileCard(app) {
   }
 
   // ── build the parts ──
-  async function build() {
+  // build is called by Apply, by the options and by the timer. While it works another call is kept for after (as it always was), and it
+  // takes the app's one-job lock, so another tool cannot start in between.
+  function build() { if (!cur) return Promise.resolve(); if (busy) { again = true; return Promise.resolve(); } return _Job.run(TITLE, () => build_job()); }
+  async function build_job() {
     if (!cur) return;
     if (busy) { again = true; return; }
     if (cur.op && !alive()) { say('This step is no longer the last one (undo or redo moved past it), so the options change nothing now.'); return; }
     busy = true; again = false;
     const btn = $i('pf-run'); if (btn) btn.disabled = true;
-    const freed = [], undoItems = [], bad = [];
+    const freed = [], undoItems = [], bad = []; let built = 0;      // (built: how many were really made this time; one that crosses itself is skipped with a warning)
     try {
       let n = 0;
       for (const it of cur.items) {
@@ -172,14 +196,10 @@ export function installProfileCard(app) {
         it.holesKept = r.holesKept != null ? r.holesKept : null;
         if (r.holesWhy) bad.push(it.name + ': holes not kept, ' + r.holesWhy);
         const before = cur.op ? null : _decSnap(p);
-        const out = _roundGeom(r, it.mat, p.mesh.geometry), old = p.mesh.geometry, oldHash = p.hash, hash = 'pf_' + (state._decSeq = (state._decSeq | 0) + 1);
-        try { _getEdgesGeom(out); } catch (_) {}
-        state.geomByHash.set(hash, out);
-        p.mesh.geometry = _stampGeometry(out); p.hash = hash;
-        p.triCount = r.index.length / 3; p.vertCount = r.positions.length / 3; it.trisAfter = p.triCount;
+        const out = _roundGeom(r, it.mat, p.mesh.geometry);
+        const { old, oldHash } = _swapPartGeometry(p, out, { prefix: 'pf' });
+        it.trisAfter = p.triCount;
         p.shadeAngle = cur.o.smooth;                                    // (shaded at it: Properties shows it, and starts from it)
-        _refreshPartBBox(p); p._fp = null; p._fpKey = null;
-        try { _cadEdgesPartSwapped(p); } catch (_) {}
         if (cur.op) {                                                   // again, in the same step: the geometry it replaces was ours
           const u = cur.op.items.find(x => x.partId === it.partId);
           if (u) u.after = _decSnap(p); else cur.op.items.push({ partId: p.partId, before: null, after: _decSnap(p) });
@@ -194,13 +214,13 @@ export function installProfileCard(app) {
     (async () => { await _nextFrame(); await _nextFrame(); for (const g of freed) { try { _disposeEdgesFor(g, false); } catch (_) {} try { _safeDispose(g); } catch (_) {} } })();
     if (cur && cur.op) {
       const tb = cur.items.reduce((s, x) => s + x.tris0, 0), ta = cur.items.reduce((s, x) => s + (x.trisAfter || x.tris0), 0);
-      say('Built ' + (cur.items.length > 1 ? fmtNum(cur.items.length) + ' profiles ' : '') + '· ' + fmtNum(tb) + ' → ' + fmtNum(ta) + ' triangles. The options now build ' + (cur.items.length > 1 ? 'them' : 'it') + ' again; Ctrl+Z takes the whole step back.');
+      say('Built ' + (built < cur.items.length ? fmtNum(built) + ' of ' + fmtNum(cur.items.length) + ' profiles (the others were left as they were: see the warning) ' : cur.items.length > 1 ? fmtNum(cur.items.length) + ' profiles ' : '') + '· ' + fmtNum(tb) + ' → ' + fmtNum(ta) + ' triangles. The options now build ' + (cur.items.length > 1 ? 'them' : 'it') + ' again; Ctrl+Z takes the whole step back.');
       const lbl = $i('pf-run-lbl'); if (lbl) lbl.textContent = 'Done';
       const fl = document.querySelector('.section-cmd[data-cmd="profile"] .cmd-ok span'); if (fl) fl.textContent = 'Done';
     }
     if (bad.length) toast(TITLE, bad[0] + (bad.length > 1 ? ' (and ' + (bad.length - 1) + ' more)' : ''), 'warn', 6000);
     if (cur) preview();
-    if (again) build();
+    if (again) return build_job();      // (inside the job: asking build() again would be turned away by its own lock)
   }
 
   // an option changed: the preview at once, and the parts again (after Apply) when it rests
@@ -244,7 +264,8 @@ export function installProfileCard(app) {
     $i('pf-prev')?.addEventListener('click', () => step(-1));
     $i('pf-next')?.addEventListener('click', () => step(1));
     $i('pf-edit')?.addEventListener('click', () => { if (!cur) return; viewOf().setEdit(!view.editing); markEdited(); });
-    $i('pf-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.edited = false; it.crossed = false; it.editFrom = null; spread(it); viewOf().reset(null); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
+    for (const k of ['undo', 'redo']) $i('pf-' + k)?.addEventListener('click', () => { if (!cur || !view) return; view[k](); $i('pf-svg')?.focus({ preventScroll: true }); });
+    $i('pf-edit-reset')?.addEventListener('click', () => { const it = itNow(); if (!it) return; it.shapes = null; it.edited = false; it.crossed = false; it.editFrom = null; spread(it); viewOf().reset(null, true); preview(); if (cur.op) { clearTimeout(timer); timer = setTimeout(build, 160); } });
     $i('pf-reset')?.addEventListener('click', () => {
       const it = itNow(); if (!cur || !it) return; const s = it.last && it.last.ok ? it.last.sectionSize * it.scale : 0;
       changed('fill', DEF.fill); changed('machining', DEF.machining); changed('smooth', DEF.smooth); changed('sym', DEF.symmetric); changed('match', DEF.match);
@@ -280,16 +301,30 @@ export function installProfileCard(app) {
 
   // ── open ──
   // Which parts are profiles: each is looked at in turn, a few at a time, so the page stays live on a big scene.
+  // (The page is given back after about 40 ms of work, not after a fixed number of parts: a few heavy parts freeze it as much as many light ones.)
   async function scan(parts, machining, quiet, seq) {
     const items = [], skipped = [];
+    let t0 = performance.now();
     for (let i = 0; i < parts.length; i++) {
       if (seq !== scanSeq) return null;
-      const p = parts[i], it = sourceOf(p);
-      let r; try { r = cleanProfile(it.P, it.I, { dryRun: true, widthAbs: 0, fillMachining: machining }); } catch (e) { r = { ok: false, why: e.message }; }
-      if (r.ok) items.push(it); else skipped.push({ name: p.name, why: r.why });
-      if (!quiet && parts.length > 6 && i % 6 === 5) { say('Looking for profiles · ' + (i + 1) + ' of ' + parts.length + ' parts…'); await _nextFrame(); }
+      const p = parts[i];
+      let it = null, r;
+      try { it = sourceOf(p); r = cleanProfile(it.P, it.I, { dryRun: true, widthAbs: 0, fillMachining: machining }); } catch (e) { r = { ok: false, why: (e && e.message) || 'it could not be read' }; }
+      if (r && r.ok && it) items.push(it); else skipped.push({ name: p.name, why: (r && r.why) || 'it is not a profile' });
+      if (parts.length > 1 && performance.now() - t0 > 40) {
+        if (!quiet) say('Looking for profiles · ' + (i + 1) + ' of ' + parts.length + ' parts…');
+        await _nextFrame(); t0 = performance.now();
+      }
     }
     return { items, skipped };
+  }
+  // The reasons parts were left out, said once each with how many: "3 parts: an end is not one flat cut (…); 1 part: …"
+  function whyOf(skipped) {
+    const by = new Map();
+    for (const s of skipped) { const e = by.get(s.why) || { n: 0, name: s.name }; e.n++; by.set(s.why, e); }
+    const rows = [...by].sort((a, b) => b[1].n - a[1].n);
+    const say1 = ([why, e]) => (skipped.length === 1 ? '' : e.n + (e.n === 1 ? ' part (' + e.name + ')' : ' parts') + ': ') + why;
+    return rows.slice(0, 2).map(say1).join('; ') + (rows.length > 2 ? '; and ' + (rows.length - 2) + ' other ' + (rows.length === 3 ? 'reason' : 'reasons') : '');
   }
   function partsFor(o) {
     const picked = o.ids && o.ids.length ? o.ids : [...state.selected];
@@ -307,7 +342,7 @@ export function installProfileCard(app) {
     const found = await scan(parts, machining, !!o.quiet, seq);
     if (!found) return { ok: false, why: 'stopped' };
     const { items, skipped } = found;
-    if (!items.length) { if (!o.quiet) toast(TITLE, (skipped.length === 1 ? skipped[0].name + ' was left as it was: ' : 'None of the ' + skipped.length + ' parts is a profile: ') + skipped[0].why, 'warn', 7000); return { ok: false, why: skipped[0].why, skipped }; }
+    if (!items.length) { const w = whyOf(skipped); if (!o.quiet) toast(TITLE, (skipped.length === 1 ? skipped[0].name + ' was left as it was: ' : 'None of the ' + skipped.length + ' parts is a profile. ') + w, 'warn', 9000); return { ok: false, why: skipped[0].why, skipped }; }
     clearTimeout(timer);
     const lead = items[0], r0 = cleanProfile(lead.P, lead.I, { dryRun: true, widthAbs: 0, fillMachining: machining });
     const secMm = r0.sectionSize * lead.scale;
@@ -337,7 +372,7 @@ export function installProfileCard(app) {
         extend: num(o.extend_mm, 0),
       },
     };
-    if (skipped.length && !o.quiet && !whole) toast(TITLE, skipped.length + (skipped.length === 1 ? ' part is' : ' parts are') + ' not a profile and will be left as ' + (skipped.length === 1 ? 'it is' : 'they are') + ': ' + skipped[0].why, 'info', 6000);
+    if (skipped.length && !o.quiet && !whole) toast(TITLE, fmtNum(items.length) + (items.length === 1 ? ' profile' : ' profiles') + ' found. ' + fmtNum(skipped.length) + (skipped.length === 1 ? ' part is' : ' parts are') + ' not a profile and will be left as ' + (skipped.length === 1 ? 'it is' : 'they are') + '. ' + whyOf(skipped), 'info', 8000);
     if (!o.quiet) {
       wire();
       viewOf().reset(null); viewOf().setEdit(false);

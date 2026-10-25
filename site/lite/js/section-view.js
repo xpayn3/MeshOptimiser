@@ -9,7 +9,10 @@
 // points out and Alt-click takes one out at once. Edges that cross another are drawn red. The view knows
 // nothing of parts: the card shows it a section and hears of each edit (fast while a handle is being dragged, at most once a frame).
 //
-// sectionView(svg, { onEdit(shapes, fast, crossed), clampY, mirrorY }) → { show({ before, after, shapes }), setEdit(on), editing, fit(), reset() }
+// Every edit made here (a point let go, points taken out, one added) is a step of this window's own history: Ctrl+Z / Ctrl+Shift+Z
+// (Ctrl+Y) with the view in focus, or undo() / redo(); onHistory() hears when they can go. It starts again with each part shown.
+//
+// sectionView(svg, { onEdit(shapes, fast, crossed), onHistory(), clampY, mirrorY }) → { show({ before, after, shapes }), setEdit(on), editing, fit(), reset(shapes, keep), undo(), redo(), canUndo, canRedo }
 //   before, after: loops of [x, y] (y up; outlines counter-clockwise); shapes: the new section as [{ outer, holes }], the one the
 //   editor works on (a copy of it is made at the first edit and handed to onEdit from then on; null when an edit is taken back with
 //   Esc before there was one); crossed: an edge of it crosses another (told when a drag ends); clampY: no point below this y (a
@@ -47,6 +50,12 @@ export function crossings(shapes) {
 export function sectionView(svg, hooks = {}) {
   let data = null, view = null, home = null, edit = false, snap = null, guide = null, work = null, drag = null, bad = null;
   let raf = 0, pend = null;
+  // this window's history: the section as it was before each edit (null: the options' own), and the ones undone
+  const past = [], future = [];
+  const cloneW = (w) => w && w.map(S => ({ outer: S.outer.map(p => p.slice()), holes: S.holes.map(H => H.map(p => p.slice())) }));
+  const heard = () => { if (hooks.onHistory) { try { hooks.onHistory(); } catch (e) { console.warn('section history', e); } } };
+  const record = (pre) => { past.push(pre); if (past.length > 200) past.shift(); future.length = 0; heard(); };
+  const wipe = () => { past.length = 0; future.length = 0; heard(); };
   // the points picked, by "shape:loop:point" (indices into the section as it is now; any edit that adds or takes out points clears it)
   const sel = new Map();
   const key = (s, l, p) => s + ':' + l + ':' + p;
@@ -159,7 +168,7 @@ export function sectionView(svg, hooks = {}) {
   const drop = () => { svg.classList.remove('is-pan'); if (raf) cancelAnimationFrame(raf); raf = 0; pend = null; if (drag) { try { svg.releasePointerCapture(drag.id); } catch (_) {} } drag = null; snap = null; guide = null; };
   // the picked points taken out (each outline keeps three at least), the highest first so the others keep their places
   function takeOut() {
-    const by = new Map();
+    const pre = cloneW(work), by = new Map();
     for (const { s, l, p } of sel.values()) { const k = s + ':' + l; if (!by.has(k)) by.set(k, { s, l, ps: [] }); by.get(k).ps.push(p); }
     let n = 0;
     for (const { s, l, ps } of by.values()) {
@@ -169,7 +178,7 @@ export function sectionView(svg, hooks = {}) {
       ps.filter(p => p < L.length).sort((a, b) => b - a).slice(0, room).forEach(p => { L.splice(p, 1); n++; });
     }
     sel.clear();
-    if (n) told(false);
+    if (n) { record(pre); told(false); }
     draw();
   }
 
@@ -226,7 +235,7 @@ export function sectionView(svg, hooks = {}) {
       const s = +c.dataset.s, l = +c.dataset.l, p = +c.dataset.p, L0 = loopOf(shapesNow(), s, l);
       if (!L0 || !L0[p]) return;
       e.preventDefault();
-      if (e.altKey) { if (L0.length > 3) { loopOf(own(), s, l).splice(p, 1); sel.clear(); told(false); draw(); } return; }
+      if (e.altKey) { if (L0.length > 3) { const pre = cloneW(work); loopOf(own(), s, l).splice(p, 1); record(pre); sel.clear(); told(false); draw(); } return; }
       const k = key(s, l, p);
       if (sub) { sel.delete(k); draw(); return; }                            // (Ctrl-click: that point is no longer picked)
       // a click on a point picks it alone; Shift adds it; on one of several picked, they stay picked (a drag moves them all) and a click
@@ -236,7 +245,7 @@ export function sectionView(svg, hooks = {}) {
       pick(s, l, p);
       const sh = shapesNow(), items = [...sel.values()].filter(v => { const M = loopOf(sh, v.s, v.l); return M && M[v.p]; }).map(v => ({ ...v, was: loopOf(sh, v.s, v.l)[v.p].slice() }));
       // (the section is copied only once a point really moves: a click alone leaves it the options' own)
-      drag = { kind: 'pt', s, l, p, id: e.pointerId, base: L0[p].slice(), items, moving: new Set(items.map(v => key(v.s, v.l, v.p))), fresh: !work, alone };
+      drag = { kind: 'pt', s, l, p, id: e.pointerId, base: L0[p].slice(), items, moving: new Set(items.map(v => key(v.s, v.l, v.p))), fresh: !work, alone, pre: cloneW(work) };
       hold(e); draw(); return;
     }
     if (e.button !== 1 && e.button !== 2) return;                           // (pan: the middle or the right button only)
@@ -264,7 +273,7 @@ export function sectionView(svg, hooks = {}) {
       const p = L[d.p], tiny = (home ? Math.max(home.w, home.h) : 1) * 1e-9;
       for (const k of [(d.p + n - 1) % n, (d.p + 1) % n]) if (Math.hypot(L[k][0] - p[0], L[k][1] - p[1]) <= tiny) { L.splice(k, 1); sel.clear(); pick(d.s, d.l, k < d.p ? d.p - 1 : d.p); break; }
     }
-    told(false); draw();
+    record(d.pre); told(false); draw();
   };
   svg.addEventListener('contextmenu', (e) => e.preventDefault());           // (the right button pans here)
   svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end); svg.addEventListener('lostpointercapture', end);
@@ -292,7 +301,7 @@ export function sectionView(svg, hooks = {}) {
         const b = L[(i + 1) % L.length], ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey || 1, t = Math.max(0, Math.min(1, ((q[0] - a[0]) * ex + (q[1] - a[1]) * ey) / l2));
         const d = Math.hypot(a[0] + t * ex - q[0], a[1] + t * ey - q[1]); if (d < lim && (!best || d < best.d)) best = { d, s, l, i, p: clamp([a[0] + t * ex, a[1] + t * ey]) };
       })));
-      if (best) { loopOf(own(), best.s, best.l).splice(best.i + 1, 0, best.p); sel.clear(); pick(best.s, best.l, best.i + 1); told(false); draw(); return; }
+      if (best) { const pre = cloneW(work); loopOf(own(), best.s, best.l).splice(best.i + 1, 0, best.p); record(pre); sel.clear(); pick(best.s, best.l, best.i + 1); told(false); draw(); return; }
       if (e.target.closest && e.target.closest('.pf-pt')) return;           // (a double-click on a point: not a fit)
     }
     view = null; draw();                                                    // (a double-click on nothing: fit)
@@ -309,6 +318,11 @@ export function sectionView(svg, hooks = {}) {
   }, { passive: false });
   svg.addEventListener('keydown', (e) => {
     if (!edit || drag) return;
+    // Ctrl+Z undoes the last edit made here, Ctrl+Shift+Z or Ctrl+Y does it again (not the scene's own undo while this view is in focus)
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y')) {
+      e.preventDefault(); e.stopPropagation();
+      (e.key === 'y' || e.key === 'Y' || e.shiftKey ? redo : undo)(); return;
+    }
     // Ctrl+A: every point picked
     if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); e.stopPropagation(); sel.clear(); eachPoint((p, s, l, i) => pick(s, l, i)); draw(); return; }
     if (!sel.size || (e.key !== 'Delete' && e.key !== 'Backspace')) return;
@@ -316,7 +330,18 @@ export function sectionView(svg, hooks = {}) {
     takeOut();
   });
 
+  // a step back or forward: the section as it was is told to the card like any edit
+  function step(from, to) {
+    if (!from.length) return false;
+    drop(); to.push(cloneW(work)); work = from.pop(); bad = work ? crossings(work) : null; sel.clear();
+    told(false); draw(); heard(); return true;
+  }
+  const undo = () => step(past, future), redo = () => step(future, past);
+
   return {
+    get canUndo() { return past.length > 0; },
+    get canRedo() { return future.length > 0; },
+    undo, redo,
     // fit: start the view again (another part shown)
     show(d, fit) {
       data = d && (d.before || d.after) ? d : null;
@@ -329,6 +354,7 @@ export function sectionView(svg, hooks = {}) {
     get editing() { return edit; },
     fit() { view = null; draw(); },
     // forget the edited copy (the card went back to the section the options make, or shows another part)
-    reset(shapes) { drop(); work = shapes || null; bad = work ? crossings(work) : null; sel.clear(); draw(); },
+    // keep: the card's own Reset points, which is a step of the history too (the section it had goes to the past)
+    reset(shapes, keep) { drop(); if (keep) { if (work) record(cloneW(work)); } else wipe(); work = shapes || null; bad = work ? crossings(work) : null; sel.clear(); draw(); },
   };
 }

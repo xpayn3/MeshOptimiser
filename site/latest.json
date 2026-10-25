@@ -1,31 +1,31 @@
 {
  "schema": 1,
  "stable": {
-  "version": "0.37.0",
-  "date": "2026-10-24",
-  "headline": "A section view that cuts the scene with a plane, a Photo mode with a toolbar, lens rings and softboxes, Remove thickness, textures in OBJ and FBX exports, and 17 fixes.",
+  "version": "0.37.1",
+  "date": "2026-10-25",
+  "headline": "A History card that goes back to any step, a Model inspector that draws faults on the model, an Animate window that keeps what you move and copies clips, Settings as cards, and 58 fixes.",
   "notes": [
-   "Section view: cut the whole scene with one plane to look inside (Explode still works)",
-   "Photo mode with a toolbar of its own, lens rings under V and softboxes in the reflections",
-   "Remove thickness: a pipe keeps its outside, a bent sheet one face",
-   "OBJ and FBX exports carry their textures, and normal maps come out the right way up",
-   "Profile: round, grow and trim the outline; every value slider is a fill bar",
-   "17 fixes: a group volume larger than the group, blurry textures at a slant, dark CAD looks, Simplify round faces on pipes"
+   "History card: every step Ctrl+Z goes back to, and a click goes to any of them",
+   "Model inspector redrawn; Show in the view draws open edges, wrong-way faces, empty and doubled triangles on the model",
+   "Animate: positions in mm, copy and paste of clips, a part you move keeps its place, Space plays anywhere",
+   "Settings as cards, and Saved in a scene file says what a file keeps (shadows start off every time)",
+   "Right-click menus on the Animate, Library, Materials, search and \"...\" buttons; texture size and WebP when exporting",
+   "58 fixes: Select similar, the floating Materials window, a black view while resizing, Camera settings padding"
   ],
   "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
   "archive": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.0/meshoptimiser-app-0.37.0.zip",
-   "sha256": "93dee35ec3a6f439383d482deab8fe64f50d794060310f6f5b0a1529509b7234",
-   "size": 12848217
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.1/meshoptimiser-app-0.37.1.zip",
+   "sha256": "f13e39b582420b601890af85cda55675b651969c181045bf4f2a7ad7a4646d39",
+   "size": 12986916
   },
   "requirements_sha256": "e3af5e22260095931b56d0d0d5c9215cd98b7540739be7eda417276748a7a322",
   "requirements_changed": false,
   "launcher": 4,
   "min_from": "",
   "installer": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.0/MeshOptimiser-v0.37.0.zip",
-   "sha256": "dd09f94a3555734791d85c825dc73130842fb5426e9eae5de4f29f30956d01e2",
-   "size": 12891440
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.1/MeshOptimiser-v0.37.1.zip",
+   "sha256": "8e5915d934d826714c8bb733e5e8b0abdc6d46d9ca224965bfb2b3617995cc82",
+   "size": 13030100
   }
  }
 }

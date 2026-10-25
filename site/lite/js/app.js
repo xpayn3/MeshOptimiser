@@ -1,9 +1,14 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=34';
-import { installHoleFillCard } from './holefill-card.js?v=2';
-import { installProfileCard } from './profile-card.js?v=21';
-import { installRoundCard } from './round-card.js?v=18';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=38';
+import { installHoleFillCard } from './holefill-card.js?v=5';
+import { installPivotCard } from './pivot-card.js?v=4';
+import { installHistoryCard } from './history-card.js?v=1';
+import { installXrayGhost } from './xray-ghost.js?v=7';
+import { installProfileCard } from './profile-card.js?v=26';
+import { installRoundCard } from './round-card.js?v=22';
+import { installBakeCard } from './bake-card.js?v=5';
+import { installUvSplit } from './uv-split.js?v=28';
 import { installDecimateCard } from './decimate-card.js?v=3';
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
@@ -14,19 +19,20 @@ import { carryUvs } from './uvcarry.js?v=2';
 import { createPhoto } from './photo.js?v=14';
 import { createStage } from './photo-stage.js?v=4';
 import * as MEDIT from './meshedit.js?v=6';
-import { dissolvePoints } from './dissolve.js?v=3';
-import * as MT from './meshtools.js?v=5';
+import { dissolvePoints } from './dissolve.js?v=4';
+import * as MT from './meshtools.js?v=6';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=3';
 import * as SPL from './splines.js?v=3';
 import { reduceIndex, reduceWithin, packAttributes } from './simplify-core.js?v=7';
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
-import { checkMesh } from './meshcheck.js?v=3';
+import { checkMesh } from './meshcheck.js?v=4';
+import { KINDS as GEO_KINDS, build as geoBuild, dispose as geoDispose } from './geo-overlay.js?v=1';
 import * as FM from './facemat.js?v=2';
-import { setExportTextureFormats } from './texformat.js?v=1';
-import { installExportWriters } from './export-writers.js?v=1';
-import { installAnim } from './anim.js?v=1';
+import { setExportTextureFormats, shrinkExportTextures } from './texformat.js?v=2';
+import { installExportWriters } from './export-writers.js?v=2';
+import { installAnim } from './anim.js?v=9';
 import { installSectionPlane } from './section-plane.js?v=1';
 import * as TS from './texsets.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -55,11 +61,15 @@ const $ = id => document.getElementById(id);
 const HOLD_MENU_MS = 220;
 // The Highlight button of the Delete small parts card: a lit bulb while the small parts are highlighted, an unlit one when they are not.
 function _hiliteIcon(on) {
-  const b = document.getElementById('tg-hilite'); if (!b) return;
   const name = on ? 'lightbulb' : 'lightbulb-off';
-  if (b._ic === name) return; b._ic = name;
-  b.innerHTML = '<i data-lucide="' + name + '"></i>Highlight';      // (a fresh placeholder: Lucide has turned the first one into an svg)
-  try { _lucide(); } catch (_) {}
+  let changed = false;
+  for (const b of document.querySelectorAll('[data-hilite]')) {      // (Delete small parts and Filters & flags carry one each)
+    b.classList.toggle('active', !!on);
+    if (b._ic === name) continue; b._ic = name;
+    b.innerHTML = '<i data-lucide="' + name + '"></i>' + (b.hasAttribute('aria-label') ? '' : 'Highlight');      // (a fresh placeholder: Lucide has turned the first one into an svg)
+    changed = true;
+  }
+  if (changed) { try { _lucide(); } catch (_) {} }
 }
 
 // Back faces are drawn darker, as in Cinema 4D, so a flipped face or an open shell shows at a glance. three lights a
@@ -154,11 +164,13 @@ if (typeof window !== 'undefined') {
     get requestRender() { return requestRender; },
     get _treeGroupDescendants() { return _treeGroupDescendants; },
     get THREE() { return THREE; },
+    get _exportDrawList() { return _exportDrawList; },      // (tests/e2e-xray-ghost.mjs: what an export would take)
     get camera() { return camera; },
     get renderer() { return renderer; },
     get controls() { return controls; },
     get applyPerfMode() { return applyPerfMode; },
     get applySelectionColors() { return applySelectionColors; },
+    get _addPrimitive() { return _addPrimitive; },      // (tests/e2e-prim-edit.mjs)
     get clearModel() { return clearModel; },
     get fitToView() { return fitToView; },
     get reindexParts() { return _reindexParts; },
@@ -181,6 +193,13 @@ if (typeof window !== 'undefined') {
     // Used by tests/selftest.js to exercise a tree drop without faking a drag.
     get _dndCommitHier() { return _dndCommitHier; },
     get _lucide() { return (typeof _lucide !== 'undefined') ? _lucide : null; },
+    // The group pivots (tests/e2e-group-pivot.mjs).
+    get _groupPivotAct() { return _groupPivotAct; },
+    get _groupOrigins() { return _groupOrigins; },
+    get _groupRotations() { return _groupRotations; },
+    get buildExportRoot() { return buildExportRoot; },
+    get _saveSceneImpl() { return _saveSceneImpl; },
+    get _exportFbxBinary() { return _exportFbxBinary; },
     // Screenshot helpers, for feature modules that save an image, so they
     // share the file picker and the naming.
     get _saveScreenshotBlob() { return _saveScreenshotBlob; },
@@ -1175,8 +1194,8 @@ const _Tasks = (() => {
   const m = new Map();
   let sig = '';
   const publish = () => {
-    const list = [...m.values()].map(t => ({ id: t.id, label: t.label, detail: t.detail, pct: t.pct, t0: t.t0, cancel: !!t.cancel }));
-    const s = JSON.stringify(list.map(t => [t.id, t.label, t.detail, t.pct == null ? null : Math.round(t.pct)]));
+    const list = [...m.values()].map(t => ({ id: t.id, label: t.label, detail: t.detail, pct: t.pct, t0: t.t0, cancel: !!t.cancel, passive: !!t.passive }));
+    const s = JSON.stringify(list.map(t => [t.id, t.label, t.detail, t.pct == null ? null : Math.round(t.pct), t.passive]));
     if (s === sig) return;
     sig = s;
     try { _Tabs.report({ tasks: list }); } catch (_) {}
@@ -1186,6 +1205,7 @@ const _Tasks = (() => {
     end(id) { if (m.delete(id)) publish(); },
     // (a passive task only shows progress: nothing is being made that an undo could cross, so it does not hold undo and redo back)
     busy() { for (const t of m.values()) if (!t.passive) return true; return false; },
+    list() { return [...m.values()].map(t => ({ id: t.id, label: t.label, passive: !!t.passive })); },
     cancel(id) { const t = m.get(id); if (t && t.cancel) { try { t.cancel(); } catch (e) { console.warn('[tasks] cancel:', e); } } },
   };
 })();
@@ -1196,15 +1216,27 @@ window.__moCancelTask = (id) => _Tasks.cancel(id);
 // callers that must hear about it (Claude's tools): it throws instead of just saying so.
 const _Job = (() => {
   let cur = null;
+  const age = () => (cur ? Math.round((Date.now() - cur.t0) / 1000) : 0);
+  // Stop waiting for the job that holds the lock (one that never ended would turn every other command away for good). The job itself,
+  // if it is only slow, still finishes; it no longer blocks the next one.
+  const release = () => { if (!cur) return ''; const n = cur.name; cur = null; try { _Tasks.end('job'); } catch (_) {} return n; };
   return {
     busy: () => (cur ? cur.name : ''),
+    age, release,
     run(name, fn, { task = true } = {}) {      // task: false for a job that puts its own, with progress, on the Tasks list
-      if (cur) { try { toast('Still working', cur.name + ' is not finished. Wait for it to end.', 'warn', 2200); } catch (_) {} return Promise.resolve(); }
-      cur = { name };
+      if (cur) {
+        const s = age();
+        const how = s >= 90 ? Math.round(s / 60) + ' min' : s + ' s';
+        try { toast('Still working', s >= 20 ? cur.name + ' has been running for ' + how + '. Stop it from the Tasks list in the status bar, or search for “Reset stuck state”.' : cur.name + ' is not finished. Wait for it to end.', 'warn', s >= 20 ? 5200 : 2200); } catch (_) {}
+        return Promise.resolve();
+      }
+      const mine = { name, t0: Date.now() };
+      cur = mine;
       // It is on the Tasks list of the status bar while it works (those that report their own progress, as Remove holes does, are left to it).
+      // Stop: the workers are told to stop; a job that has not ended four seconds later stops holding the lock, so the next command runs.
       const own = !task;
-      if (!own) { try { _Tasks.set('job', { label: name, detail: '', pct: null, cancel: () => { try { _MeshWorkers.cancelAll(name); } catch (_) {} } }); } catch (_) {} }
-      return Promise.resolve().then(fn).finally(() => { cur = null; if (!own) { try { _Tasks.end('job'); } catch (_) {} } });
+      if (!own) { try { _Tasks.set('job', { label: name, detail: '', pct: null, cancel: () => { try { _MeshWorkers.cancelAll(name); } catch (_) {} setTimeout(() => { if (cur === mine) { release(); try { toast('Stopped waiting', name + ' did not end. You can run another command now.', 'warn', 3600); } catch (_) {} } }, 4000); } }); } catch (_) {} }
+      return Promise.resolve().then(fn).finally(() => { if (cur === mine) { cur = null; if (!own) { try { _Tasks.end('job'); } catch (_) {} } } });
     },
     strict(fn) { return (...a) => { if (cur) throw new Error(cur.name + ' is still running; wait for it to finish'); return fn(...a); }; },
   };
@@ -1722,7 +1754,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=81', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=87', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -1802,6 +1834,23 @@ function _importMapUrl(name) {
 // swap visible. On a geometry that is already on the GPU this costs one
 // re-upload, which is why undo / redo can use it too.
 let _geomVersionSeq = 1 << 20;
+// Put a new geometry on a part: the same steps for every tool that builds a part again (Profile, Round part, the mesh tools), so none of
+// them forgets one. The new geometry gets its edges, a name in the table (`prefix` + a number), the stamp the GPU needs, the part's
+// counts and box, and the CAD lines of the part go on to the new shape; CAD faces a tool kept (`o.cad`) are handed on. Returns the
+// geometry that was replaced and its name: the caller frees them when no undo step can want them back.
+function _swapPartGeometry(p, out, o = {}) {
+  const old = p.mesh.geometry, oldHash = p.hash;
+  const hash = (o.prefix || 'g') + '_' + (state._decSeq = (state._decSeq | 0) + 1);
+  _quiet('swap: edges of the new geometry', () => _getEdgesGeom(out));
+  state.geomByHash.set(hash, out);
+  p.mesh.geometry = _stampGeometry(out); p.hash = hash;
+  const pos = out.attributes.position;
+  p.triCount = out.index ? out.index.count / 3 : pos.count / 3; p.vertCount = pos.count;
+  _refreshPartBBox(p); p._fp = null; p._fpKey = null;
+  if (o.cad && o.cad.faces) _quiet('swap: CAD faces handed on', () => _Brep.adopt(out, o.cad));
+  _quiet('swap: CAD lines of the part', () => _cadEdgesPartSwapped(p));
+  return { old, oldHash, hash };
+}
 function _stampGeometry(g) {
   if (!g || !g.attributes) return g;
   // A geometry that goes to the GPU for a lit material has its normals, one for each point: the pipeline is built for them, and a
@@ -2106,6 +2155,7 @@ function _snapWorldMats() {
 // fold into the previous entry so one gesture is one Ctrl+Z.
 function _withTransformUndo(tag, fn) {
   const before = _snapWorldMats();
+  const goBefore = state.selectedGroupIds?.size ? _snapGroupFrames() : null;
   try { return fn(); }
   finally {
     try {
@@ -2127,6 +2177,7 @@ function _withTransformUndo(tag, fn) {
         const sameGesture = !(state.redo && state.redo.length) && last && last.type === 'transformGroup' && last._panelTag &&      // (folded with redo waiting, a redo set the old value back)
           ((last._panelTag === tag && now - last._panelAt < 1200) || now - last._panelAt < 250);
         if (sameGesture) {
+          if (last._go) last._go.after = _snapGroupFrames();
           const byId = new Map(last.items.map(it => [it.partId, it]));
           for (const it of items) {
             const prev = byId.get(it.partId);
@@ -2135,6 +2186,7 @@ function _withTransformUndo(tag, fn) {
           last._panelAt = now;
         } else {
           pushUndo({ type: 'transformGroup', label: 'Transform', items, _panelTag: tag, _panelAt: now });
+          if (goBefore) { const op = state.history[state.history.length - 1]; if (op && op.type === 'transformGroup') op._go = { before: goBefore, after: _snapGroupFrames() }; }
         }
         // (a scale typed for a tree group: the number the fields show goes with the step)
         if (_groupScalePending) { const op = state.history[state.history.length - 1]; if (op && op.type === 'transformGroup') op._gs = op._gs && op._gs.gid === _groupScalePending.gid ? { gid: op._gs.gid, before: op._gs.before, after: _groupScalePending.after } : _groupScalePending; }
@@ -2750,7 +2802,7 @@ const _ImportSettings = (() => {
       // (a preset is its two numbers, also for settings saved before the numbers existed)
       if (isStep && _PRESETS[opts.quality]) [opts.sag, opts.angle] = _PRESETS[opts.quality];
       opts.append = !!forceAppend;          // (Import appends, Open does not; never remembered from last time)
-      if (_skipModal(ext)) { resolve(opts); return; }
+      if ((file && file.__moBatch) || _skipModal(ext)) { resolve(opts); return; }      // (a batch takes the settings saved for the format: no window per file)
 
       const bg = document.getElementById('import-modal');
       if (!bg) { resolve(opts); return; }
@@ -3363,12 +3415,16 @@ async function _revertToSourceFile() {
   const detail = editCount > 0
     ? `Discards every edit (${editCount} undo entr${editCount === 1 ? 'y' : 'ies'} + deletions, hierarchy changes, colours, merges, splits) and re-parses ${state._sourceFile.name}.`
     : `Re-parses ${state._sourceFile.name} from scratch.`;
-  const ok = await appConfirmDestructive(detail, {
+  // The same window as Refresh and Quit: Keep edits, and a slider to pull to revert.
+  const act = await _confirmQuitDialog({
     title: 'Revert to original model?',
-    okLabel: 'Revert',
-    cancelLabel: 'Keep edits',
+    text: detail,
+    discard: 'Slide to revert',
+    cancel: 'Keep edits',
+    slide: true,
+    save: false,
   });
-  if (!ok) return;
+  if (act !== 'discard') return;
   // Source file may be any supported mesh format — route through the same
   // dispatcher used by drag-and-drop so revert works for FBX/OBJ/3MF/STL too.
   const meshLoader = _loaderForName(state._sourceFile?.name);
@@ -3393,15 +3449,18 @@ function _confirmQuitDialog(o = {}) {
     card.innerHTML =
       `<div class="cq-head"><span class="cq-ico"><i data-lucide="triangle-alert"></i></span><div class="cq-title">${_t.title}</div></div>` +
       `<div class="cq-text">${_t.text}</div>` +
+      (_t.slide ? `<div class="cq-slide" role="group"><div class="cq-slide-fill"></div><div class="cq-slide-label">${_t.discard}</div><button type="button" class="cq-slide-thumb" data-slide role="slider" aria-label="${_t.discard}: slide to the end to confirm" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i data-lucide="chevron-right"></i></button></div>` : '') +
       `<div class="cq-foot">` +
-        `<button type="button" class="cq-btn cq-danger" data-act="discard">${_t.discard}</button>` +
+        (_t.slide || _t.flat ? '' : `<button type="button" class="cq-btn cq-danger" data-act="discard">${_t.discard}</button>`) +
         `<span class="cq-gap"></span>` +
         `<button type="button" class="cq-btn" data-act="cancel">${_t.cancel}</button>` +
-        (_t.save === false ? '' : `<button type="button" class="cq-btn cq-primary" data-act="save">Save</button>`) +
+        (_t.save === false ? '' : `<button type="button" class="cq-btn cq-primary" data-act="save">${_t.okLabel || 'Save'}</button>`) +
       `</div>`;
     bg.appendChild(card);
     document.body.appendChild(bg);
     try { _lucide(); } catch (_) {}
+    if (_t.slide || _t.flat) card.classList.add('has-slide');      // (flat: the same window without the track, Cancel and the one button, okLabel, which answers 'save')
+    if (_t.slide) card.querySelector('.cq-foot').after(card.querySelector('.cq-slide'));      // (Cancel and Save first, the way out last)
     try { card.querySelector('[data-act="' + (_t.save === false ? 'cancel' : 'save') + '"]').focus(); } catch (_) {}
     const finish = (act) => {
       document.removeEventListener('keydown', onKey, true);
@@ -3412,11 +3471,51 @@ function _confirmQuitDialog(o = {}) {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act) finish(act);
     });
+    // Slide to confirm: the thumb is pulled to the far end (a release short of the end springs back; the arrow keys move it too).
+    const track = card.querySelector('.cq-slide');
+    if (track) {
+      const thumb = track.querySelector('.cq-slide-thumb'), fill = track.querySelector('.cq-slide-fill');
+      let pos = 0, drag = null, done = false;
+      const range = () => Math.max(1, track.clientWidth - thumb.offsetWidth - 2 * thumb.offsetLeft);
+      const show = (p) => {
+        pos = Math.max(0, Math.min(1, p));
+        thumb.style.transform = 'translateX(' + (pos * range()) + 'px)';
+        fill.style.width = (thumb.offsetLeft + thumb.offsetWidth / 2 + pos * range()) + 'px';      // (ends under the thumb's middle, so it never shows round it)
+        track.style.setProperty('--p', pos.toFixed(3));
+        thumb.setAttribute('aria-valuenow', String(Math.round(pos * 100)));
+      };
+      const commit = () => {      // the thumb runs to the end, the fill closes, the arrow turns into a tick, then the window fades out
+        if (done) return; done = true;
+        track.classList.remove('is-back', 'is-drag'); track.classList.add('is-done');
+        show(1); fill.style.width = '100%';
+        thumb.innerHTML = '<i data-lucide="check"></i>'; try { _lucide(); } catch (_) {}
+        setTimeout(() => card.classList.add('is-leaving'), 260);
+        setTimeout(() => finish('discard'), 460);
+      };
+      const release = () => {
+        if (!drag) return; drag = null; track.classList.remove('is-drag');
+        if (pos >= 0.92) commit(); else { track.classList.add('is-back'); show(0); setTimeout(() => track.classList.remove('is-back'), 480); }
+      };
+      thumb.addEventListener('pointerdown', (e) => {
+        if (done) return; e.preventDefault();
+        drag = { x: e.clientX, p: pos }; track.classList.add('is-drag'); track.classList.remove('is-back');
+        try { thumb.setPointerCapture(e.pointerId); } catch (_) {}
+        thumb.focus();
+      });
+      thumb.addEventListener('pointermove', (e) => { if (drag) show(drag.p + (e.clientX - drag.x) / range()); });
+      thumb.addEventListener('pointerup', release);
+      thumb.addEventListener('pointercancel', release);
+      thumb.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); if (pos + 0.34 >= 0.92) commit(); else show(pos + 0.34); }
+        else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); show(pos - 0.34); }
+      });
+    }
     bg.addEventListener('click', (e) => { if (e.target === bg) finish('cancel'); });
     const onKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); finish('cancel'); }
       else if (e.key === 'Enter') {
         const f = document.activeElement, act = f && f.dataset ? f.dataset.act : '';
+        if (f && f.dataset && f.dataset.slide && bg.contains(f)) return;      // (Enter on the slider does nothing: it is pulled, or moved with the arrows)
         if (f && f.tagName === 'BUTTON' && act && act !== 'save' && bg.contains(f)) return;      // Enter on "Don't save" or Cancel means that button
         e.preventDefault(); finish(_t.save === false ? 'cancel' : 'save');      // (no Save button: Enter keeps things as they are)
       }
@@ -3442,7 +3541,7 @@ async function _showInboxFolder() {
 async function _quitApp() {
   const hasContent = (state.parts || []).some(p => !p.deleted);
   if (hasContent) {
-    const action = await _confirmQuitDialog();
+    const action = await _confirmQuitDialog({ title: 'Quit?', discard: 'Slide to quit without saving', slide: true });
     if (action === 'cancel') return;
     if (action === 'save') {
       const ok = await saveScene();
@@ -3453,7 +3552,7 @@ async function _quitApp() {
     }
   } else {
     let ok = false;
-    try { ok = await appConfirm('The local server will stop.', { title: 'Quit MeshOptimiser?', okLabel: 'Quit' }); } catch (_) {}
+    try { ok = (await _confirmQuitDialog({ title: 'Quit?', text: 'The local server will stop.', flat: true, okLabel: 'Quit' })) === 'save'; } catch (_) {}
     if (!ok) return;
   }
   // The other tabs are scenes of their own; one of them may have work that is not saved.
@@ -3534,6 +3633,7 @@ async function _openRecentByKey(key) {
 const _Prefs = (() => {
   const KEY = 'stepopt-prefs';
   const DEFAULTS = {
+    saveCamera: true, saveDisplay: true, saveLights: true, saveShadows: false, saveUnits: true, saveParts: true, saveExplode: true, saveAnim: true, saveNotes: true,      // (what a scene file keeps: Settings › General › "Saved in a scene file"; the shadows start off every time and are kept only if asked)
     welcomeOnBoot: true,
     splashOnStart: true,             // the short splash while the app opens
     dynPlaceAlign: true,             // Dynamic place: turn the part to face the surface it rests on
@@ -3575,6 +3675,20 @@ const _Prefs = (() => {
     searchInitials: true,    // "rh" finds Remove holes
     searchRecentFirst: true, // what was run lately stands a little higher
     searchMax: 14,           // the most commands listed for what was typed
+    // Search, Look (Settings › Search › Look)
+    searchWidth: 'standard',       // how wide it opens: 'compact' | 'standard' | 'wide' (a width dragged by hand is used until one of these is chosen)
+    searchOpensAt: 'remember',     // where it opens: 'remember' (where it was left, else a fifth down) | 'middle' | 'top'
+    searchTransparency: 0,         // how see-through the window is, in percent (0 = solid); it is blurred behind as it gets clearer
+    searchBackdrop: 'none',        // what the rest of the app does while it is open: 'none' | 'dim' | 'blur'
+    searchDensity: 'normal',       // the height of a row: 'compact' | 'normal' | 'roomy'
+    searchIcons: '',               // 'colour' | 'grey' | 'none' ('' = what the older Coloured icons switch said)
+    searchGroupLabel: 'typing',    // the group's name at the end of a row: 'typing' (only while something is typed) | 'always' | 'never'
+    searchKeys: true,              // the shortcut keys of a command, on its row
+    searchHeadings: true,          // Recent, Suggestions, Commands, Parts ... above their rows
+    searchFooter: true,            // the line of hints at the bottom
+    searchChips: true,             // the filter buttons under the field: All, Commands, Parts, Library, Settings
+    searchRecentsOpen: true,       // the commands run last (six at most) lead the list while nothing is typed
+    ghostOpacity: 18,              // X-ray isolate: how much of the other parts shows, in percent (the dial under the comma key)
   };
   // A stored value whose kind is not the default's (a string where a number belongs, an object for a switch: a hand-edited or
   // damaged entry) is dropped for the default; numbers must be finite. Keys with no default (the tools' own settings) are kept.
@@ -3604,6 +3718,89 @@ const _Prefs = (() => {
     reset() { cur = { ...DEFAULTS }; save(cur); },
   };
 })();
+
+// What the search's icons look like: 'colour' (each kind has its own), 'grey', or 'none'. The older switch (Coloured icons) still counts until the new choice is made.
+function _searchIcons() {
+  const v = _Prefs.get('searchIcons');
+  if (v === 'colour' || v === 'grey' || v === 'none') return v;
+  return _Prefs.get('searchIconColours') === false ? 'grey' : 'colour';
+}
+
+// An error that is swallowed on purpose ("the outline is only a nicety") still leaves a trace: the first of each kind goes to the log
+// panel, and the State section counts them. About 1,600 places in this file swallow one with an empty catch; the ones that matter are
+// moved here a few at a time, starting with the swap of a part's geometry.
+const _quietLog = { n: 0, tags: new Map() };
+function _quiet(tag, fn, fallback) {
+  try { return fn(); }
+  catch (e) {
+    _quietLog.n++;
+    const c = (_quietLog.tags.get(tag) || 0) + 1; _quietLog.tags.set(tag, c);
+    if (c === 1) { try { console.warn('[quiet] ' + tag + ': ' + ((e && e.message) || e)); } catch (_) {} }
+    return fallback;
+  }
+}
+// Troubleshooting. When a function stops working, something is usually still holding it: a job that never ended, a card or mode left
+// open, orbiting left off, the messages muted. The State section of the Tasks list (the chip in the status bar) lists those, the chip gets a
+// red dot while one of them looks stuck, and Reset stuck state lets go of them. A model is never touched.
+const _Diag = (() => {
+  const q = (f, d = 'none') => { try { const v = f(); return v == null || v === '' ? d : v; } catch (_) { return d; } };
+  // What is wrong, if anything. A job that runs, a drag and an undo are normal while they last: only what stays wrong with nothing running counts.
+  const probs = () => {
+    const idle = !_Tasks.busy() && !_Job.busy();
+    return {
+      job: _Job.age() > 60,
+      orbit: idle && q(() => controls && !controls.enabled && !(state.gizmo && state.gizmo.dragging), false),
+      muted: idle && !!window.__moQuietToasts,
+      undo: idle && !!window.__moInUndo,
+    };
+  };
+  function rows() {
+    const job = _Job.busy(), age = _Job.age(), p = probs();
+    return [
+      ['Job', job ? job + ' · ' + age + ' s' : 'none', p.job],
+      ['Card open', q(() => [...document.querySelectorAll('.section-cmd')].filter(c => !c.hidden).map(c => c.dataset.cmd).join(', '))],
+      ['Window open', q(() => [...document.querySelectorAll('.modal-bg.show, .dlg-popup.show')].map(e => e.id || e.className.split(' ')[0]).join(', '))],
+      ['Orbit', q(() => (controls ? (controls.enabled ? 'on' : 'OFF') : 'none')), p.orbit],
+      ['Gizmo', q(() => (state.gizmo && state.gizmo.dragging ? 'dragging' : 'idle'))],
+      ['Place', q(() => (_DynPlace.isOn() ? (_DynPlace.busy() ? 'on, busy' : 'on') : 'off'))],
+      ['Isolated', q(() => (state._isolated ? (state._isolatedBy || 'selection') : 'no'))],
+      ['Selected', q(() => state.selected.size)],
+      ['Messages', window.__moQuietToasts ? 'MUTED' : 'on', p.muted],
+      ['In undo', window.__moInUndo ? 'YES' : 'no', p.undo],
+      ['Quiet errors', _quietLog.n ? _quietLog.n + ' · ' + ([..._quietLog.tags].sort((a, b) => b[1] - a[1])[0] || ['', ''])[0] : 'none'],
+      ['Body classes', q(() => document.body.className.trim().slice(0, 90))],
+      ['Focus', q(() => { const a = document.activeElement; return a ? a.tagName.toLowerCase() + (a.id ? '#' + a.id : '') : ''; })],
+    ];
+  }
+  // The dot on the chip: only when something looks wrong on two looks in a row (two seconds), so a move in progress does not flash it.
+  let prev = false;
+  function flag() {
+    const chip = document.getElementById('sb-bg'); if (!chip) return;
+    let bad = false; try { bad = Object.values(probs()).some(Boolean); } catch (_) {}
+    chip.classList.toggle('has-warn', bad && prev);
+    prev = bad;
+  }
+  setInterval(() => { if (!document.hidden) flag(); }, 1000);
+  // The command "Show state": the Tasks list, with the State section open.
+  const api = { rows, flag, wantOpen: false, open() {
+    const pop = document.getElementById('sb-bg-pop');
+    if (pop) { const d = pop.querySelector('.bgp-state'); if (d) d.open = true; return; }
+    api.wantOpen = true; document.getElementById('sb-bg')?.click();
+  } };
+  return api;
+})();
+// What the State section shows, as an object (tests/e2e-stress.mjs reads it; { Job: { v: 'none', bad: false }, ... }).
+window.__moState = () => { const o = {}; for (const [k, v, bad] of _Diag.rows()) o[k] = { v, bad: !!bad }; return o; };
+function _unstick() {
+  const did = [];
+  const j = _Job.release(); if (j) did.push('stopped waiting for ' + j);
+  try { if (controls && !controls.enabled) { controls.enabled = true; did.push('orbiting is on again'); } } catch (_) {}
+  if (window.__moQuietToasts) { window.__moQuietToasts = false; did.push('messages are on again'); }
+  if (window.__moInUndo) { window.__moInUndo = false; did.push('undo flag cleared'); }
+  try { for (const c of document.querySelectorAll('.section-cmd')) if (!c.hidden) { _CmdCards.close(c.dataset.cmd); did.push('closed ' + c.dataset.cmd); } } catch (_) {}
+  try { requestRender(); } catch (_) {}
+  toast('Reset', did.length ? did.join(', ') : 'Nothing was stuck', 'info', 3200);
+}
 
 // How fast the view orbits and zooms: Settings › Camera › Speed.
 function _applyCameraFeel() {
@@ -4242,6 +4439,16 @@ const _Settings = (() => {
       _toggleRow('set-sounds', 'Interface sounds', p.uiSounds !== false, 'Soft clicks from the gizmos and quick wheels of the viewport: the lens rings of Photo mode as they turn and catch on a mark, the command wheel (Q), the colour wheel and the quick remesh pill (B) as they open and go from one choice to the next. Made by the app itself, quiet and short.') +
       _group('Opening files') +
       _toggleRow('set-autofit', 'Fit the view after loading', p.autoFitOnLoad, 'Frame the whole model as soon as it opens.') +
+      _group('Saved in a scene file') +
+      _toggleRow('set-sv-camera', 'The camera', p.saveCamera !== false, 'Where you were looking from.') +
+      _toggleRow('set-sv-display', 'Display', p.saveDisplay !== false, 'The look of the view: shading mode, grid, background and light of the scene, fog, small parts highlighted.') +
+      _toggleRow('set-sv-lights', 'Lights', p.saveLights !== false, 'Exposure, sun, ambient light and where the sun stands.') +
+      _toggleRow('set-sv-shadows', 'Shadows', p.saveShadows === true, 'Off: a file never turns the shadows on, and they start off every time the app opens. On: a file keeps them as they were when it was saved.') +
+      _toggleRow('set-sv-units', 'Units and size', p.saveUnits !== false, 'The unit sizes are shown in, the scale of the scene, which way is up and the grid cell.') +
+      _toggleRow('set-sv-parts', 'Hidden, flagged and locked parts', p.saveParts !== false, 'Which parts are hidden, flagged or locked, and whether the view was isolated.') +
+      _toggleRow('set-sv-explode', 'The exploded view', p.saveExplode !== false, 'How far the parts were pulled apart.') +
+      _toggleRow('set-sv-anim', 'Animation', p.saveAnim !== false, 'The animations of the Animate window and its timeline.') +
+      _toggleRow('set-sv-notes', 'Notes', p.saveNotes !== false, 'The review notes and the conversations on them. The Save window can still leave them out of one file. A duplicate of the scene or a recovery copy keeps all of it, except the shadows.') +
       _group('Tabs') +
       _toggleRow('set-same-sidebars', 'Same sidebars in every tab', (() => { try { return _Tabs.sameSidebars(); } catch (_) { return true; } })(), 'Switching tabs keeps the sidebar widths, and the folded left sidebar, of the tab you came from. Off: each tab keeps its own.') +
       _group('Bottom docks') +
@@ -4255,7 +4462,10 @@ const _Settings = (() => {
       `<div class="set-row set-stack"><span>Keep a recovery copy<span class="set-help">While a scene has changes that are not saved, a copy of it is kept inside this browser, only when something changed and never while you are dragging. If the app crashes, it offers the scene back the next time it starts. Closing or reloading on purpose does not bring it back, and saving clears the copy. Your files are never touched. A big scene takes a moment to copy, so it is copied less often.</span></span>${_chipsPref('autosaveMin', [['Off', 0], ['Every minute', 1], ['2 minutes', 2], ['5 minutes', 5]], p.autosaveMin ?? 2)}</div>` +
       _group('New scenes') +
       `<div class="set-row set-stack"><span>Unit<span class="set-help">What a new scene shows sizes in. The scene you have open keeps its own; change it in its Scene settings.</span></span>${_chipsPref('newUnit', [['mm', 'mm'], ['cm', 'cm'], ['m', 'm'], ['in', 'in'], ['ft', 'ft'], ['No unit', 'none']], p.newUnit || 'mm')}</div>` +
-      `<div class="set-row set-stack"><span>Up axis<span class="set-help">Z-up for CAD (NX, SolidWorks), Y-up for Maya, glTF and Unity. Used by every scene you start from now on, a new tab or a reload.</span></span>${_chipsPref('newUpAxis', [['Z-up', 'z'], ['Y-up', 'y']], p.newUpAxis || 'z')}</div>`;
+      `<div class="set-row set-stack"><span>Up axis<span class="set-help">Z-up for CAD (NX, SolidWorks), Y-up for Maya, glTF and Unity. Used by every scene you start from now on, a new tab or a reload.</span></span>${_chipsPref('newUpAxis', [['Z-up', 'z'], ['Y-up', 'y']], p.newUpAxis || 'z')}</div>` +
+      _group('Troubleshooting') +
+      `<div class="set-row set-action"><span>State<span class="set-help">What the app thinks is going on (the running job, the open card, whether orbiting is on) is at the end of the Tasks list in the status bar. The chip gets a red dot when something looks stuck.</span></span><button class="btn" id="set-state">Show</button></div>` +
+      `<div class="set-row set-action"><span>Reset stuck state<span class="set-help">Stops waiting for a job that never ended, turns orbiting back on, shows messages again and closes any open card. The model is not touched.</span></span><button class="btn" id="set-unstick">Reset</button></div>`;
     if (!window.__MESHOPT_DEMO) _fillClaude();
     // Search: what it looks through, and how closely a name has to fit (read by _CmdK each time something is typed)
     const sp = $s('set-pane-search');
@@ -4274,23 +4484,37 @@ const _Settings = (() => {
         _toggleRow('set-search-typos', 'Forgive a slip of the finger', on('searchTypos'), 'One letter wrong, missing, one too many, or two the wrong way round still finds the command.') +
         _toggleRow('set-search-initials', 'Initials', on('searchInitials'), '“rh” finds Remove holes, “ss” finds Save scene.') +
         _group('Look') +
-        _toggleRow('set-search-colour', 'Coloured icons', on('searchIconColours'), 'Each kind of result has a colour of its own on its icon: commands by their group, parts, library parts, settings, answers. Off: the icons are all grey.') +
+        `<div class="set-row set-stack"><span>Width<span class="set-help">How wide the search opens. Drag its right edge to set your own; choosing one here puts it back.</span></span>${_chipsPref('searchWidth', [['Compact', 'compact'], ['Standard', 'standard'], ['Wide', 'wide']], p.searchWidth || 'standard')}</div>` +
+        `<div class="set-row set-stack"><span>Where it opens<span class="set-help">Where you left it, in the middle of the view, or near the top. Hold its search icon and drag to move it; a double-click puts it back.</span></span>${_chipsPref('searchOpensAt', [['Where I left it', 'remember'], ['Middle', 'middle'], ['Near the top', 'top']], p.searchOpensAt || 'remember')}</div>` +
+        `<div class="set-row set-stack"><span>Transparency<span class="set-help">How much of the view shows through the window. The clearer it is, the more the view behind it is blurred, so the words stay easy to read.</span></span>${_chipsPref('searchTransparency', [['Solid', 0], ['Slight', 12], ['Medium', 25], ['High', 40], ['Glass', 55]], p.searchTransparency || 0)}</div>` +
+        `<div class="set-row set-stack"><span>Behind it<span class="set-help">What the rest of the app does while the search is open: nothing, a little darker, or blurred.</span></span>${_chipsPref('searchBackdrop', [['Nothing', 'none'], ['Dim', 'dim'], ['Blur', 'blur']], p.searchBackdrop || 'none')}</div>` +
+        `<div class="set-row set-stack"><span>Row height<span class="set-help">How tightly the results are packed.</span></span>${_chipsPref('searchDensity', [['Compact', 'compact'], ['Normal', 'normal'], ['Roomy', 'roomy']], p.searchDensity || 'normal')}</div>` +
+        `<div class="set-row set-stack"><span>Icons<span class="set-help">Colour: each kind of result has a colour of its own on its icon (commands by their group, parts, library parts, settings, answers). Grey: one colour. None: no icons.</span></span>${_chipsPref('searchIcons', [['Colour', 'colour'], ['Grey', 'grey'], ['None', 'none']], _searchIcons())}</div>` +
+        `<div class="set-row set-stack"><span>Group name on a row<span class="set-help">The small grey name at the end of a row (Selection, View ...).</span></span>${_chipsPref('searchGroupLabel', [['While typing', 'typing'], ['Always', 'always'], ['Never', 'never']], p.searchGroupLabel || 'typing')}</div>` +
+        _toggleRow('set-search-keys', 'Shortcut keys', on('searchKeys'), 'The keys of a command, at the end of its row.') +
+        _toggleRow('set-search-headings', 'Section headings', on('searchHeadings'), 'Recent, Suggestions, Commands, Parts ... above their rows. Off: one flat list.') +
+        _toggleRow('set-search-chips', 'Filter buttons under the field', on('searchChips'), 'All, Commands, Parts, Library and Settings: one press narrows the search to that kind, the same as a mark typed in front. Tab and Shift+Tab move between them.') +
+        _toggleRow('set-search-footer', 'Hint line at the bottom', on('searchFooter'), 'The keys that move, run and close, and the examples of what to type.') +
         _group('Order') +
         _toggleRow('set-search-recent', 'What you used lately comes first', on('searchRecentFirst'), 'Among commands that fit about as well, the ones you ran last stand higher.') +
         `<div class="set-row set-stack"><span>How many results<span class="set-help">The most commands listed for what you typed. Parts get about half as many rows.</span></span>${_chipsPref('searchMax', [['Few', 8], ['Normal', 14], ['Many', 30]], p.searchMax || 14)}</div>` +
         _group('While you type') +
         `<div class="set-row set-stack"><span>A mark in front narrows the search<span class="set-help">&gt; commands only · @ parts only · + library parts only · # settings only. For example “@bracket” lists parts and nothing else.</span></span></div>` +
-        `<div class="set-row set-action"><span>Recent commands<span class="set-help">The five commands you ran last lead the list while nothing is typed.</span></span><button class="btn" id="set-search-forget">Forget them</button></div>`;
-      [['set-search-sidebar', 'searchSidebar'], ['set-search-parts', 'searchParts'], ['set-search-library', 'searchLibrary'], ['set-search-answers', 'searchAnswers'], ['set-search-settings', 'searchSettings'], ['set-search-switches', 'searchSwitches'], ['set-search-colour', 'searchIconColours'],
+        _toggleRow('set-search-recents', 'Recent commands when it opens', on('searchRecentsOpen'), 'The six commands you ran last lead the list while nothing is typed.') +
+        `<div class="set-row set-action"><span>Forget the recent commands<span class="set-help">Empties that list.</span></span><button class="btn" id="set-search-forget">Forget them</button></div>`;
+      [['set-search-sidebar', 'searchSidebar'], ['set-search-parts', 'searchParts'], ['set-search-library', 'searchLibrary'], ['set-search-answers', 'searchAnswers'], ['set-search-settings', 'searchSettings'], ['set-search-switches', 'searchSwitches'], ['set-search-keys', 'searchKeys'], ['set-search-headings', 'searchHeadings'], ['set-search-footer', 'searchFooter'], ['set-search-chips', 'searchChips'], ['set-search-recents', 'searchRecentsOpen'],
        ['set-search-synonyms', 'searchSynonyms'], ['set-search-typos', 'searchTypos'], ['set-search-initials', 'searchInitials'], ['set-search-recent', 'searchRecentFirst'],
-      ].forEach(([id, key]) => $s(id)?.addEventListener('change', (e) => _Prefs.set(key, e.target.checked)));
+      ].forEach(([id, key]) => $s(id)?.addEventListener('change', (e) => { _Prefs.set(key, e.target.checked); try { _CmdK.applyLook(); } catch (_) {} }));
       $s('set-search-forget')?.addEventListener('click', () => { try { localStorage.removeItem('stepopt-cmdk-recent'); } catch (_) {} toast('Search', 'Recent commands forgotten', 'info', 2200); });
       if (!sp._wired) {
         sp._wired = true;
         sp.addEventListener('click', (e) => {
           const b = e.target.closest('[data-v]'), grp = b && b.closest('[data-pref]');
           if (!b || !grp) return;
-          _Prefs.set(grp.dataset.pref, +b.dataset.v);
+          const raw = b.dataset.v;
+          _Prefs.set(grp.dataset.pref, raw !== '' && Number.isFinite(+raw) ? +raw : raw);
+          if (grp.dataset.pref === 'searchWidth' || grp.dataset.pref === 'searchOpensAt') { try { _CmdK.resetGeo(grp.dataset.pref); } catch (_) {} }
+          try { _CmdK.applyLook(); } catch (_) {}
           grp.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('is-on', x === b));
         });
       }
@@ -4330,6 +4554,7 @@ const _Settings = (() => {
     $s('set-sel-glow')?.addEventListener('change', (e) => { _Prefs.set('selGlow', e.target.checked); state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} });
     $s('set-hilite')?.addEventListener('change', (e) => { const t = $s('toggle-highlight'); if (t) { t.checked = e.target.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } });
     [
+      ['set-sv-camera', 'saveCamera'], ['set-sv-display', 'saveDisplay'], ['set-sv-lights', 'saveLights'], ['set-sv-shadows', 'saveShadows'], ['set-sv-units', 'saveUnits'], ['set-sv-parts', 'saveParts'], ['set-sv-explode', 'saveExplode'], ['set-sv-anim', 'saveAnim'], ['set-sv-notes', 'saveNotes'],
       ['set-splash', 'splashOnStart'], ['set-sounds', 'uiSounds'], ['set-welcome', 'welcomeOnBoot'], ['set-restore', 'autoRestoreSession'], ['set-autofit', 'autoFitOnLoad'],
       ['set-confirm', 'confirmDestructive'], ['set-share-dock-h', 'shareDockHeight'], ['set-warn-unsaved', 'warnUnsaved'], ['set-auto-empty', 'autoDeleteEmptyGroups'], ['set-zoom-cursor', 'zoomToCursor'], ['set-hover-link', 'hoverLink'], ['set-orbit-invert', 'orbitInvert'], ['set-orbit-limit', 'orbitLimit'], ['set-offscreen', 'offscreenArrow'],
     ].forEach(([id, key]) => {
@@ -4342,6 +4567,8 @@ const _Settings = (() => {
         if (key === 'hoverLink' && !e.target.checked) { try { window.__moHoverLink && window.__moHoverLink.off(); } catch (_) {} }
       });
     });
+    $s('set-state')?.addEventListener('click', () => { try { _Settings.hide(); } catch (_) {} _Diag.open(); });
+    $s('set-unstick')?.addEventListener('click', () => _unstick());
     $s('set-same-sidebars')?.addEventListener('change', e => { try { _Tabs.setSameSidebars(e.target.checked); } catch (_) {} });
     try { window._enhanceSelects?.(); } catch (_) {}
     if ($s('settings-search')?.value) _search($s('settings-search').value);
@@ -4361,26 +4588,28 @@ const _Settings = (() => {
     if (_structuring) return;
     _structuring = true;
     try {
-      for (const b of document.querySelectorAll('#set-main .set-pane-b')) {
+      for (const b of document.querySelectorAll('#set-main .set-pane-b, #set-main #set-camera-prefs')) {      // (the Camera pane keeps its navigation groups in a box of their own)
         if (!b.querySelector(':scope > .set-group-title')) continue;
         const pane = b.closest('.set-pane'), pid = pane.dataset.pane;
         pane.querySelector(':scope > .set-jump')?.remove();
         let card = null; const titled = [];
         for (const kid of [...b.children]) {
+          if (kid.id === 'set-camera-prefs') { b.appendChild(kid); card = null; continue; }      // (its own groups come after the cards above it, not inside the last one)
           if (kid.classList.contains('set-group-title')) {
             const title = kid.textContent.trim(), key = pid + '/' + title;
             card = document.createElement('div');
             card.className = 'set-card'; card.dataset.key = key;
-            card.innerHTML = '<button type="button" class="set-card-h" aria-expanded="true"><span class="set-card-t"></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+            card.innerHTML = '<button type="button" class="set-card-h" aria-expanded="true"><span class="set-card-t"></span><span class="set-card-n"></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="set-card-b"><div class="set-card-bi"></div></div>';
             card.querySelector('.set-card-t').textContent = title;
             if (_fold.get(key)) { card.classList.add('is-fold'); card.firstChild.setAttribute('aria-expanded', 'false'); }
             b.appendChild(card); titled.push(card); kid.remove();
           } else {
             if (!card) { card = document.createElement('div'); card.className = 'set-card set-card-plain'; b.appendChild(card); }
-            card.appendChild(kid);
+            (card.querySelector(':scope > .set-card-b > .set-card-bi') || card).appendChild(kid);
           }
         }
-        if (titled.length >= 3) {
+        for (const c of titled) _cardLive(c);
+        if (titled.length >= 3 && b.parentNode === pane) {
           const j = document.createElement('div'); j.className = 'set-jump';
           titled.forEach((c, i) => { const a = document.createElement('button'); a.type = 'button'; a.className = 'set-jump-c'; a.dataset.i = String(i); a.textContent = c.querySelector('.set-card-t').textContent; j.appendChild(a); });
           pane.insertBefore(j, b);
@@ -4388,14 +4617,46 @@ const _Settings = (() => {
       }
     } finally { _structuring = false; }
   }
+  // A card of switches says how many are on, and a card of five or more plain switches is shown as tiles (a tile lights when its switch is on)
+  // with All on / None, and the line under them reads what the tile the pointer is on does. The rows are the same elements, moved and
+  // restyled, so every id and listener stays.
+  const TILE_HINT = 'Point at a setting to read what it does.';
+  function _cardLive(card) {
+    const bi = card.querySelector(':scope > .set-card-b > .set-card-bi'); if (!bi) return;
+    const rows = [...bi.children].filter(k => k.classList && k.classList.contains('set-row') && k.classList.contains('toggle'));
+    const plain = rows.length >= 5 && rows.length === bi.children.length && rows.every(r => r.querySelectorAll('input').length === 1 && r.querySelector('input[type=checkbox]'));
+    if (plain && !bi.querySelector(':scope > .set-tiles')) {
+      const grid = document.createElement('div'); grid.className = 'set-tiles';
+      for (const r of rows) grid.appendChild(r);
+      const tools = document.createElement('div'); tools.className = 'set-card-tools';
+      tools.innerHTML = '<span class="set-tile-desc"></span><button type="button" class="set-mini" data-set-all="on">All on</button><button type="button" class="set-mini" data-set-all="off">None</button>';
+      tools.firstChild.textContent = TILE_HINT;
+      bi.appendChild(grid); bi.appendChild(tools);
+    }
+    _cardCount(card);
+  }
+  function _cardCount(card) {
+    const n = card.querySelector('.set-card-n'); if (!n) return;
+    if (card.querySelector('.set-card-bi select, .set-card-bi .cs-wrap, .set-card-bi input:not([type=checkbox])')) { n.textContent = ''; n.classList.remove('is-all', 'is-none'); return; }      // (a count of switches only on a card that is made of switches)
+    const boxes = [...card.querySelectorAll('.set-card-bi .toggle input[type=checkbox]')].filter(x => !x.closest('[style*="display:none"], [hidden]'));
+    if (boxes.length < 2) { n.textContent = ''; n.classList.remove('is-all'); return; }
+    const on = boxes.filter(x => x.checked).length;
+    n.textContent = on + ' of ' + boxes.length + ' on'; n.classList.toggle('is-all', on === boxes.length); n.classList.toggle('is-none', on === 0);
+  }
   function _structureWire() {
     if (_structWired) return;
     const main = $s('set-main'); if (!main) return;
     _structWired = true;
     const later = () => queueMicrotask(_structure);
     const mo = new MutationObserver(later);
-    for (const b of main.querySelectorAll('.set-pane-b')) mo.observe(b, { childList: true });
+    for (const b of main.querySelectorAll('.set-pane-b, #set-camera-prefs')) mo.observe(b, { childList: true });
+    main.addEventListener('change', (e) => { const c = e.target.closest && e.target.closest('.set-card'); if (c) _cardCount(c); });
+    main.addEventListener('pointerover', (e) => { const t = e.target.closest && e.target.closest('.set-tiles > .set-row'); if (!t) return; const d = t.closest('.set-card-bi').querySelector('.set-tile-desc'); const h = t.querySelector('.set-help'); if (d) d.textContent = h ? h.textContent : TILE_HINT; });
+    main.addEventListener('focusin', (e) => { const t = e.target.closest && e.target.closest('.set-tiles > .set-row'); if (!t) return; const d = t.closest('.set-card-bi').querySelector('.set-tile-desc'); const h = t.querySelector('.set-help'); if (d) d.textContent = h ? h.textContent : TILE_HINT; });
+    main.addEventListener('pointerleave', () => { for (const d of main.querySelectorAll('.set-tile-desc')) d.textContent = TILE_HINT; });
     main.addEventListener('click', (e) => {
+      const all = e.target.closest && e.target.closest('[data-set-all]');
+      if (all) { const want = all.dataset.setAll === 'on'; for (const cb of all.closest('.set-card-bi').querySelectorAll('.set-tiles input[type=checkbox]')) if (cb.checked !== want && !cb.disabled) cb.click(); return; }
       const h = e.target.closest('.set-card-h');
       if (h) {
         const card = h.parentElement, fold = !card.classList.contains('is-fold');
@@ -4821,6 +5082,7 @@ const _Welcome = (() => {
     if (!bg) return;
     _renderRecents();
     _setMode('pick');
+    { const imp = document.getElementById('welcome-import'); if (imp) imp.hidden = !state.parts.some(p => !p.deleted); }      // (Import adds to the open scene: with none open there is nothing to add to)
     bg.classList.add('show');
     requestAnimationFrame(_recentsEdges);
   }
@@ -5097,154 +5359,10 @@ const _CmdCards = (() => {
   return { open, close, closeTop, runTop, isOpen };
 })();
 
-// ── UV layout card ──────────────────────────────────────────────────────────
-// Shows how the selected part's texture coordinates lie on the 0–1 square: the islands, the space they use, where islands lie on each
-// other, what is outside the square, and how even the texel density is. Read-only: nothing in the scene changes. The numbers come from
-// uvtools.js (loaded when the card is first opened); the card looks at the selection while it is open (every 400 ms, only then).
-const _UVView = (() => {
-  const card = document.querySelector('.section-cmd[data-cmd="uvview"]');
-  if (!card) return null;
-  const MAX_TRIS = 600000;                      // a bigger part is not read on the page: reduce it first
-  const cache = new WeakMap();                  // geometry → { sig, r }
-  let mod = null, timer = 0, lastSig = '', token = 0, last = null, ro = null, raf = 0;
-  const el = (id) => document.getElementById(id);
-  const loadMod = async () => mod || (mod = await import('./uvtools.js?v=1'));
-  const pickPart = () => {
-    if (!state.selected) return null;
-    const ids = [...state.selected];
-    for (let i = ids.length - 1; i >= 0; i--) { const p = getPart(ids[i]); if (p && !p.deleted && !p.isSpline) return { p, n: ids.length }; }
-    return null;
-  };
-  const geomOf = (p) => (p.mesh && p.mesh.geometry) || (p.instancedMesh && p.instancedMesh.geometry) || (state.geomByHash && state.geomByHash.get(p.hash)) || null;
-  const sigOf = (hit) => {
-    if (!hit) return '';
-    const g = geomOf(hit.p), uv = g && g.attributes && g.attributes.uv, pos = g && g.attributes && g.attributes.position;
-    return [hit.p.partId, hit.n, g ? g.uuid : '-', uv ? uv.version : -1, pos ? pos.version + ':' + pos.count : -1, g && g.index ? g.index.count : -1].join('|');
-  };
-  const flat = (a, size) => {
-    if (!a.isInterleavedBufferAttribute && a.array instanceof Float32Array && a.itemSize === size) return a.array;
-    const out = new Float32Array(a.count * size);
-    for (let i = 0; i < a.count; i++) { out[i * size] = a.getX(i); out[i * size + 1] = a.getY(i); if (size > 2) out[i * size + 2] = a.getZ(i); }
-    return out;
-  };
-  const pct = (v) => { const x = v * 100; return (x >= 10 || x === 0 ? Math.round(x) : x.toFixed(1)) + ' %'; };
-  const say = (lede, info) => {
-    el('uv-box').classList.add('is-empty');
-    el('uv-lede').textContent = lede;
-    el('uv-info').textContent = info || '';
-    last = null;
-  };
-  function stats(r) {
-    const rows = [
-      ['Texture coordinates', 'yes', false],
-      ['Islands', String(r.islands), false],
-      ['Space used', pct(r.used), false],
-      ['On another island', r.overlap > 0 ? pct(r.overlap) : 'none', r.overlap > 0.005],
-      ['Outside the square', r.outside ? r.outside.toLocaleString() + ' triangles' : 'none', r.outside > 0],
-      ['Collapsed triangles', r.collapsed ? r.collapsed.toLocaleString() : 'none', r.collapsed > 0],
-      ['Mirrored triangles', r.flipped ? r.flipped.toLocaleString() : 'none', false],
-      ['Texel density', r.density.uneven > 0.1 ? pct(r.density.uneven) + ' uneven' : 'even', r.density.uneven > 0.1],
-    ];
-    const dl = el('uv-stats');
-    dl.textContent = '';
-    for (const [k, v, warn] of rows) {
-      const dt = document.createElement('dt'), dd = document.createElement('dd');
-      dt.textContent = k; dd.textContent = v; if (warn) dd.className = 'warn';
-      dl.append(dt, dd);
-    }
-  }
-  function paint() {
-    raf = 0;
-    const c = el('uv-view');
-    if (!c || !c.offsetParent || !last) return;
-    if (!ro && window.ResizeObserver) { ro = new ResizeObserver(() => draw()); ro.observe(c); }
-    const r = last, dpr = Math.min(2, window.devicePixelRatio || 1), W = c.clientWidth, H = c.clientHeight;
-    if (!W || !H) return;
-    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
-    const g = c.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-    const MARK = getComputedStyle(document.documentElement).getPropertyValue('--marker').trim() || '#ffc928';
-    const b = r.bounds, x0 = Math.min(0, b.minU), x1 = Math.max(1, b.maxU), y0 = Math.min(0, b.minV), y1 = Math.max(1, b.maxV);
-    const m = 0.06 * Math.max(x1 - x0, y1 - y0), ux0 = x0 - m, ux1 = x1 + m, uy0 = y0 - m, uy1 = y1 + m;
-    const sc = Math.min(W / (ux1 - ux0), H / (uy1 - uy0)), ox = (W - sc * (ux1 - ux0)) / 2 - ux0 * sc, oy = (H - sc * (uy1 - uy0)) / 2 + uy1 * sc;
-    const X = (u) => ox + u * sc, Y = (v) => oy - v * sc;
-    // the 0–1 square
-    g.fillStyle = 'rgba(0,0,0,.38)'; g.fillRect(X(0), Y(1), sc, sc);
-    // what the islands cover inside it
-    if (r.res && r.cover.length) {
-      const R = r.res, cv = document.createElement('canvas'); cv.width = cv.height = R;
-      const cg = cv.getContext('2d'), img = cg.createImageData(R, R), d = img.data;
-      const mk = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(MARK), mr = mk ? parseInt(mk[1], 16) : 255, mg = mk ? parseInt(mk[2], 16) : 201, mb = mk ? parseInt(mk[3], 16) : 40;
-      for (let y = 0; y < R; y++) for (let x = 0; x < R; x++) {
-        const v = r.cover[y * R + x]; if (!v) continue;
-        const o = ((R - 1 - y) * R + x) * 4;
-        if (v === 2) { d[o] = mr; d[o + 1] = mg; d[o + 2] = mb; d[o + 3] = 190; } else { d[o] = 255; d[o + 1] = 255; d[o + 2] = 255; d[o + 3] = 70; }
-      }
-      cg.putImageData(img, 0, 0);
-      g.imageSmoothingEnabled = false;
-      g.drawImage(cv, X(0), Y(1), sc, sc);
-    }
-    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.strokeRect(X(0) + .5, Y(1) + .5, sc - 1, sc - 1);
-    // the rim of every island; what lies outside the square is drawn in the marker colour
-    const bd = r.border;
-    g.lineWidth = 1;
-    for (const outside of [false, true]) {
-      g.beginPath();
-      for (let i = 0; i < bd.length; i += 4) {
-        const out = bd[i] < -1e-4 || bd[i] > 1 + 1e-4 || bd[i + 1] < -1e-4 || bd[i + 1] > 1 + 1e-4 || bd[i + 2] < -1e-4 || bd[i + 2] > 1 + 1e-4 || bd[i + 3] < -1e-4 || bd[i + 3] > 1 + 1e-4;
-        if (out !== outside) continue;
-        g.moveTo(X(bd[i]), Y(bd[i + 1])); g.lineTo(X(bd[i + 2]), Y(bd[i + 3]));
-      }
-      g.strokeStyle = outside ? MARK : 'rgba(225,225,230,.8)';
-      g.stroke();
-    }
-  }
-  function draw() { if (!raf) raf = requestAnimationFrame(paint); }
-  async function refresh() {
-    const my = ++token;
-    const hit = pickPart();
-    lastSig = sigOf(hit);
-    if (!hit) { say('Select a part to see how its texture is laid out.'); return; }
-    const name = hit.p.name || 'This part', which = hit.n > 1 ? ' · 1 of ' + hit.n + ' selected' : '';
-    const g = geomOf(hit.p);
-    if (!g || !g.attributes || !g.attributes.position) { say(name + ' has no mesh to read.'); return; }
-    let M;
-    try { M = await loadMod(); } catch (e) { console.warn('[uv] module failed:', e); say('The UV check could not be loaded.'); return; }
-    if (my !== token) return;
-    const pos = g.attributes.position, uvA = g.attributes.uv;
-    const tris = g.index ? Math.floor(g.index.count / 3) : Math.floor(pos.count / 3);
-    if (!uvA || uvA.count !== pos.count || !M.hasUsableUV(uvA.isInterleavedBufferAttribute ? flat(uvA, 2) : uvA.array, pos.count)) {
-      say(name + ' has no texture coordinates' + which + '.', 'A part with no UVs shows no texture. Import it with “Keep texture coordinates” on, or add them in a modelling tool.');
-      return;
-    }
-    if (tris > MAX_TRIS) { say(name + ' has ' + tris.toLocaleString() + ' triangles: too many to check here' + which + '.', 'Reduce the part first, or select a smaller one.'); return; }
-    let r, c = cache.get(g);
-    if (c && c.sig === lastSig) r = c.r;
-    else {
-      el('uv-lede').textContent = 'Reading ' + name + '…';
-      if (tris > 100000) await new Promise((res) => setTimeout(res, 30));       // (let the line above show before the page is busy)
-      if (my !== token) return;
-      try { r = M.analyseUV(flat(pos, 3), flat(uvA, 2), g.index ? g.index.array : null); }
-      catch (e) { console.warn('[uv] analysis failed:', e); say('The UV check failed on ' + name + '.'); return; }
-      cache.set(g, { sig: lastSig, r });
-    }
-    last = r;
-    el('uv-box').classList.remove('is-empty');
-    el('uv-lede').textContent = name + which;
-    el('uv-info').textContent = r.overlap > 0.005 ? 'Islands that lie on each other share the same texels: a texture painted on one shows on the other. Mirrored or repeated parts do this on purpose.' : '';
-    stats(r);
-    draw();
-  }
-  const start = () => {
-    clearInterval(timer);
-    refresh();
-    timer = setInterval(() => { if (card.hidden || document.hidden) return; const s = sigOf(pickPart()); if (s !== lastSig) refresh(); }, 400);
-  };
-  const stop = () => { clearInterval(timer); timer = 0; token++; last = null; };
-  card.addEventListener('cmd-open', start);
-  card.addEventListener('cmd-close', stop);
-  return { refresh };
-})();
+// ── UV layout (split view) ──────────────────────────────────────────────────
+// The layout of the selected parts' texture coordinates as a view of its own: the viewport on the left, the layout on the right, the left
+// sidebar folded away meanwhile (uv-split.js). The button is at the foot of the tool pill; the command is "UV layout".
+// (it is made further down, where the undo steps and the helpers that rebuild a part are in reach: window.__moUvSplit)
 
 // The last tools that were used: the command palette's and the shortcuts' commands (every action of _Actions, wrapped below) and a press on a
 // switch of the viewport toolbar. The button at the left of that toolbar repeats the newest; held or right-clicked it lists the last few.
@@ -5327,6 +5445,7 @@ const _Actions = (() => {
     { id:'showAll',      group:'Selection',  label:'Show all parts',             kbd:'Alt+H', run: () => { try { showAllParts(); } catch (_) {} } },
     { id:'hideUnsel',    group:'Selection',  label:'Hide unselected',            kbd:'Shift+H', run: () => { try { hideUnselected(); } catch (_) {} } },
     { id:'reveal',       group:'Selection',  label:'Reveal selected in tree',    kbd:'Shift+S', run: () => { try { revealSelectedInTree(); } catch (_) {} } },
+    { id:'historyCard', group:'Edit',      icon:'history', label:'History', words:'history undo steps list jump back redo timeline clear', run: () => { try { const h = document.querySelector('#history-section .section-h'); if (h && h.classList.contains('collapsed')) h.click(); document.getElementById('history-section')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {} } },
     { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undoLast(); } catch (_) {} } },
     { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', alt:'Ctrl+Shift+Z', run: () => { try { redoLast(); } catch (_) {} } },
     { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', alt:'Backspace', run: () => { if (state.selected.size || state.selectedGroupIds?.size) _deleteSelection('Deleted via palette'); } },
@@ -5336,8 +5455,8 @@ const _Actions = (() => {
     { id:'recenter',     group:'Edit',       label:'Recentre model',             run: _click('btn-recenter') },
     { id:'alignParts',   group:'Edit',       label:'Align and spread parts…',    run: () => _CmdCards.open('arrange') },
     { id:'alignFloor',   group:'Edit',       label:'Align model to the floor…',  run: () => _CmdCards.open('align') },
-    { id:'uvView',       group:'View',       label:'UV layout…',                 words:'uv texture coordinates map islands overlap unwrap', run: () => _CmdCards.open('uvview') },
-    { id:'pivotOrient',  group:'Edit',       label:'Change pivot orientation…',  run: () => _CmdCards.open('pivot') },
+    { id:'uvView',       group:'View',       icon:'columns-2', label:'UV layout',   words:'uv layout editor split view texture coordinates map islands overlap unwrap checker side by side', run: () => { try { window.__moUvSplit && window.__moUvSplit.toggle(); } catch (e) { console.error('[uv]', e); } } },
+    { id:'pivotOrient',  group:'Edit',       label:'Change pivot orientation…',  run: () => { _CmdCards.open('axis'); try { _pivotCard && _pivotCard.tab('orient'); } catch (_) {} } },
     { id:'alignFloorNow', group:'Edit',      label:'Align model to the floor, as before', words:'align model to the floor (with the last choices)', run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            kbd:'Ctrl+M', run: _click('btn-merge-sel') },
@@ -5349,7 +5468,7 @@ const _Actions = (() => {
     { id:'sweep',        group:'Edit',       label:'Sweep…',                     run: () => _CmdCards.open('sweep') },
     { id:'draw',         group:'Edit',       label:'Draw lines…',                kbd:'L', run: () => _CmdCards.open('draw') },
     { id:'decimate',     group:'Edit',       label:'Decimate selection',         run: _click('btn-decimate-sel') },
-    { id:'quickRemesh',  group:'Edit',       label:'Quick remesh', kbd:'B', words:'reduce decimate lighter triangles level live preview quick remesh: pick a level under the pointer', run: () => { try { window.__moQuickRemesh.open(); } catch (_) {} } },
+    { id:'quickRemesh',  group:'Edit',       label:'Quick decimate', kbd:'B', words:'reduce decimate lighter triangles level live preview quick remesh quick decimate: pick a level under the pointer', run: () => { try { window.__moQuickRemesh.open(); } catch (_) {} } },
     { id:'floating',      group:'Edit',       label:'Remove floating pieces…',    run: () => _CmdCards.open('floating') },
     { id:'modePoints',    group:'Edit',       label:'Points mode', words:'points mode: pick the points of a mesh',     kbd:'1', run: () => _Elements.api.mode('points') },
     { id:'modeEdges',     group:'Edit',       label:'Edges mode', words:'edges mode: pick the edges of a mesh',       kbd:'2', run: () => _Elements.api.mode('edges') },
@@ -5363,16 +5482,17 @@ const _Actions = (() => {
     { id:'normalsReverse',group:'Edit',       label:'Reverse normals of selected', words:'flip invert turn inside out faces selected parts', run: () => { try { window.__moNormals.reverse(); } catch (_) {} } },
     { id:'normalsAlign',  group:'Edit',       label:'Align normals outward', words:'unify consistent orient fix winding inside out faces align normals: turn faces the same way, outward', run: () => { try { window.__moNormals.align(); } catch (_) {} } },
     { id:'normalsHighlight', group:'Edit',    get label() { return window.__moNormals && window.__moNormals.isHighlighting() ? 'Stop highlighting back faces' : 'Highlight back faces'; }, words:'show hide toggle flipped reversed normals inside out faces red', run: () => { try { window.__moNormals.highlight(); } catch (_) {} } },
-    { id:'remesh',        group:'Edit',       label:'Remesh…', words:'remesh… (untriangulate or triangulate)', run: () => _CmdCards.open('remesh') },
+    { id:'remesh',        group:'Edit',       label:'Triangulation…', words:'triangulation remesh… untriangulate triangulate polygons n-gons quads flat faces', run: () => _CmdCards.open('remesh') },
     { id:'untriangulate', group:'Edit',       label:'Untriangulate',              kbd:'U', run: () => { try { window.__showRemesh && window.__showRemesh('ut'); } catch (_) {} } },
+    { id:'bakeTextures',  group:'Edit',       icon:'croissant', label:'Bake textures…', words:'bake textures colour color picture atlas uv unwrap reduce decimate lod low poly texture map baked material draw calls', run: () => { try { window.__moAgent && window.__moAgent.bakeCard && window.__moAgent.bakeCard(); } catch (_) {} } },
     { id:'fillGrooves',   group:'Edit',       label:'Round part: remove ridges', words:'round part remove ridges fill grooves threads defeature smooth turned lathe revolve spool bushing pulley rebuild profile section edit points', run: () => { try { window.__moAgent && window.__moAgent.roundCard && window.__moAgent.roundCard({ mode: 'exact' }); } catch (_) {} } },
     { id:'closeCracks', group:'Edit', label:'Close cracks', words:'close cracks gaps stitch seams t-junctions weld open edges watertight repair cad', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('closeCracks'); } catch (_) {} } },
     { id:'removeSlivers', group:'Edit', label:'Remove slivers', words:'remove slivers needles thin triangles caps clean degenerate repair cad', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('removeSlivers'); } catch (_) {} } },
     { id:'removeThickness', group:'Edit', label:'Remove thickness', words:'remove thickness wall thin sheet shell surface pipe tube hollow one side mid surface middle plane single layer', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('removeThickness'); } catch (_) {} } },
     { id:'roundFaces', group:'Edit', label:'Simplify round faces', words:'simplify round faces fewer segments facets cylinders fillets bores coarser cad step decimate', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('roundFaces'); } catch (_) {} } },
     { id:'removeBlends', group:'Edit', label:'Remove fillets and chamfers', words:'remove fillets chamfers blends rounds defeature sharp edges simplify cad step faces', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('removeBlends'); } catch (_) {} } },
-    { id:'patchHoles', group:'Edit', label:'Patch holes', words:'patch holes fill holes curved openings fair close repair', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('patchHoles'); } catch (_) {} } },
-    { id:'remeshEvenly', group:'Edit', label:'Remesh evenly', words:'remesh evenly isotropic uniform even triangles retopology quality sharp edges', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('remeshEvenly'); } catch (_) {} } },
+    { id:'patchHoles', group:'Edit', label:'Fill mesh holes', words:'patch holes fill mesh holes close holes curved openings fair close repair', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('patchHoles'); } catch (_) {} } },
+    { id:'remeshEvenly', group:'Edit', label:'Isotropic remesh', words:'remesh evenly isotropic uniform even triangles retopology quality sharp edges', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('remeshEvenly'); } catch (_) {} } },
     { id:'smoothSurface', group:'Edit', label:'Smooth surface', words:'smooth surface denoise faceting noise relax keep edges sharp', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('smoothSurface'); } catch (_) {} } },
     { id:'convexHull', group:'Edit', label:'Convex hull', words:'convex hull shell wrap collision physics game', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('convexHull'); } catch (_) {} } },
     { id:'convexPieces', group:'Edit', label:'Convex pieces', words:'convex pieces decomposition collision physics game vhacd', run: () => { try { window.__moAgent && window.__moAgent.meshOp && window.__moAgent.meshOp('convexPieces'); } catch (_) {} } },
@@ -5423,7 +5543,7 @@ const _Actions = (() => {
     { id:'turntable',    group:'File',       label:'Turntable video…',           run: () => _openTurntableDialog?.() },
     { id:'screenshot',   group:'File',       label:'Screenshot', words:'screenshot share copy download picture image save', run: _click('tg-screenshot') },
     { id:'toggleSidebar', group:'View',      label:'Toggle sidebar',             run: _click('btn-toggle-left') },
-    { id:'transformPanel', group:'View',     label:'Transform panel', words:'transform panel (position, rotation, size)', run: _click('tg-transform') },
+    { id:'transformPanel', group:'View',     label:'Transform', words:'transform panel position rotation size scale reset', run: () => { try { const p = document.getElementById('transform-panel'); p && p.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); const i = document.getElementById('tform-px'); i && !i.disabled && i.focus(); } catch (_) {} } },
     { id:'transformReset', group:'Edit',     label:'Reset position, rotation and size', run: _click('tform-reset') },
     { id:'hiliteSmall',  group:'View',       label:'Highlight small parts',      run: _click('tg-hilite') },
     { id:'sunGizmo',     group:'View',       label:'Toggle sun direction gizmo', run: _click('tg-sun') },
@@ -5431,6 +5551,7 @@ const _Actions = (() => {
     { id:'addShape',     group:'Edit',       label:'Add shape',                  run: _click('vp-add-prim') },
     { id:'selSimilar',   group:'Selection',  label:'Select similar',             run: _click('sel-similar') },
     { id:'selInstances', group:'Selection',  label:'Select all instances',       words: 'same geometry shared copies', run: () => selectInstances() },
+    { id:'instances',    group:'Selection',  label:'Instances…',                 words: 'instance instances shared geometry copies original unique link share identical count', run: () => _CmdCards.open('instances') },
     { id:'selOriginal',  group:'Selection',  label:'Select the original of an instance', words: 'master source parent first copy', run: () => selectInstanceOriginal() },
     { id:'makeUnique',   group:'Edit',       label:'Make unique',                words: 'instance shared geometry own copy detach', run: () => makeUnique() },
     { id:'selColour',    group:'Selection',  label:'Select by colour',           run: _click('btn-select-color') },
@@ -5440,16 +5561,19 @@ const _Actions = (() => {
     { id:'measureClear', group:'View',       label:'Delete every measurement',   run: _click('msr-clear') },
     { id:'explodeReset', group:'View',       label:'Put exploded parts back',    run: _click('btn-explode-reset') },
     { id:'bakeTransforms', group:'Edit',     label:'Bake transforms into the mesh', run: () => bakeTransforms() },
-    { id:'centerPivot',  group:'Edit',       label:'Axis Center',   words:'pivot origin center centre axis reset rotation c4d axis center: centre the axis on the part and reset its rotation to 0, 0, 0', run: () => axisCenter() },
-    { id:'axisCard',     group:'Edit',       label:'Axis…', words:'pivot axis center centre align origin reset scale object c4d axis…: centre, align and move the axis, centre the object, reset scale', run: () => _CmdCards.open('axis') },
-    { id:'axisToOrigin', group:'Edit',       label:'Center Axis to the world origin', words:'pivot axis origin zero', run: () => axisSet('origin', 'keep') },
-    { id:'axisToSel',    group:'Edit',       label:'Center Axis to the selection', words:'pivot axis selection centre center axis to the middle of the selection', run: () => axisSet('selection', 'keep') },
-    { id:'objToOrigin',  group:'Edit',       label:'Center Object to the origin', words:'move object origin zero center object to the world origin (its axis lands on 0, 0, 0)', run: () => axisMoveObject('origin') },
-    { id:'axisWorld',    group:'Edit',       label:'Align axis to the world', words:'pivot axis rotation reset world align axis to the world (rotation 0, 0, 0)', run: () => axisSet('keep', 'world') },
-    { id:'axisParent',   group:'Edit',       label:'Align axis to its parent', words:'pivot axis rotation parent', run: () => axisSet('keep', 'parent') },
+    { id:'centerPivot',  group:'Edit',       label:'Centre pivot',  words:'pivot origin center centre axis reset rotation c4d axis center: centre the axis on the part and reset its rotation to 0, 0, 0', run: () => axisCenter() },
+    { id:'axisCard',     group:'Edit',       label:'Pivot…', words:'pivot axis center centre align origin reset scale object c4d axis…: centre, align and move the axis, centre the object, reset scale', run: () => _CmdCards.open('axis') },
+    { id:'axisToBottom', group:'Edit',      label:'Pivot to the bottom', words:'pivot axis base bottom foot floor lowest base of the part: put the axis in the middle of the lowest face', run: () => axisSet('bottom', 'keep') },
+    { id:'axisToTop',    group:'Edit',       label:'Pivot to the top', words:'pivot axis top highest lid: put the axis in the middle of the highest face', run: () => axisSet('top', 'keep') },
+    { id:'axisToOrigin', group:'Edit',       label:'Pivot to the world origin', words:'pivot axis origin zero', run: () => axisSet('origin', 'keep') },
+    { id:'axisToSel',    group:'Edit',       label:'Pivot to the selection', words:'pivot axis selection centre center axis to the middle of the selection', run: () => axisSet('selection', 'keep') },
+    { id:'objToOrigin',  group:'Edit',       label:'Move to the world origin', words:'move object origin zero center object to the world origin (its axis lands on 0, 0, 0)', run: () => axisMoveObject('origin') },
+    { id:'axisWorld',    group:'Edit',       label:'Align pivot to the world', words:'pivot axis rotation reset world align axis to the world (rotation 0, 0, 0)', run: () => axisSet('keep', 'world') },
+    { id:'axisParent',   group:'Edit',       label:'Align pivot to its parent', words:'pivot axis rotation parent', run: () => axisSet('keep', 'parent') },
     { id:'axisResetScale', group:'Edit',     label:'Reset Scale', words:'scale reset one bake reset scale: build the scale into the mesh', run: () => axisResetScale() },
     { id:'flagSmall',    group:'Selection',  label:'Mark small parts', words:'mark parts under the triangle threshold', run: _click('btn-flag-tri') },
     { id:'flagSliver',   group:'Selection',  label:'Mark thin parts', words:'mark thin parts (gaskets, wires, decals)', run: _click('btn-flag-sliver') },
+    { id:'xrayIsolate',  group:'Selection',  label:'X-ray the other parts', words:'x-ray xray ghost transparent see through others isolate flagged highlight', run: _click('btn-xray-isolate') },
     { id:'isolateSmall', group:'Selection',  label:'Show only the small parts',  run: _click('btn-isolate-small') },
     { id:'smallParts',   group:'Edit',       label:'Delete small parts…',        words:'small parts threshold remove tiny size', run: () => _CmdCards.open('small') },
     { id:'deleteSmall',  group:'Edit',       label:'Delete the small parts',     run: _click('btn-delete-small') },
@@ -5476,6 +5600,8 @@ const _Actions = (() => {
     { id:'claudeSettings', group:'App',      label:'Claude connection settings', run: _click('claude-pill') },
     { id:'flatten',      group:'Edit',       label:'Advanced flatten…',          run: _click('tree-flatten') },
     { id:'batchRename',  group:'Edit',       label:'Batch rename…',              kbd:'F2', run: () => _openBatchRenameDialog(document.getElementById('tree-batch-rename')) },
+    { id:'diag',         group:'App',        label:'Show state of the app',        words:'diagnostics debug what is running stuck status', run: () => _Diag.open() },
+    { id:'unstick',      group:'App',        label:'Reset stuck state',          words:'unstick fix frozen not working busy stuck still working', run: () => _unstick() },
     { id:'settings',     group:'App',        label:'Open settings',              kbd:'Ctrl+,', run: () => _Settings.show() },
     { id:'searchSettings', group:'App',      label:'Search settings',            words:'find palette matching options', run: () => _Settings.show('search') },
     { id:'help',         group:'App',        label:'Help & docs',                kbd:'F1', run: () => window.MOHelp?.show() },
@@ -5483,6 +5609,7 @@ const _Actions = (() => {
     { id:'palette',      group:'App',        label:'Command palette',            kbd:'Shift+C', alt:'Ctrl+K', run: () => _CmdK.show() },
     { id:'console',      group:'App',        label:'Toggle log console',         kbd:'`', run: _click('sb-console-btn') },
     { id:'welcome',      group:'App',        label:'Open welcome screen',        run: () => _Welcome.show() },
+    { id:'batchFolder',  group:'File',       label:'Batch optimise a folder…', words:'batch folder optimise optimize many files all models one after another drop a folder', run: () => _BatchFolder.pick() },
     { id:'inbox',        group:'File',       label:'Show inbox folder',          run: () => _showInboxFolder() },
   ];
   // every command that is run (palette, shortcut, toolbar) is noted as the last tool
@@ -5716,7 +5843,7 @@ const _CmdK = (() => {
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
-  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'booleanCard', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
+  const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'booleanCard', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToBottom', 'axisToTop', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
   const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
     'flagSliver', 'isolateSmall', 'deleteSmall', 'smallParts', 'splitAll', 'split', 'fillHoles', 'removeBlends', 'roundFaces', 'removeThickness', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
@@ -5775,8 +5902,8 @@ const _CmdK = (() => {
   // Enter copies the answer). Commands that were run lately lead the list
   // while nothing is typed.
   const RECENT_KEY = 'stepopt-cmdk-recent';
-  const _recentIds = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 5) : []; } catch (_) { return []; } };
-  const _remember = (it) => { if (!it || !it.id || it.noRecent) return; try { localStorage.setItem(RECENT_KEY, JSON.stringify([it.id, ..._recentIds().filter(x => x !== it.id)].slice(0, 5))); } catch (_) {} };
+  const _recentIds = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 6) : []; } catch (_) { return []; } };
+  const _remember = (it) => { if (!it || !it.id || it.noRecent) return; try { localStorage.setItem(RECENT_KEY, JSON.stringify([it.id, ..._recentIds().filter(x => x !== it.id)].slice(0, 6))); } catch (_) {} };
   const _fmtNum = (v) => { const r = Math.abs(v) >= 1e9 || (v !== 0 && Math.abs(v) < 1e-6) ? v.toExponential(6) : String(+v.toPrecision(10)); return r; };
   // "Copied" is said once the clipboard has taken it; if it refuses (no
   // permission, page not focused) the answer is shown instead, to copy by hand.
@@ -5807,7 +5934,7 @@ const _CmdK = (() => {
     const out = [];
     for (const p of state.parts) {
       if (p.deleted || !p.name) continue;
-      const sc = _score(q, p.name);
+      const sc = q ? _score(q, p.name) : 1 + Math.min(0.99, (p.triCount || 0) / 1e7);      // (nothing typed: the heaviest parts first)
       if (sc > 0) out.push({ sc, p });
     }
     const pick = (ids) => {
@@ -5838,12 +5965,12 @@ const _CmdK = (() => {
     return settingsItems.map(it => ({ it, s: _smart(pq, it.label, it.words) })).filter(x => x.s > 0 && !(x.it.toggle && shown.has(x.it.toggle.id)))
       .sort((a, b) => b.s - a.s).slice(0, limit).map(x => x.it);
   }
-  function _findLibrary(q) {
+  function _findLibrary(q, listAll = false) {
     const out = [], qq = q.replace(/^(add|new|insert)\s+/i, '');
-    if (!qq) return out;
+    if (!qq && !listAll) return out;
     try {
       for (const [shelf, kinds] of _LIB_SHELVES) for (const k of kinds) {
-        const name = _primitiveDefaultName(k), sc = Math.max(_score(qq, name), _score(qq, k) * 0.8, _score(qq, shelf) * 0.2);
+        const name = _primitiveDefaultName(k), sc = !qq ? 1 : Math.max(_score(qq, name), _score(qq, k) * 0.8, _score(qq, shelf) * 0.2);
         if (sc > 0) out.push({ sc, k, name });
       }
     } catch (_) {}
@@ -5879,21 +6006,50 @@ const _CmdK = (() => {
     _go(it);
   }
   function _go(it) { if (!it) return; hide(); _remember(it); try { it.run(); } catch (e) { console.warn('[cmdk] run failed:', e); } }
+  // The filter buttons under the field: the same narrowing as a mark typed in front (> commands, @ parts, + library, # settings).
+  const FILTERS = ['all', 'commands', 'parts', 'library', 'settings'];
+  const FMARK = { commands: '>', parts: '@', library: '+', settings: '#' };
+  const MARKF = { '>': 'commands', '@': 'parts', '+': 'library', '#': 'settings' };
+  let _filter = 'all';
+  function _paintFilters(eff) {
+    for (const b of document.querySelectorAll('#cmdk-filters [data-f]')) {
+      const on = b.dataset.f === eff;
+      b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+  function _setFilter(f) {
+    if (!FILTERS.includes(f)) return;
+    _filter = f;
+    const input = document.getElementById('cmdk-input');
+    if (input) { input.value = input.value.replace(/^[>@+#]\s*/, ''); activeIdx = 0; _render(input.value); input.focus(); }
+  }
+  function _cycleFilter(d) {
+    const typed = /^[>@+#]/.test((document.getElementById('cmdk-input')?.value || '').trim()) ? MARKF[(document.getElementById('cmdk-input').value || '').trim()[0]] : '';
+    const at = FILTERS.indexOf(typed || _filter);
+    _setFilter(FILTERS[(at + d + FILTERS.length) % FILTERS.length]);
+  }
   function _render(query) {
     const list = document.getElementById('cmdk-list');
     if (!list) return;
-    list.classList.toggle('cmdk-colour', _Prefs.get('searchIconColours') !== false);
+    list.classList.toggle('cmdk-colour', _searchIcons() === 'colour');
     const q = (query || '').trim();
+    const typedMark = /^[>@+#]/.test(q) ? q[0] : '';
+    _paintFilters(typedMark ? MARKF[typedMark] : _filter);      // (a mark typed in front counts over the button)
     const card = list.closest('.modal'), h0 = card && _shown() ? card.getBoundingClientRect().height : 0;
     const sections = [];
     if (!q) {
-      const sug = _suggest(), recent = _recentIds().map(id => _Actions.list.find(a => a.id === id)).filter(Boolean);
-      if (recent.length) sections.push(['Recent', recent]);
-      sections.push(['Suggestions', sug.filter(a => !recent.includes(a))]);
+      // (Parts and Library: with nothing typed, the heaviest parts and the first library parts; Settings: a line that says to type)
+      if (_filter === 'parts') { const ps = _findParts('', 6); if (ps.length) sections.push(['Heaviest parts', ps]); }
+      else if (_filter === 'library') { const lb = _findLibrary('', true); if (lb.length) sections.push(['Library', lb]); }
+      else if (_filter !== 'settings') {
+        const sug = _suggest(), recent = _Prefs.get('searchRecentsOpen') === false ? [] : _recentIds().map(id => _Actions.list.find(a => a.id === id)).filter(Boolean);
+        if (recent.length) sections.push(['Recent', recent]);
+        sections.push(['Suggestions', sug.filter(a => !recent.includes(a))]);
+      }
     } else {
       // A mark in front narrows the search: > commands, @ parts, + library parts. Without one, everything that is switched on in
       // Settings › Search is looked through.
-      const mark = /^[>@+#]/.test(q) ? q[0] : '', text = mark ? q.slice(1).trim() : q;
+      const mark = typedMark || FMARK[_filter] || '', text = typedMark ? q.slice(1).trim() : q;
       const on = (k) => _Prefs.get(k) !== false;
       const max = Math.max(4, Math.min(60, +_Prefs.get('searchMax') || 14)), few = Math.max(3, Math.round(max * 0.45));
       if (!mark && on('searchAnswers')) { const ans = _answer(q); if (ans) sections.push(['Answer', [ans]]); }
@@ -5922,17 +6078,18 @@ const _CmdK = (() => {
     if (activeIdx >= items.length) activeIdx = 0;
     let i = 0;
     const sws = _Prefs.get('searchSwitches') !== false;
+    const grpMode = _Prefs.get('searchGroupLabel') || 'typing', showKeys = _Prefs.get('searchKeys') !== false, showHeads = _Prefs.get('searchHeadings') !== false;
     const row = (a) => { const idx = i++; const isSw = sws && a.toggle, off = _offOf(a); return `
         <div class="cmdk-item${idx === activeIdx ? ' active' : ''}${isSw ? ' cmdk-has-switch' : ''}${off ? ' cmdk-off' : ''}" data-idx="${idx}" data-cat="${_catOf(a)}"${off ? ` aria-disabled="true" title="${escapeHtml(off)}"` : ''}>
           <i class="cmdk-item-icon" data-lucide="${a.icon || ICON[a.id] || GROUP_ICON[a.group] || 'panel-right'}"></i>
           <span class="cmdk-item-label">${escapeHtml(a.label)}</span>${_opensPanel(a) ? '<i class="cmdk-opens" data-lucide="app-window" title="Opens a panel with options"></i>' : ''}
-          <span class="cmdk-item-group">${off ? escapeHtml(off) : (q ? escapeHtml(a.group || '') : '')}</span>
-          ${a.kbd ? `<span class="cmdk-keys">${a.kbd.split('+').map(k => `<kbd class="kbd-chip">${k}</kbd>`).join('<span class="sc-plus">+</span>')}</span>` : ''}
+          <span class="cmdk-item-group">${off ? escapeHtml(off) : (grpMode === 'never' ? '' : (q || grpMode === 'always') ? escapeHtml(a.group || '') : '')}</span>
+          ${a.kbd && showKeys ? `<span class="cmdk-keys">${a.kbd.split('+').map(k => `<kbd class="kbd-chip">${k}</kbd>`).join('<span class="sc-plus">+</span>')}</span>` : ''}
           ${isSw ? `<span class="cmdk-sw${a.toggle.get() ? ' on' : ''}" role="switch" aria-checked="${a.toggle.get() ? 'true' : 'false'}" aria-label="${escapeHtml(a.label)}"><span class="cmdk-sw-knob"></span></span>` : ''}
         </div>`; };
     list.innerHTML = items.length === 0
-      ? `<div class="cmdk-empty">Nothing found for “${escapeHtml(q)}”</div>`
-      : sections.filter(sec => sec[1].length).map(([title, its]) => `<div class="cmdk-section">${title}</div>` + its.map(row).join('')).join('');
+      ? `<div class="cmdk-empty">${q ? 'Nothing found for “' + escapeHtml(q) + '”' : _filter === 'settings' ? 'Type the name of a setting' : _filter === 'parts' ? 'There are no parts in the scene' : 'Nothing to show'}</div>`
+      : sections.filter(sec => sec[1].length).map(([title, its]) => (showHeads ? `<div class="cmdk-section">${title}</div>` : '') + its.map(row).join('')).join('');
     try { _lucide(); } catch (_) {}
     const act = list.querySelector('.cmdk-item.active'); if (act && act.scrollIntoView) { try { act.scrollIntoView({ block: 'nearest' }); } catch (_) {} }
     if (activeIdx === 0) list.scrollTop = 0;                     // keep the first heading in view
@@ -5955,11 +6112,14 @@ const _CmdK = (() => {
     if (!card) return;
     const r = vp && vp.offsetParent ? vp.getBoundingClientRect() : null;
     const v = r && r.width > 200 ? r : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight, bottom: window.innerHeight };
-    let w = Math.min(560, v.width - 24), top = v.top + Math.max(24, Math.round(v.height * 0.2)), left = null, floor = v.bottom;
+    const at = _Prefs.get('searchOpensAt') || 'remember';
+    const wide = { compact: 420, standard: 560, wide: 720 }[_Prefs.get('searchWidth')] || 560;
+    let w = Math.min(wide, v.width - 24), left = null, floor = v.bottom;
+    let top = v.top + (at === 'top' ? Math.max(24, Math.round(v.height * 0.06)) : at === 'middle' ? Math.max(24, Math.round((v.height - 440) / 2)) : Math.max(24, Math.round(v.height * 0.2)));
     // where it was dragged to and how wide it was made (see _wireGeo), kept inside the window
     const W = window.innerWidth, H = window.innerHeight;
     if (_geo && _geo.w) w = Math.max(GEO_MIN_W, Math.min(W - 16, _geo.w));
-    if (_geo && _geo.x != null) { left = Math.max(8, Math.min(W - w - 8, _geo.x)); top = Math.max(8, Math.min(H - 120, _geo.y)); floor = H; }
+    if (_geo && _geo.x != null && at === 'remember') { left = Math.max(8, Math.min(W - w - 8, _geo.x)); top = Math.max(8, Math.min(H - 120, _geo.y)); floor = H; }
     card.style.position = 'fixed';
     card.style.width = w + 'px';
     card.style.left = (left != null ? left : Math.round(v.left + (v.width - w) / 2)) + 'px';
@@ -5972,6 +6132,25 @@ const _CmdK = (() => {
   const GEO_KEY = 'stepopt-cmdk-geo', GEO_MIN_W = 320;
   let _geo = null;
   try { const g = JSON.parse(localStorage.getItem(GEO_KEY) || 'null'); if (g && typeof g === 'object') _geo = { x: isFinite(g.x) ? +g.x : null, y: isFinite(g.y) ? +g.y : null, w: isFinite(g.w) && g.w ? +g.w : null }; if (_geo && _geo.x != null && _geo.y == null) _geo.x = null; } catch (_) {}
+  // What the Look settings say, put on the window: the classes and variables the stylesheet reads.
+  function _applyLook() {
+    const bg = document.getElementById('cmdk-modal'); if (!bg) return;
+    const P = (k) => _Prefs.get(k);
+    bg.dataset.bd = P('searchBackdrop') || 'none';
+    bg.dataset.dense = P('searchDensity') || 'normal';
+    bg.dataset.icons = _searchIcons();
+    bg.classList.toggle('cmdk-nokeys', P('searchKeys') === false);
+    bg.classList.toggle('cmdk-nofoot', P('searchFooter') === false);
+    bg.classList.toggle('cmdk-nochips', P('searchChips') === false);
+    bg.style.setProperty('--cmdk-t', String(Math.max(0, Math.min(70, +P('searchTransparency') || 0))));
+  }
+  // A width or a place chosen in Settings wins over the one dragged by hand.
+  function _resetGeo(which) {
+    if (!_geo) return;
+    if (which === 'searchWidth') _geo.w = null; else { _geo.x = null; _geo.y = null; }
+    if (_geo.w == null && _geo.x == null) _geo = null;
+    _geoSave();
+  }
   const _geoSave = () => { try { if (_geo) localStorage.setItem(GEO_KEY, JSON.stringify(_geo)); else localStorage.removeItem(GEO_KEY); } catch (_) {} };
   function _wireGeo(bg) {
     const card = bg.querySelector('.modal'), head = card && card.querySelector('.modal-h'), edge = card && card.querySelector('.cmdk-resize');
@@ -6005,6 +6184,11 @@ const _CmdK = (() => {
     if (!bg || !input) return;
     bg.addEventListener('click', e => { if (e.target === bg) hide(); });
     _wireGeo(bg);
+    const fb = document.getElementById('cmdk-filters');
+    if (fb) {
+      fb.addEventListener('mousedown', (e) => { if (e.target.closest('[data-f]')) e.preventDefault(); });      // (the field keeps the keyboard)
+      fb.addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) _setFilter(b.dataset.f); });
+    }
     input.addEventListener('input', () => { activeIdx = 0; _render(input.value); });
     input.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(visibleItems.length - 1, activeIdx + 1); _render(input.value); }
@@ -6014,6 +6198,7 @@ const _CmdK = (() => {
         _activate(visibleItems[activeIdx], document.querySelector('#cmdk-list .cmdk-item.active'), e.shiftKey);
       }
       else if (e.key === 'Escape') { e.preventDefault(); hide(); }
+      else if (e.key === 'Tab' && _Prefs.get('searchChips') !== false) { e.preventDefault(); _cycleFilter(e.shiftKey ? -1 : 1); }      // (Tab moves between the buttons)
     });
   }
   function show() {
@@ -6023,6 +6208,8 @@ const _CmdK = (() => {
     if (!bg || !input) return;
     try { sidebarItems = _scanSidebar(); } catch (e) { console.warn('[cmdk] sidebar scan failed:', e); sidebarItems = []; }
     // (the rows of the Settings window are read the first time something is typed, and kept: their switches are found by id when used)
+    _applyLook();
+    _filter = 'all';
     input.value = ''; activeIdx = 0; _render('');
     _place();
     bg.classList.add('show');
@@ -6037,7 +6224,7 @@ const _CmdK = (() => {
     if (input && document.activeElement === input) input.blur();
   }
   const isOpen = () => !!document.getElementById('cmdk-modal')?.classList.contains('show');
-  return { show, hide, isOpen };
+  return { show, hide, isOpen, applyLook: _applyLook, resetGeo: _resetGeo };
 })();
 
 const _Shortcuts = (() => {
@@ -6063,6 +6250,7 @@ const _Shortcuts = (() => {
     { group:'Mouse',  label:'Box select, adding to the selection',    kbd:'Ctrl+Shift+Drag' },
     { group:'Mouse',  label:'Context menu',                           kbd:'Right-click' },
     { group:'Mouse',  label:'Photo: focus here', kbd:'Alt+Click' },
+    { group:'Mouse',  label:'X-ray isolate: hold, then move up or down, how much of the other parts shows', kbd:',' },
     { group:'Tree',   label:'Select a row',                           kbd:'Click' },
     { group:'Tree',   label:'Select a range of rows',                 kbd:'Shift+Click' },
     { group:'Tree',   label:'Toggle a row in the selection',          kbd:'Ctrl+Click' },
@@ -6200,7 +6388,7 @@ const _Shortcuts = (() => {
     camPersp:'Camera', camTop:'Top', camFront:'Front', camSide:'Side', solid:'Solid', wire:'Wire', xray:'X-ray', heat:'Heat', clay:'Clay', cad:'CAD', gzMove:'Move', gzRotate:'Rotate', gzScale:'Scale',
     gzPlace:'Place', gzOff:'Off', tgGrid:'Grid', selAll:'All', selInvert:'Invert', selClear:'Clear', isolate:'Isolate', showAll:'Show', hideUnsel:'Solo', reveal:'Reveal', undo:'Undo',
     redo:'Redo', delete:'Delete', copy:'Copy', paste:'Paste', duplicate:'Dupe', group:'Group', merge:'Merge', split:'Split', smartFit:'Box fit', fillHoles:'Holes', draw:'Draw',
-    quickRemesh:'Remesh', modePoints:'Points', modeEdges:'Edges', modeFaces:'Polys', modeModel:'Model', untriangulate:'Polys', triangulate:'Tris', ungroup:'Ungroup', hideSel:'Hide',
+    quickRemesh:'Decimate', modePoints:'Points', modeEdges:'Edges', modeFaces:'Polys', modeModel:'Model', untriangulate:'Polys', triangulate:'Tris', ungroup:'Ungroup', hideSel:'Hide',
     materials:'Mats', library:'Library', measure:'Measure', batchRename:'Rename', settings:'Prefs', help:'Help', shortcuts:'Keys', palette:'Search', console:'Log' };
   // Every row: a command (its keys can be changed) or a fixed gesture / panel key.
   function entries() {
@@ -7655,8 +7843,13 @@ function initScene() {
   // is wrapped in try/catch because it's null until _wireTransformPanel
   // has built the panel DOM, and the gizmo may finish a drag before that.
   state.gizmo.addEventListener('dragging-changed', e => {
-    if (e.value) return;
+    if (e.value) { try { state._goBefore = state.selectedGroupIds?.size ? { snap: _snapGroupFrames(), top: state.history[state.history.length - 1] } : null; } catch (_) { state._goBefore = null; } return; }
+    const _gb = state._goBefore; state._goBefore = null;
     try { _updateTreeGroupOrigin(); } catch (_) {}
+    try {
+      const last = state.history[state.history.length - 1];
+      if (_gb && last && last !== _gb.top && last.type === 'transformGroup' && !last._go) last._go = { before: _gb.snap, after: _snapGroupFrames() };
+    } catch (_) {}
     try { _transformPanelRefresh?.(); } catch (_) {}
   });
   const gh = (typeof state.gizmo.getHelper === 'function') ? state.gizmo.getHelper() : state.gizmo;
@@ -7920,7 +8113,6 @@ function _partWorldBoxOwn(mesh) {
 }
 function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   if (!state.gizmo || !state.pivot) return;
-  if (state._animMode) return;                                  // (no gizmo while the Animate window is open)
   // Promote any selected-but-instanced parts so they CAN be moved by the
   // gizmo. Without this they'd silently be filtered out below and the user
   // would see "selection but no gizmo" on every instanced part — which on
@@ -8199,7 +8391,6 @@ function _updateGizmoImpl() {
   // carry no transform gizmo (a move made here would only be undone by the
   // next change of the explosion). It comes back when the parts are put back.
   { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { _detachGizmo(); return; } }
-  if (state._animMode) { _detachGizmo(); return; }      // (the Animate window is open: no gizmo, the parts are looked at, not moved)
   try { if (_Draw.isActive()) { _detachGizmo(); return; } } catch (_) {}      // the Draw tool owns the left button
   try { if (_Elements.isActive()) { _detachGizmo(); _Elements.gizmo(); return; } } catch (_) {}  // …and so does Edit mesh: its own gizmo sits on the picked pieces
   const ids = [...state.selected];
@@ -8436,38 +8627,10 @@ function _wireGizmoSpacePop() {
   }
 }
 
-// ── The Gizmo card ─────────────────────────────────────────────────────────────────────────────────────────────────────
-// A floating card under Transform that turns the gizmo's axes (its pivot orientation) for what is selected: one chip per way
-// of choosing them, and X / Y / Z fields (degrees, in the scene's axes) for any angle. Only the gizmo turns: the parts stay as they are.
-function _gizmoCardSync(force) {
-  const card = document.querySelector('.section-cmd[data-cmd="pivot"]');
-  if (!card || card.hidden) return;
-  // (the angles read the gizmo's own axes: the pivot's turn in the scene, in degrees)
-  if (!(state.pivot && state.gizmo && state.gizmo.object)) return;
-  const q = new THREE.Quaternion(); state.pivot.getWorldQuaternion(q);
-  const e = new THREE.Euler().setFromQuaternion(q, 'XYZ'), R = 180 / Math.PI;
-  ['x', 'y', 'z'].forEach(k => {
-    const inp = document.getElementById('pivot-' + k);
-    if (inp && (force || document.activeElement !== inp)) { const v = e[k] * R; inp.value = String(Math.round(Math.abs(v) < 5e-3 ? 0 : v * 100) / 100); }
-  });
-}
-function _wireGizmoCard() {
-  const card = document.querySelector('.section-cmd[data-cmd="pivot"]');
-  if (!card || card._wired) return;
-  card._wired = true;
-  const refresh = () => setTimeout(() => _gizmoCardSync(true), 60);
-  card.querySelectorAll('[data-orient]').forEach(b => b.addEventListener('click', () => { orientPivotsTo(b.dataset.orient); b.blur(); refresh(); }));
-  const apply = () => {
-    const v = ['x', 'y', 'z'].map(k => parseFloat(String(document.getElementById('pivot-' + k).value).replace(',', '.')));
-    if (v.some(n => !Number.isFinite(n))) { _gizmoCardSync(true); return; }
-    orientPivotsTo('custom', { euler: v });
-    refresh();
-  };
-  document.getElementById('btn-pivot-apply')?.addEventListener('click', apply);
-  // (the card opens from the palette: show where the pivot stands the moment it does)
-  new MutationObserver(() => { if (!card.hidden) setTimeout(() => _gizmoCardSync(true), 80); }).observe(card, { attributes: true, attributeFilter: ['hidden'] });
-}
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wireGizmoCard); else _wireGizmoCard();
+// ── The Pivot card (pivot-card.js) ─────────────────────────────────────────────────────
+// The angles in its Orientation tab follow the gizmo while it is dragged: the places that move it tell the card through here.
+let _pivotCard = null;
+function _gizmoCardSync(force) { if (_pivotCard) _pivotCard.sync(force); }
 
 function setGizmoMode(mode) {
   state.gizmoMode = mode;
@@ -9239,6 +9402,8 @@ function onResize() {
   if (onResize._w !== w || onResize._h !== h || onResize._dpr !== dpr) {       // (setSize clears and reallocates the drawing buffer, even for the size it has)
     onResize._w = w; onResize._h = h; onResize._dpr = dpr;
     renderer.setSize(w, h, false);
+    // (setSize empties the canvas, and the frame the loop draws comes a little later: until then the view showed black. So the picture is drawn here, at the new size, at once.)
+    try { if (w > 0 && h > 0 && !state.renderPaused && !_Photo.render()) { if (window.__moSectionPlane) window.__moSectionPlane.render(scene, camera); else renderer.render(scene, camera); } } catch (_) {}
   }
   requestRender();
 }
@@ -11115,14 +11280,18 @@ async function _settleView(stillMine = () => true, capMs = 12000) {
         new Promise(r => setTimeout(r, left())),
       ]);
     }
-    // draw until four frames in a row take no longer than half as much again as the quickest so far (34 ms at least)
-    let best = Infinity, even = 0, prev = performance.now();
+    // draw until four frames in a row take no longer than half as much again as the usual frame of the last few (34 ms at least).
+    // The usual frame is the median of the last six, not the quickest ever: one quick frame early on (a frame with little to draw) set a
+    // bar that a slow graphics path (150 to 200 ms a frame, every frame) never met, and the loop ran to its 12 s cap on a model of 128
+    // triangles. A steady slow path is settled; a hitch (a shader built, a buffer sent) is a frame far above the others and starts the count again.
+    const recent = []; let even = 0, prev = performance.now();
     while (!over() && even < 4) {
       requestRender();
       await nextFrame();
       const now = performance.now(), dt = now - prev; prev = now; frames++;
-      if (dt < best) best = dt;
-      even = frames > 2 && dt <= Math.max(34, best * 1.5) ? even + 1 : 0;
+      recent.push(dt); if (recent.length > 6) recent.shift();
+      const med = recent.slice().sort((a, b) => a - b)[recent.length >> 1];
+      even = frames > 2 && dt <= Math.max(34, med * 1.5) ? even + 1 : 0;
     }
     // the picking trees (the hover outline and every click use them)
     while (!over() && state._bvhBuilding) await new Promise(r => setTimeout(r, 50));
@@ -13122,6 +13291,21 @@ const _ClaudeBridge = (() => {
       const b = snap(); const r = await hook('roundFaces', { ids, quiet: true, params }); await sleep(200);
       return text({ scope, ...diff(b, snap()), parts: (r && r.results) || [], note: 'Only a part that still has its CAD faces (a STEP opened with them) can be simplified this way; the part keeps its CAD faces afterwards, so the other CAD tools still work on it.' });
     },
+    async bake_textures(a) {
+      const hook = window.__moAgent && window.__moAgent.bakeTextures;
+      if (!hook) throw new Error('Bake textures is not available here.');
+      let ids = resolveIds(a);
+      if (!ids.length) throw new Error('Name the parts (ids or name_contains) or select them: Bake textures works on chosen parts only.');
+      ids = ids.filter(id => !(getPart(id) || {}).locked);      // (a locked part is not to change: lock_parts)
+      if (!ids.length) throw new Error('The parts are locked (lock_parts): nothing was changed.');
+      const size = [1024, 2048, 4096].includes(a.size_px) ? a.size_px : 2048;
+      const reduce = Number.isFinite(a.reduce_percent) ? Math.max(0, Math.min(90, a.reduce_percent)) : 50;
+      const maps = Array.isArray(a.maps) && a.maps.length ? a.maps.filter(m => ['colour', 'normals', 'occlusion'].includes(m)) : ['colour', 'normals'];
+      if (!maps.length) throw new Error("maps can hold 'colour', 'normals' and 'occlusion'.");
+      const b = snap(); const r = await hook({ ids, reduce_percent: reduce, size, maps, occlusion_reach_percent: a.occlusion_reach_percent, occlusion_rays: a.occlusion_rays, quiet: true }); await sleep(200);
+      if (r && r.ok === false) throw new Error('Nothing was baked: ' + (r.why || 'it could not be done'));
+      return text({ ...diff(b, snap()), picture_px: size, reduced_by_percent: reduce, maps, result: r, note: 'The parts now wear one material, Baked, with the maps as its Base colour, Normal and Ambient occlusion maps. One undo step takes it back.' });
+    },
     async remove_thickness(a) {
       const hook = window.__moAgent && window.__moAgent.meshOp;
       if (!hook) throw new Error('Remove thickness is not available here.');
@@ -13167,8 +13351,9 @@ const _ClaudeBridge = (() => {
       const hook = window.__moAgent && window.__moAgent.voxelRemesh;
       if (!hook) throw new Error('Voxel remesh is not available here.');
       const ids = needIds(a, 'remesh');
-      const b = snap(); const r = await hook({ ids, cells: a.detail, adaptivity: a.adaptivity, width: a.close_gaps_mm, quiet: true }); await sleep(200);
-      return text({ ...diff(b, snap()), parts: (r && r.results) || [], note: 'Each part is rebuilt on a voxel grid as one closed surface: overlapping bodies become one, hollows shut inside are filled, sharp edges are kept to the size of a voxel.' });
+      if (a.wrap && ids.length < 2) throw new Error('wrap needs two or more parts: it makes them one part with one closed skin.');
+      const b = snap(); const r = await hook({ ids, cells: a.detail, adaptivity: a.adaptivity, width: a.close_gaps_mm, wrap: !!a.wrap, quiet: true }); await sleep(200);
+      return text({ ...diff(b, snap()), parts: (r && r.results) || [], note: a.wrap ? 'The ' + ids.length + ' parts were made one part, "Wrap", rebuilt on a voxel grid as one closed skin: what was inside is gone, gaps narrower than ' + (a.close_gaps_mm > 0 ? a.close_gaps_mm + ' mm' : '3 % of its length') + ' are bridged. One undo takes the whole call back.' : 'Each part is rebuilt on a voxel grid as one closed surface: overlapping bodies become one, hollows shut inside are filled, sharp edges are kept to the size of a voxel.' });
     },
     async simplify_round_part(a) {
       const hook = window.__moAgent && window.__moAgent.fillGrooves;
@@ -13438,8 +13623,6 @@ const _ClaudeBridge = (() => {
     async batch_optimise(a) {
       // A folder of models, one after another: each opens in a scene tab of its own (your scene is not touched), is optimised, is exported, and its tab is closed.
       if (!prefOn('files')) throw new Error('Files are turned off in Settings › Claude. Nothing was done.');
-      const reg = (() => { try { return window.top.__moTabs; } catch (_) { return null; } })();
-      if (!reg || typeof _Tabs === 'undefined') throw new Error('Scene tabs are not available here.');
       let paths = Array.isArray(a.files) ? a.files.map(String) : [];
       if (a.folder) {
         const r = await fetch('/api/bridge/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: String(a.folder), recursive: !!a.recursive }) });
@@ -13453,57 +13636,13 @@ const _ClaudeBridge = (() => {
       const doing = recipe ? 'the recipe “' + recipe + '”' : goal ? 'optimise to ' + (a.preset ? 'the ' + a.preset + ' limits' : [a.target_mb > 0 && a.target_mb + ' MB', a.target_triangles > 0 && a.target_triangles + ' triangles'].filter(Boolean).join(' and ')) : 'Smart optimise (' + (level === 'none' ? 'light' : level) + ')';
       const exp = a.export_format ? { format: String(a.export_format) } : { preset: a.export_preset || 'web' };
       if (a.dry_run) return text({ dry_run: true, nothing_changed: true, would_process: paths.map(p => p.split(/[\\/]/).pop()), count: paths.length, skipped_over_the_limit: skipped, would_do: doing, then_export: exp, note: 'Call again without dry_run to run it (the user is asked first).' });
-      const origin = reg.active, results = [], t0 = Date.now();
-      let cancelled = false;
-      jobNote('', 0, paths.length);
-      try {
-        for (let i = 0; i < paths.length; i++) {
-          if (stopped()) { cancelled = true; break; }
-          const path = paths[i], name = path.split(/[\\/]/).pop(), row = { file: name };
-          jobNote('File ' + (i + 1) + ' of ' + paths.length + ' · ' + name + ' · ', i, paths.length);
-          progress('opening');
-          let tabId = null;
-          try {
-            const r = await fetch('/api/bridge/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
-            if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (_) {} throw new Error(m || 'could not read the file'); }
-            const file = new File([await r.blob()], decodeURIComponent(r.headers.get('X-File-Name') || name));
-            tabId = _Tabs.add({ file });
-            const lim = Date.now() + Math.min(3600, Math.max(30, a.timeout_seconds | 0 || 900)) * 1000;
-            let wt = null, last = '', same = 0, sum = null;
-            while (Date.now() < lim) {
-              if (stopped()) throw new Error('stopped');
-              const w = reg.wins[tabId]; wt = w && w.__moBridgeTools;
-              if (wt) {
-                try { sum = JSON.parse((await wt.scene_summary())[0].text); } catch (_) { sum = null; }
-                if (sum && sum.parts > 0) { const k = sum.parts + ':' + sum.triangles; same = k === last ? same + 1 : 0; last = k; if (same >= 2) break; }
-              }
-              await sleep(1000);
-            }
-            if (!sum || !(sum.parts > 0) || same < 2) throw new Error('the file did not open in time');
-            row.before = { parts: sum.parts, triangles: sum.triangles };
-            if (recipe) await wt.run_recipe({ name: recipe });
-            else if (goal) await wt.optimise_to_target({ preset: a.preset, target_mb: a.target_mb, target_triangles: a.target_triangles, level, draco: a.draco });
-            else await wt.smart_optimise({ level: level === 'none' ? 'light' : level });
-            if (stopped()) throw new Error('stopped');
-            progress('exporting');
-            const after = JSON.parse((await wt.scene_summary())[0].text);
-            row.after = { parts: after.parts, triangles: after.triangles };
-            const stem = name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'model';
-            const ex = JSON.parse((await wt.export_model({ ...exp, file_name: stem + '_optimised' }))[0].text);
-            row.saved = (ex.files || []).map(f => ({ path: f.path, megabytes: f.megabytes }));
-            row.ok = true;
-          } catch (e) {
-            row.ok = false; row.error = (e && e.message) || String(e);
-            if (row.error === 'stopped') { cancelled = true; row.error = 'stopped'; }
-          } finally {
-            if (tabId) { try { const tb = reg.tabs.find(x => x.id === tabId); if (tb) tb.dirty = false; await _Tabs.close(tabId); } catch (_) {} }
-          }
-          results.push(row);
-          if (cancelled) break;
-        }
-      } finally {
-        try { if (reg.tabs.some(x => x.id === origin && !x.closed)) _Tabs.activate(origin); } catch (_) {}
-      }
+      const t0 = Date.now();
+      const items = paths.map(path => ({ name: path.split(/[\\/]/).pop(), get: async () => {
+        const r = await fetch('/api/bridge/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+        if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (_) {} throw new Error(m || 'could not read the file'); }
+        return new File([await r.blob()], decodeURIComponent(r.headers.get('X-File-Name') || path.split(/[\\/]/).pop()));
+      } }));
+      const { results, cancelled } = await _batchCore(items, { recipe, goal, preset: a.preset, target_mb: a.target_mb, target_triangles: a.target_triangles, level, draco: a.draco, exp, timeout_seconds: a.timeout_seconds }, { stopped, note: jobNote, stage: (m) => progress(m) });
       const good = results.filter(r => r.ok);
       const sum = (k, f) => good.reduce((n, r) => n + ((r[k] && r[k][f]) || 0), 0);
       return text({ did: doing, exported_as: exp, files_done: results.length, succeeded: good.length, failed: results.length - good.length, stopped: cancelled, not_reached_because_of_the_limit: skipped,
@@ -13768,12 +13907,12 @@ const _ClaudeBridge = (() => {
     untriangulate: (a, n) => a.mode === 'quads'
       ? ['Pair triangles into quads on ' + (n ? n + ' part' + (n === 1 ? '' : 's') : 'the whole scene'), 'Neighbouring triangles become four-sided polygons where they make one. No point moves and no triangle goes; the OBJ and FBX exports write the quads.']
       : ['Untriangulate ' + (n ? n + ' part' + (n === 1 ? '' : 's') : 'the whole scene'), 'Flat faces are re-triangulated with the fewest triangles. The shape does not change. Undo (Ctrl+Z) takes it back.'],
-    fix_mesh: (a, n) => [({ close_cracks: 'Close cracks', close_open_edges: 'Close open edges', remove_slivers: 'Remove slivers', patch_holes: 'Patch holes' }[a.action] || 'Mend') + ' (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'The mesh is mended and kept where it is. Undo (Ctrl+Z) takes it back.'],
-    reshape_mesh: (a, n) => [({ remesh_evenly: 'Remesh evenly', smooth: 'Smooth surface', convex_hull: 'Convex hull', convex_pieces: 'Convex pieces', merge_bodies: 'Merge bodies' }[a.action] || 'Reshape') + ' (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'Each part is rebuilt. Undo (Ctrl+Z) takes it back.'],
+    fix_mesh: (a, n) => [({ close_cracks: 'Close cracks', close_open_edges: 'Close open edges', remove_slivers: 'Remove slivers', patch_holes: 'Fill mesh holes' }[a.action] || 'Mend') + ' (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'The mesh is mended and kept where it is. Undo (Ctrl+Z) takes it back.'],
+    reshape_mesh: (a, n) => [({ remesh_evenly: 'Isotropic remesh', smooth: 'Smooth surface', convex_hull: 'Convex hull', convex_pieces: 'Convex pieces', merge_bodies: 'Merge bodies' }[a.action] || 'Reshape') + ' (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'Each part is rebuilt. Undo (Ctrl+Z) takes it back.'],
     simplify_round_faces: (a, n) => ['Simplify round faces (' + (n ? n + ' part' + (n === 1 ? '' : 's') : 'every part that is shown') + ')', 'The round faces get fewer facets' + (a.deviation_mm > 0 ? ', moving by at most ' + a.deviation_mm + ' mm' : '') + (a.min_segments > 0 ? ', at least ' + a.min_segments + ' a turn' : '') + '. The flat faces and the CAD faces are kept. Undo (Ctrl+Z) takes it back.'],
     remove_fillets: (a, n) => ['Remove fillets and chamfers (' + (n ? n + ' part' + (n === 1 ? '' : 's') : 'every part that is shown') + ')', 'Fillets' + (a.max_radius_mm > 0 ? ' up to r ' + a.max_radius_mm + ' mm' : '') + ' and chamfers' + (a.max_chamfer_mm > 0 ? ' up to ' + a.max_chamfer_mm + ' mm' : '') + ' are taken off and the edges made sharp. Undo (Ctrl+Z) takes it back.'],
     boolean_parts: (a) => [({ union: 'Union', subtract: 'Subtract', intersect: 'Intersect' }[a.op] || 'Boolean') + ' parts', 'The first part becomes the result; the others are left as they are. Undo (Ctrl+Z) takes it back.'],
-    voxel_remesh: (a, n) => ['Voxel remesh (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'Each part is rebuilt on a voxel grid' + (a.detail > 0 ? ' of ' + a.detail + ' cells' : '') + (a.close_gaps_mm > 0 ? ', closing gaps up to ' + a.close_gaps_mm + ' mm' : '') + '. Undo (Ctrl+Z) takes it back.'],
+    voxel_remesh: (a, n) => [a.wrap ? 'Wrap ' + n + ' parts into one' : 'Voxel remesh (' + n + ' part' + (n === 1 ? '' : 's') + ')', (a.wrap ? 'The parts are made one part, rebuilt on a voxel grid' : 'Each part is rebuilt on a voxel grid') + (a.detail > 0 ? ' of ' + a.detail + ' cells' : '') + (a.close_gaps_mm > 0 ? ', closing gaps up to ' + a.close_gaps_mm + ' mm' : '') + '. Undo (Ctrl+Z) takes it back.'],
     simplify_round_part: (a, n) => a.mode === 'belt'
       ? ['Belt: remove ribs (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'The ribs along each belt are filled and it is swept again from one cross-section. Undo (Ctrl+Z) takes it back.']
       : a.mode === 'solid'
@@ -13830,7 +13969,7 @@ const _ClaudeBridge = (() => {
     merge_parts: 'geometry', merge_by_colour: 'geometry', decimate: 'geometry', fit_to_budget: 'geometry', fill_holes: 'geometry', clean_up: 'delete', repair_mesh: 'geometry', remove_hidden_faces: 'geometry', split_parts: 'geometry', duplicate_parts: 'geometry', smart_optimise: 'geometry', smart_fit: 'geometry', untriangulate: 'geometry', simplify_round_part: 'geometry', voxel_remesh: 'geometry', fix_mesh: 'geometry', reshape_mesh: 'geometry', boolean_parts: 'geometry',
     group_parts: 'layout', ungroup: 'layout', rename_parts: 'layout', transform_parts: 'layout', recenter_model: 'layout', align_to_floor: 'layout',
     export_model: 'files', open_file: 'files', turntable_video: 'files', render_image: 'files', save_scene: 'files', run_recipe: 'geometry', add_library_part: 'layout',
-    optimise_to_target: 'geometry', batch_optimise: 'geometry', remove_thickness: 'geometry', compare_images: 'files', list_folder: 'files',
+    optimise_to_target: 'geometry', batch_optimise: 'geometry', remove_thickness: 'geometry', bake_textures: 'geometry', compare_images: 'files', list_folder: 'files',
     remove_floating_pieces: 'geometry', make_unique: 'geometry', remove_fillets: 'geometry', simplify_round_faces: 'geometry', lock_parts: 'layout', add_note: 'layout', reply_to_note: 'layout', update_note: 'layout', export_notes: 'files' };
   // Steps that can be tried and taken back (dry_run), and jobs that take a while (progress, and Stop for the ones that can be interrupted)
   const DRY = new Set(['delete_parts', 'remove_small_parts', 'merge_parts', 'merge_by_colour', 'decimate', 'fit_to_budget', 'fill_holes', 'remove_hidden_faces', 'repair_mesh', 'clean_up', 'duplicate_parts', 'smart_optimise', 'smart_fit', 'untriangulate', 'simplify_round_part', 'voxel_remesh', 'fix_mesh', 'reshape_mesh', 'boolean_parts', 'run_recipe', 'optimise_to_target', 'remove_fillets', 'simplify_round_faces']);
@@ -15451,6 +15590,62 @@ const _GROUP_SCALE_ONE = new THREE.Vector3(1, 1, 1);
 let _groupScalePending = null;
 function _groupScaleNote(gid, before, after) { _groupScalePending = { gid, before: _groupScalePending && _groupScalePending.gid === gid ? _groupScalePending.before : (before ? before.clone() : null), after: after ? after.clone() : null }; }
 function _groupScaleApply(op, dir) { const g = op && op._gs; if (!g) return; const v = g[dir]; if (v) _groupScales.set(g.gid, v.clone()); else _groupScales.delete(g.gid); try { _transformPanelRefresh(); } catch (_) {} }
+// The stored pivot (origin and turn) of every tree group, copied: a move of a group is undone with the parts, and the pivot goes back with them
+// (without it the gizmo stayed where the group had been moved to).
+function _snapGroupFrames() { return { o: new Map([..._groupOrigins].map(([k, v]) => [k, v.clone()])), r: new Map([..._groupRotations].map(([k, v]) => [k, v.clone()])) }; }
+function _groupFramesApply(op, dir) {
+  const g = op && op._go, f = g && g[dir]; if (!f) return;
+  _groupOrigins.clear(); for (const [k, v] of f.o) _groupOrigins.set(k, v.clone());
+  _groupRotations.clear(); for (const [k, v] of f.r) _groupRotations.set(k, v.clone());
+  _tfParentCentroidForChild = null;
+  try { _detachGizmo(); updateGizmo(); } catch (_) {}      // (detached first: the pivot is anchored again at the restored origin)
+}
+// The pivot of a tree group, set on purpose (the Pivot card with one group picked): only the stored origin and turn change, no part moves.
+// They are what the gizmo stands on, what the Position fields count from, and what is written into the file (see _writeGroupPivots).
+function _groupPivotTarget() {
+  if (!state.selectedGroupIds || state.selectedGroupIds.size !== 1) return null;
+  const gid = parseInt(String([...state.selectedGroupIds][0]), 10);
+  return Number.isFinite(gid) && state.treeNodes?.some(n => n.kind === 'group' && n.id === gid) ? gid : null;
+}
+function _groupPivotApply(op, dir) {
+  const v = op[dir];
+  _groupOrigins.set(op.gid, v.o.clone()); _groupRotations.set(op.gid, v.q.clone());
+  _tfParentCentroidForChild = null;
+  try { _detachGizmo(); updateGizmo(); _transformPanelRefresh(); requestRender(); } catch (_) {}
+}
+// where: 'centre' | 'origin' | 'view' | 'keep'; turn: 'keep' | 'world' | 'parent' | 'custom' (opts.euler, degrees). Returns true when a
+// group was picked (the card then has nothing else to do), false when it was not.
+function _groupPivotAct(where, turn, opts = {}) {
+  const gid = _groupPivotTarget(); if (gid == null) return false;
+  _initGroupOrigins();
+  let o = null, q = null, label = 'Group pivot';
+  if (where === 'centre') {
+    const keep = _groupOrigins.get(gid);
+    _groupOrigins.delete(gid); _initGroupOrigins();
+    o = _groupOrigins.get(gid) || null;
+    if (keep) _groupOrigins.set(gid, keep); else _groupOrigins.delete(gid);
+    if (!o) { toast('Nothing to centre on', 'The group has no parts', 'info', 2200); return true; }
+    label = 'Centre group pivot';
+  } else if (where === 'origin') { o = new THREE.Vector3(); label = 'Group pivot to the origin'; }
+  else if (where === 'view') { if (!controls || !controls.target) return true; o = controls.target.clone(); label = 'Group pivot to the view'; }
+  else if (where !== 'keep') { toast('Not for a group', 'A group pivot goes to its centre, the origin or the middle of the view', 'info', 2800); return true; }
+  if (turn === 'world') { q = new THREE.Quaternion(); if (where === 'keep') label = 'Group pivot turned to the world'; }
+  else if (turn === 'parent') {
+    const node = state.treeNodes.find(n => n.kind === 'group' && n.id === gid);
+    q = ((node && node.parentId != null && _groupRotations.get(node.parentId)) || new THREE.Quaternion()).clone(); if (where === 'keep') label = 'Group pivot turned to its parent';
+  } else if (turn === 'custom') {
+    const e = opts.euler || [0, 0, 0], D = Math.PI / 180;
+    q = new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * D, e[1] * D, e[2] * D, 'XYZ')); if (where === 'keep') label = 'Group pivot turned';
+  } else if (turn !== 'keep') { toast('Not for a group', 'A group has no shape to follow: turn its pivot to the World, its parent or typed angles', 'info', 3200); if (!o) return true; }
+  const before = { o: (_groupOrigins.get(gid) || new THREE.Vector3()).clone(), q: (_groupRotations.get(gid) || new THREE.Quaternion()).clone() };
+  const after = { o: o ? o.clone() : before.o.clone(), q: q ? q.clone() : before.q.clone() };
+  if (before.o.distanceTo(after.o) <= 1e-9 * (1 + before.o.length()) && Math.abs(before.q.dot(after.q)) >= 1 - 1e-12) { toast('Nothing to do', 'The pivot is already there', 'info', 2000); return true; }
+  const op = { type: 'groupPivot', label, gid, before, after };
+  _groupPivotApply(op, 'after');
+  pushUndo(op);
+  toast(label, '', 'success', 1800);
+  return true;
+}
 function _tformGroupId() { const g = state.selectedGroupIds ? [...state.selectedGroupIds][0] : null; const n = g != null ? parseInt(String(g), 10) : NaN; return Number.isFinite(n) ? n : null; }
 function _tformGroupScale() { const id = _tformGroupId(); return (id != null && _groupScales.get(id)) || _GROUP_SCALE_ONE; }
 // Scale the parts of tree group `gid` by `factor` along the group's own axis k ('x', 'y' or 'z'), about its middle. With the gizmo on
@@ -15529,20 +15724,22 @@ function _readStableSize(obj, target) {
   else _tfTmpBox.getSize(target);
 }
 
-// The third column of the Transform panel: the size of the part (its box, in the scene's unit) or, with the Scale switch in the
-// panel head on, its scale (a factor, 1 = as it came). A group always shows its scale. The choice is kept in this browser.
+// The third column of the Transform panel: the size of the part (its box, in the scene's unit) or, after a click on the column's
+// title (Size / Scale), its scale (a factor, 1 = as it came). A group always shows its scale. The choice is kept in this browser.
 let _tformScale = (() => { try { return localStorage.getItem('stepopt-tform-scale') === '1'; } catch (_) { return false; } })();
 function _tformScaleOn() { return _tformScale; }
 function _tformScaleSet(on) { _tformScale = !!on; try { localStorage.setItem('stepopt-tform-scale', _tformScale ? '1' : '0'); } catch (_) {} }
-// The switch is wired on its own, as soon as the page is there: the rest of the panel is wired the first time it is opened
-// (_wireTransformPanel), and until then a press on the switch did nothing.
+// The title is wired on its own, as soon as the page is there: the rest of the panel is wired the first time it is opened
+// (_wireTransformPanel), and until then a press on it did nothing.
 function _tformScaleWire() {
-  const sw = document.getElementById('tform-scale-toggle');
-  if (!sw || sw._wired) return;
-  sw._wired = true;
-  const sync = () => { const on = _tformScaleOn(); sw.setAttribute('aria-pressed', String(on)); sw.classList.toggle('is-on', on); };
-  sw.addEventListener('click', () => { _tformScaleSet(!_tformScaleOn()); sync(); sw.blur(); try { _transformPanelRefresh(); } catch (_) {} });
-  sync();
+  const grid = document.getElementById('tform-grid');
+  if (!grid || grid._scaleWired) return;
+  grid._scaleWired = true;
+  grid.addEventListener('click', (e) => {
+    if (!e.target.closest('.tform-col-label[data-tform-col="scale"]')) return;
+    _tformScaleSet(!_tformScaleOn());
+    try { _transformPanelRefresh(); } catch (_) {}
+  });
 }
 if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _tformScaleWire, { once: true }); else _tformScaleWire(); }
 // ── Several parts selected ──
@@ -15990,9 +16187,26 @@ function _transformPanelRefresh() {
     }
   } catch (_) {}
 }
+
 function _fmtNum(v, decimals = 3) {
   if (!Number.isFinite(v)) return '';
   return parseFloat(v.toFixed(decimals)).toString();
+}
+
+// Reset of a part puts its pivot on the pivot of its group, so the pivot has to be in the part first: the origin of a CAD part is usually
+// far from its shape, and the shape would be left that far from the group's axis. The pivot is moved to the middle of the part, the shape
+// staying where it is (the same step as Centre pivot, which is its own step on the undo list), and only when it is not there already.
+function _tformCentrePartPivot() {
+  try {
+    const t = _transformTarget();
+    if (!t || t.kind !== 'part' || !t.part || t.part.locked || !t.part.mesh) return;
+    const m = t.part.mesh; m.updateWorldMatrix(true, false);
+    const wq = m.getWorldQuaternion(new THREE.Quaternion()), c = _axisCentreOf(t.part, wq);
+    if (!c) return;
+    const w = m.getWorldPosition(new THREE.Vector3());
+    if (c.distanceTo(w) <= 1e-6 * (1 + w.length() + c.length())) return;
+    axisSet('centre', 'keep', { ids: [t.part.partId], label: 'Centre pivot' });
+  } catch (e) { console.warn('[transform-panel] centring the pivot before Reset failed:', e); }
 }
 
 // What the Reset button does. Position is what the panel shows: the world
@@ -16461,7 +16675,7 @@ function _wireTransformPanel() {
   // Reset puts the selection back at the origin of its parent group (the world
   // origin when it has none), turned to 0 and at scale 1: the values the
   // fields show as zero. See _tformResetSelection.
-  document.getElementById('tform-reset')?.addEventListener('click', () => _withTransformUndo('panel:reset', _tformResetSelection));
+  document.getElementById('tform-reset')?.addEventListener('click', () => { _tformCentrePartPivot(); _withTransformUndo('panel:reset', _tformResetSelection); });
 
   // ── Right-click on Position / Rotation / Size column headers ─────────
   // Pops a small context menu with Copy XYZ / Paste XYZ / Reset XYZ for
@@ -16625,6 +16839,14 @@ function _stopTransformPoll() {
   state._transformPollOn = false;
 }
 
+// The Transform block sits in the right sidebar and is always shown: wired and read from the start.
+function _initTransformDock() {
+  const panel = document.getElementById('transform-panel');
+  if (!panel) return;
+  _wireTransformPanel();
+  panel.classList.add('show');
+  _transformPanelRefresh(); _startTransformPoll();
+}
 function _toggleTransformPanel() {
   const btn = document.getElementById('tg-transform');
   const panel = document.getElementById('transform-panel');
@@ -17555,7 +17777,11 @@ const _Photo = (() => {
     // figures and a red mark across its band at the top, where its setting is read; the others faint; its name and setting over it.
     // Light to draw: each ring's figures and ridges are made once, at fixed angles, and turned as one (a rotation of its group); only the
     // focus ring's figures are made again when a new decade comes round. The turning is done once a frame, however many moves arrive.
-    const RINGS = { focus: { r: 88, w: 21, name: 'Focus' }, aperture: { r: 64, w: 18, name: 'Aperture' }, zoom: { r: 42, w: 16, name: 'Zoom' } };
+    const RINGS = { focus: { r: 89, w: 24, name: 'Focus' }, aperture: { r: 64, w: 18, name: 'Aperture' }, zoom: { r: 42, w: 16, name: 'Zoom' } };
+    // Across a band: the ribs (rubber) take the outer edge, `rib` deep and `step` degrees apart; the figures stand inside them (the focus ring has
+    // two rows, as a lens has: metres, and feet in a warm colour). The scene is in millimetres, a lens's scale in metres and feet.
+    const BAND = { focus: { fig: 91.5, ft: 82.5, rib: 5, step: 3 }, aperture: { fig: 62.5, rib: 4, step: 4 }, zoom: { fig: 40.5, rib: 4, step: 5 } };
+    const FT = 304.8, INF_MM = 1e6;      // (a foot in millimetres; a kilometre is where the scale ends, at the infinity mark)
     const ORDER = ['focus', 'aperture', 'zoom'];
     let ringNow = 'focus';                                    // (the one turned last: the next drag starts on it)
     const STOPS = [1.4, 2, 2.8, 4, 5.6, 8, 11, 16];
@@ -17584,7 +17810,7 @@ const _Photo = (() => {
       const c = camera.getWorldPosition(new THREE.Vector3()), d = focusPoint.clone().sub(c), len = d.length();
       if (len <= 1e-9) return;
       if (drag.dRaw == null) drag.dRaw = len;
-      drag.dRaw *= Math.exp(-dy * (fine ? 0.0003 : 0.003));
+      drag.dRaw = Math.min(INF_MM, drag.dRaw * Math.exp(-dy * (fine ? 0.0003 : 0.003)));      // (the infinity stop)
       const sn = snapped('focus', drag.dRaw, fine); drag.snap = sn.on;
       if (Math.abs(sn.v - len) < len * 1e-9) return;
       focusPoint.copy(c).addScaledVector(d.multiplyScalar(1 / len), sn.v); focusName = ''; drag.focusMoved = true; lib.restart(); requestRender();
@@ -17609,15 +17835,22 @@ const _Photo = (() => {
       if (Math.abs(mm - mmNow()) < 1e-6) return;
       state.cameraFov = 2 * Math.atan(12 / mm) * 180 / Math.PI; camera.fov = state.cameraFov; camera.updateProjectionMatrix();
       const el = $('cam-fov'); if (el) el.value = String(Math.round(mm));
-      void was; lib.restart(); requestRender();
+      const lbl = $('cam-fov-val'); if (lbl) lbl.textContent = Math.round(mm);
+      void was; if (on) lib.restart(); requestRender();
     }
     let ring = null;
-    const figure = (key, v, label) => { const deg = angOf(key, v), p = ptAt(deg, RINGS[key].r); return '<text class="fr-num" data-v="' + v + '" x="' + p[0].toFixed(1) + '" y="' + (p[1] + 3).toFixed(1) + '" transform="rotate(' + deg.toFixed(1) + ' ' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ')">' + label + '</text>'; };
-    const ridges = (r, step) => { let d = ''; for (let deg = 0; deg < 360; deg += step) { const a = ptAt(deg, r - 3), b = ptAt(deg, r); d += 'M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) + 'L' + b[0].toFixed(1) + ' ' + b[1].toFixed(1); } return '<path class="fr-ticks" d="' + d + '"/>'; };
+    const figure = (key, v, label, o = {}) => { const deg = angOf(key, v), p = ptAt(deg, o.r || BAND[key].fig); return '<text class="fr-num' + (o.cls ? ' ' + o.cls : '') + '" data-v="' + v + '" x="' + p[0].toFixed(1) + '" y="' + (p[1] + (o.dy || 3)).toFixed(1) + '" transform="rotate(' + deg.toFixed(1) + ' ' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ')">' + label + '</text>'; };
+    const ribs = (key) => {
+      const R = RINGS[key], B = BAND[key], ro = R.r + R.w / 2, ri = ro - B.rib, d = 0.85 / ro * 180 / Math.PI;      // (d: the lit and the shaded edge, a little under a pixel either side)
+      let lo = '', body = '', hi = '';
+      const seg = (deg) => { const a = ptAt(deg, ri), b = ptAt(deg, ro); return 'M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) + 'L' + b[0].toFixed(1) + ' ' + b[1].toFixed(1); };
+      for (let deg = 0; deg < 360; deg += B.step) { lo += seg(deg + d); body += seg(deg); hi += seg(deg - d); }
+      return '<path class="fr-rib-lo" d="' + lo + '"/><path class="fr-rib" d="' + body + '"/><path class="fr-rib-hi" d="' + hi + '"/><circle class="fr-lip" r="' + ri.toFixed(1) + '"/>';
+    };
     const ringMake = () => {
       if (ring) return ring;
       ring = document.createElement('div'); ring.className = 'photo-focus-ring'; ring.setAttribute('aria-hidden', 'true');
-      const turnOf = (k) => ridges(RINGS[k].r + RINGS[k].w / 2, k === 'focus' ? 4 : 5)
+      const turnOf = (k) => ribs(k)
         + (k === 'aperture' ? STOPS.map(f => figure(k, f, String(f))).join('') : k === 'zoom' ? LENSES.map(m => figure(k, m, String(m))).join('') : '<g class="fr-figs"></g>');
       const mark = (k) => { const g = RINGS[k]; return '<path class="fr-mark" d="M0 ' + (-(g.r - g.w / 2 + 3)).toFixed(1) + 'V' + (-(g.r + g.w / 2 - 3)).toFixed(1) + '"/>'; };
       ring.innerHTML = '<svg viewBox="-122 -122 244 244">' + ORDER.map(k => '<g class="fr-ring" data-ring="' + k + '"><circle class="fr-band" r="' + RINGS[k].r + '" stroke-width="' + RINGS[k].w + '"/><g class="fr-turn">' + turnOf(k) + '</g>' + mark(k) + '</g>').join('')
@@ -17631,11 +17864,17 @@ const _Photo = (() => {
     const ringDraw = () => {
       const R = ringMake(), dist = focusPoint ? focusDist() : 1, f = drag && drag.fT != null ? drag.fT : fNow(), mm = mmNow();
       const cur = { focus: dist, aperture: f, zoom: mm };
-      // the focus ring's figures: the round distances within reach of the top (made again only when that set changes)
-      const e0 = Math.floor(Math.log10(dist)), want = [];
-      for (let e = e0 - 2; e <= e0 + 2; e++) for (const m of [1, 2, 5]) { const v = m * Math.pow(10, e); if (Math.abs(angOf('focus', v) - angOf('focus', dist)) <= 165) want.push(v); }
-      const key = want.join(',');
-      if (key !== R._key) { R._key = key; R._figs.innerHTML = want.map(v => figure('focus', v, fmtD(v))).join(''); }
+      // the focus ring's figures: the round distances within reach of the top, in metres (white) and in feet (warm), the near end
+      // (under a metre) tinted, and an infinity mark where the scale ends (made again only when that set changes)
+      const e0 = Math.floor(Math.log10(dist)), ef = Math.floor(Math.log10(dist / FT)), wantM = [], wantF = [];
+      const nearTop = (v) => Math.abs(angOf('focus', v) - angOf('focus', dist)) <= 165;
+      for (let e = e0 - 2; e <= e0 + 2; e++) for (const m of [1, 2, 5]) { const v = m * Math.pow(10, e); if (v <= INF_MM && nearTop(v)) wantM.push(v); }
+      for (let e = ef - 2; e <= ef + 2; e++) for (const m of [1, 1.5, 2, 3, 5, 7]) { const ft = m * Math.pow(10, e); if (ft * FT < INF_MM && nearTop(ft * FT)) wantF.push(ft); }
+      const key = wantM.join(',') + '|' + wantF.join(',');
+      if (key !== R._key) {
+        R._key = key;
+        R._figs.innerHTML = wantM.map(v => v >= INF_MM ? figure('focus', v, '∞', { cls: 'fr-inf', dy: 4.5 }) : figure('focus', v, fmtD(v / 1000), v < 1000 ? { cls: 'fr-near' } : {})).join('')
+          + wantF.map(ft => figure('focus', ft * FT, fmtD(ft), { r: BAND.focus.ft, cls: ft * FT < 1000 ? 'fr-ft fr-near' : 'fr-ft', dy: 2.4 })).join(''); }
       for (const k of ORDER) {
         const rot = -angOf(k, cur[k]);
         if (R._rot[k] !== rot) { R._rot[k] = rot; R._t[k].setAttribute('transform', 'rotate(' + rot.toFixed(2) + ')'); }
@@ -17643,11 +17882,11 @@ const _Photo = (() => {
       if (R._now !== ringNow) { R._now = ringNow; for (const k of ORDER) R._g[k].classList.toggle('is-active', k === ringNow); }
       const snapNow = !!(drag && drag.snap); if (R._snap !== snapNow) { R._snap = snapNow; R.classList.toggle('is-snap', snapNow); }
       const fs = nearStop(f);
-      const nm = ringNow === 'focus' ? 'Focus ' + fmtD(dist) : ringNow === 'aperture' ? 'f/' + (Math.round(f * 10) / 10) : Math.round(mm) + ' mm';
+      const nm = ringNow === 'focus' ? (dist >= INF_MM ? 'Focus ∞' : 'Focus ' + fmtD(dist / 1000) + ' m') : ringNow === 'aperture' ? 'f/' + (Math.round(f * 10) / 10) : Math.round(mm) + ' mm';
       if (R._name.data !== nm) R._name.data = nm;
       R._st = { dist, fs, f, mm };      // (for the test hook only: kept in a plain object, not written to the page each frame)
     };
-    const ringShow = (x, y) => { const R = ringMake(); R.style.left = Math.round(x) + 'px'; R.style.top = Math.round(y) + 'px'; ringDraw(); R.classList.add('show'); };
+    const ringShow = (x, y) => { const R = ringMake(); R.style.left = Math.round(x) + 'px'; R.style.top = Math.round(y) + 'px'; const zo = !!(drag && drag.zOnly); R.classList.toggle('zoom-only', zo); R.querySelector('.fr-name').setAttribute('y', String(zo ? -(RINGS.zoom.r + 20) : -(RINGS.focus.r + 22))); ringDraw(); R.classList.add('show'); };
     const ringHide = () => { ring && ring.classList.remove('show'); };
     // the moves of a drag are added up and done once a frame (a mouse can send several moves a frame: each turned the lens and drew)
     const turnSoon = (dy, fine) => {
@@ -17661,7 +17900,7 @@ const _Photo = (() => {
         if (drag.ring) ringDraw();
         // (the sounds of it: a click when it catches a mark, else a tick for each ridge of the ring that has gone past the top)
         if (drag.ring && ring) {
-          const step = ringNow === 'focus' ? 4 : 5, r = ring._rot[ringNow], at = Number.isFinite(r) ? Math.floor(r / step) : null;
+          const step = BAND[ringNow].step, r = ring._rot[ringNow], at = Number.isFinite(r) ? Math.floor(r / step) : null;
           if (drag.snap && !wasSnap) _UiSound.click();
           else if (at !== null && drag.ridge != null && at !== drag.ridge) _UiSound.tick(Math.abs(d));      // (by how fast it turns)
           drag.ridge = at;
@@ -17697,11 +17936,16 @@ const _Photo = (() => {
     window.addEventListener('keydown', (e) => {
       if ((e.key !== 'v' && e.key !== 'V') || e.ctrlKey || e.metaKey || e.altKey) return;
       if (drag && drag.key) { e.preventDefault(); e.stopImmediatePropagation(); return; }      // (held: its repeats)
-      if (e.repeat || drag || !live() || _typingTarget(e) || _modalOpen() || !overView()) return;
+      if (e.repeat || drag || _typingTarget(e) || _modalOpen() || !overView()) return;
+      const zOnly = !live();      // (outside Photo mode's depth of field there is no focus or aperture to turn: only the lens, which is the view's field of view)
+      if (zOnly && !(camera && camera.isPerspectiveCamera && controls)) return;
       e.preventDefault(); e.stopImmediatePropagation();
-      if (!focusPoint) { const t = controls && controls.target; if (t) { focusPoint = t.clone(); focusName = ''; focusShow(); } }
-      if (!focusPoint) return;
-      drag = { y: py, x0: px, y0: py, ring: true, key: true };
+      if (!zOnly) {
+        if (!focusPoint) { const t = controls && controls.target; if (t) { focusPoint = t.clone(); focusName = ''; focusShow(); } }
+        if (!focusPoint) return;
+      }
+      drag = { y: py, x0: px, y0: py, ring: true, key: true, zOnly, prevRing: ringNow };
+      if (zOnly) ringNow = 'zoom';
       ringShow(px, py);
     }, true);
     window.addEventListener('keyup', (e) => { if ((e.key === 'v' || e.key === 'V') && drag && drag.key) { e.preventDefault(); e.stopImmediatePropagation(); dragEnd(); } }, true);
@@ -17710,6 +17954,7 @@ const _Photo = (() => {
       if (drag.id != null) { try { cv.releasePointerCapture(drag.id); } catch (_) {} }
       if (drag.raf) cancelAnimationFrame(drag.raf);
       if (drag.focusMoved) focusShow();      // (the focus readout, once)
+      if (drag.zOnly && drag.prevRing) ringNow = drag.prevRing;
       drag = null; cv.classList.remove('focus-drag'); ringHide(); swallow = 2; setTimeout(() => { swallow = 0; }, 0);
     };
     window.addEventListener('pointerup', (e) => { if (drag && !drag.key && e.button === 0) { e.stopImmediatePropagation(); dragEnd(); } }, true);
@@ -17718,6 +17963,7 @@ const _Photo = (() => {
       e.preventDefault(); e.stopImmediatePropagation();      // (the wheel does not zoom the camera meanwhile)
       const now = performance.now(); if (now - (drag.wheelAt || 0) < 140 || !e.deltaY) return;
       drag.wheelAt = now;
+      if (drag.zOnly) return;      // (one ring: nothing to go to)
       // (it stops at the outer ring and at the inner one: the wheel does not go round from one to the other)
       const i = Math.max(0, Math.min(ORDER.length - 1, ORDER.indexOf(ringNow) + (e.deltaY > 0 ? 1 : -1)));
       if (ORDER[i] === ringNow) return;
@@ -17918,7 +18164,7 @@ const _AXG = {
   colors: { x: ['#ff8a8f', '#f0525f'], y: ['#7fe08f', '#3fb85a'], z: ['#7fbaff', '#3b8cf2'] },   // [highlight, body] of each dot
   S: 11,            // half the cube's edge (svg units; viewBox is -44..44)
   D: 10,            // how far past the cube an axis runs before its dot
-  R: 7,             // dot radius
+  R: 7.5,           // dot radius: 15 px across, an odd number, so the 7 px capitals of its letter stand on whole pixels in the middle of it
   // six faces: outward normal and the four corners, counter-clockwise from outside
   faces: [
     { id: 'px', n: [ 1, 0, 0], c: [[1,-1,-1],[1, 1,-1],[1, 1, 1],[1,-1, 1]] },
@@ -17945,12 +18191,12 @@ function buildAxisGizmo() {
     html += `<polygon class="axg-face" id="axg-f-${f.id}" data-axis="${f.id}" points="" stroke-width="1.1" stroke-linejoin="round" style="cursor:pointer;display:none"></polygon>`;
   }
   html += '</g>';
-  // Three handles: positive axes only — a small glossy dot with the axis letter.
+  // Three handles: the positive axes, a dot with the axis letter.
   for (const a of ['x', 'y', 'z']) {
     const id = 'p' + a;
     html += `<g class="axg-handle" id="axg-h-${id}" data-axis="${id}" style="cursor:pointer">
       <circle r="${_AXG.R}" fill="${c[a][1]}"/>
-      <text x="0" y="0" dy=".36em" text-anchor="middle" font-size="9" font-weight="500" fill="#fff" style="pointer-events:none;user-select:none">${a.toUpperCase()}</text>
+      <text x="0" y="3.5" text-anchor="middle" text-rendering="geometricPrecision" font-size="9.63" font-weight="500" fill="#fff" style="pointer-events:none;user-select:none">${a.toUpperCase()}</text>
     </g>`;
   }
   svg.innerHTML = html;
@@ -17987,8 +18233,8 @@ function updateAxisGizmo() {
     for (const k of f.c) { const p = project(k[0] * S, k[1] * S, k[2] * S); pts += p.x.toFixed(2) + ',' + p.y.toFixed(2) + ' '; }
     el.setAttribute('points', pts.trim());
     const lit = Math.max(0, Math.min(1, -0.40 * n.x + -0.62 * n.y + 0.68 * n.z));   // n.y is already flipped (up = negative)
-    const g = Math.round(150 + 98 * lit);
-    const col = `rgb(${g},${g},${Math.min(255, g + 4)})`;
+    const g = Math.round(140 + 92 * lit);
+    const col = `rgb(${g - 7},${g - 2},${Math.min(255, g + 9)})`;      // (a cool grey: a little blue in the light, a little more in the shade)
     el.setAttribute('fill', col);
     el.setAttribute('stroke', col);
     el.style.display = '';
@@ -18024,10 +18270,14 @@ function updateAxisGizmo() {
     }
     return false;
   };
+  // (the dots, and the letters in them, move in whole device pixels: a letter is set on the pixel grid and cannot follow a dot that moves by fractions, so it fell behind by up to one)
+  const K = window.devicePixelRatio || 1;
+  const snapTo = (r) => { const half = Math.round(2 * r * K) % 2 ? 0.5 : 0; return (p) => ({ x: (Math.floor(p.x * K) + half) / K, y: (Math.floor(p.y * K) + half) / K, z: p.z }); };
+  const snapDot = snapTo(_AXG.R);
   const order = ['x', 'y', 'z'].map(a => {
     const e = a === 'x' ? [1, 0, 0] : a === 'y' ? [0, 1, 0] : [0, 0, 1];
     const at = (t) => project(-S + e[0] * t, -S + e[1] * t, -S + e[2] * t);
-    return { a, at, from: at(0), to: at(2 * S + _AXG.D) };
+    return { a, at, from: at(0), to: snapDot(at(2 * S + _AXG.D)) };
   }).sort((p, q) => p.to.z - q.to.z);
   const STEPS = 44;
   for (const o of order) {
@@ -18546,6 +18796,7 @@ function _rebuildTreeHierarchical(reuse = null) {
   const collapsed = state.treeCollapsed;
   const selG = state.selectedGroupIds || new Set();
   const selP = state.selected || new Set();
+  const rangeG = new Set(_rangeLitGroups());
 
   // ── First pass: what each group holds ──────────────────────────────────
   // Every group's totals are the sum of its children's, so they are added up
@@ -18628,7 +18879,7 @@ function _rebuildTreeHierarchical(reuse = null) {
       cls += ' is-group is-asm';
       // Bright for a clicked group; dim for a group that has the selection
       // somewhere inside it, or that is itself inside a clicked group.
-      if (selG.has(n.id)) { cls += ' selected'; litG.add(n.id); }
+      if (selG.has(n.id) || rangeG.has(n.id)) { cls += ' selected'; litG.add(n.id); }
       else if (selBelow.has(n.id) || clickDepth !== Infinity) { cls += ' ancestor-selected'; dimG.add(n.id); }
       if (collapsed.has(n.id)) cls += ' collapsed';
       cloner = cloners.has(n.id);
@@ -18911,7 +19162,7 @@ function _treeFillVisible(ev) {
 // not in the document. Returns false if the row is hidden or not in the tree.
 function _treeScrollToRow(row, where = 'center', smooth = false) {
   const el = $('tree');
-  if (!el || !row) return false;
+  if (!el || !row || state._animMode) return false;
   if (!el._rows) {                            // a flat list: the row is in the document
     if (!row.isConnected) return false;
     if (where === 'top') el.scrollTop = Math.max(0, el.scrollTop + row.getBoundingClientRect().top - el.getBoundingClientRect().top);
@@ -19369,6 +19620,17 @@ function _invalidateTreeSelCache() { _treeSelCache = null; _treeGroupSelCache = 
 // `selected` class so the user can visually trace where the selection sits
 // in deeply-nested trees. Mixed-type set: numeric ids for hier groups, string
 // ids for userGroups.
+// Group rows a shift-click range ran over without taking all of their parts (the range ends inside them): they are lit like the
+// rest of the range, but only the parts in the range are selected. Good only while the selection is the one the range made.
+function _rangeLitGroups() {
+  const r = state._rangeGroups;
+  if (!r) return r || [];
+  const sel = state.selected;
+  if (!sel || sel.size !== r.sel.size) return [];
+  for (const id of sel) if (!r.sel.has(id)) return [];
+  return r.ids;
+}
+
 function _computeAncestorGroupHighlights() {
   const out = new Set();
   if (!state.selected || state.selected.size === 0) return out;
@@ -19401,6 +19663,7 @@ function rebuildTreeSelectionOnly() {
   const explicitG = state.selectedGroupIds || new Set();
   const ancestorG = _computeAncestorGroupHighlights();
   const nextGFull = new Set(explicitG);
+  for (const g of _rangeLitGroups()) nextGFull.add(g);
   const nextGAnc = new Set();
   for (const x of ancestorG) if (!nextGFull.has(x)) nextGAnc.add(x);
   // Parts whose ancestor group is explicitly clicked also get the subdued
@@ -19521,7 +19784,7 @@ function rebuildTreeSelectionOnly() {
 let _selColorsQueued = false;
 const _selFollowers = [];      // (cards that move to the new selection while they are open: Profile, Round part; each has follow())
 function applySelectionColors() {
-  try { const m = document.getElementById('em-mode'); if (m) { const idle = !(state.selected && state.selected.size); m.classList.toggle('is-idle', idle); m.setAttribute('aria-disabled', idle ? 'true' : 'false'); } } catch (_) {}      // (the Model mode button is grey while nothing is selected)
+  try { const m = document.getElementById('em-mode'); if (m) { const prim = [...(state.selected || [])].some(id => { const p = getPart(id); return p && !p.deleted && p.isPrimitive; }), idle = !(state.selected && state.selected.size) || prim; const wasPrim = m.classList.contains('is-prim'); m.classList.toggle('is-idle', idle); m.classList.toggle('is-prim', prim); if (prim) m.title = 'Bake geo first: a library shape is edited with its settings. Press Bake geo under them to turn it into a mesh you can edit.'; else if (wasPrim) m.title = 'Model mode: a click picks a whole part, hold for all four modes'; m.setAttribute('aria-disabled', idle ? 'true' : 'false'); } } catch (_) {}      // (the Model mode button is grey while nothing is selected, or a library shape with parameters: Bake geo first)
   try { const i = _flatSelInfo(); _FlattenDialog.syncSelection({ selectedGroupCount: i.selectedIds.length, selectedNames: i.selectedNames }); } catch (_) {}      // (Advanced flatten, when it is open, follows the selection)
   for (const c of _selFollowers) { try { c.follow(); } catch (_) {} }      // (Profile: clean outline, Round part, ...: when open, they move to the new selection)
   if (_selColorsQueued) return;
@@ -20317,14 +20580,17 @@ function _buildNgonEdgesGeom(geom) {
 
   const p = posAttr.array;
   const verts = new Float32Array(edgeSet.size * 6);
-  let off = 0;
+  const pairs = new Uint32Array(edgeSet.size * 2);      // (which two vertices each line joins: a size drag moves the vertices, not these)
+  let off = 0, po = 0;
   for (const key of edgeSet) {
     const hi = key % n, ai = ((key - hi) / n) * 3, bi = hi * 3;
+    pairs[po++] = ai / 3; pairs[po++] = hi;
     verts[off++] = p[ai]; verts[off++] = p[ai + 1]; verts[off++] = p[ai + 2];
     verts[off++] = p[bi]; verts[off++] = p[bi + 1]; verts[off++] = p[bi + 2];
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  g._wfPairs = pairs; g._wfN = n; g._wfIdx = idxArr ? idxArr.length : -1;
   return g;
 }
 
@@ -20348,6 +20614,17 @@ function _syncPrimWireframe(p) {
       return;
     }
     const made = { g, pos, posV: pos?.version, idx, idxV: idx ? idx.version : -1 };
+    // A live SIZE drag keeps the same vertices and the same triangles, only moved: the outline's lines are written again from
+    // the new positions, in the buffer it has, instead of finding the edges again and uploading a new geometry every frame
+    // (which is what made it lag behind the shape and the slider).
+    const eg = existing && existing.geometry;
+    if (eg && eg._wfPairs && pos && state._primDragging && state._primDragKind === 'size' && eg._wfN === Math.max(1, pos.count) && eg._wfIdx === (idx ? idx.array.length : -1)) {
+      const ea = eg.attributes.position, out = ea.array, pr = eg._wfPairs, src = pos.array;
+      for (let k = 0, o = 0; k < pr.length; k++) { const q = pr[k] * 3; out[o++] = src[q]; out[o++] = src[q + 1]; out[o++] = src[q + 2]; }
+      ea.needsUpdate = true; eg.boundingSphere = null; eg.boundingBox = null;
+      existing._wfOf = made; existing.visible = true;
+      return;
+    }
     const wfGeom = _buildNgonEdgesGeom(p.mesh.geometry);
     if (!wfGeom) return;
     if (existing) {
@@ -21262,7 +21539,9 @@ function _treeSelectRowMod(e, row) {
         for (const id of kids) { const k = at({ kind: 'part', id }); if (k < 0) continue; if (k < lo || k > hi) return false; seen++; }
         return seen === 0 || seen === kids.length;      // (shown only in part, by a search: the rows that are shown speak for themselves)
       };
-      for (let i = lo; i <= hi; i++) { const x = list[i]; if (x.kind !== 'group' || whole(x, i)) addRow(x); }
+      const partial = new Set();
+      for (let i = lo; i <= hi; i++) { const x = list[i]; if (x.kind !== 'group' || whole(x, i)) addRow(x); else partial.add(x.id); }
+      state._rangeGroups = partial.size ? { ids: partial, sel: new Set(state.selected) } : null;      // (a group the range only runs into is lit, its other parts are not taken)
       // the part rows the range runs over were picked one by one: they are bright, also where a group in the range holds them
       { const ex = state._explicitParts || (state._explicitParts = new Set()); for (let i = lo; i <= hi; i++) { const x = list[i]; if (x.kind === 'part' && state.selected.has(x.id)) ex.add(x.id); } }
       state._selAnchorRow = anchor;                                                    // the anchor stays put across shift-clicks
@@ -21445,6 +21724,7 @@ function _wireTagSlider(box) {
   }, { passive: false });
   upd();
 }
+const _HEAVY_TRIS = 10000;      // a part with more triangles than this is heavy: a warning tag in the Properties card
 function refreshPropertiesPanel() {
   const el = $('prop-body');
   const ids = [...state.selected];
@@ -21567,6 +21847,7 @@ function refreshPropertiesPanel() {
     if (_liveShareCount(p) > 1 && !_isInstanceCopy(p)) tags.push(`<span class="tree-badge has-ico" title="The first of its kind; the others are its copies"><i data-lucide="crown"></i>original</span>`);
     if (p.layers && p.layers.length) tags.push(`<span class="tree-badge has-ico" data-prop-act="select-layer" data-part-id="${p.partId}" title="On CAD layer ${escapeHtml(p.layers.join(', '))}: click to select all"><i data-lucide="layers"></i>${escapeHtml(p.layers.join(', '))}</span>`);
     if (p.flagged)  tags.push(`<span class="tree-badge warn">flagged</span>`);
+    if (p.triCount > _HEAVY_TRIS) tags.push(`<span class="tree-badge warn has-ico" title="${fmtNum(p.triCount)} triangles: more than ${fmtNum(_HEAVY_TRIS)}"><i data-lucide="weight"></i>heavy</span>`);
     if (!p.visible) tags.push(`<span class="tree-badge muted">hidden</span>`);
     if (p.deleted)  tags.push(`<span class="tree-badge danger">deleted</span>`);
     tagsHtml = tags.join('');
@@ -21648,6 +21929,7 @@ function refreshPropertiesPanel() {
     const tags = [];
     if (anyInstanced) tags.push(`<span class="tree-badge">${anyInstanced} instanced</span>`);
     if (anyFlagged)   tags.push(`<span class="tree-badge warn">${fmtNum(nFlagged)} flagged</span>`);
+    { let nHeavy = 0; for (const id of ids) { const q = getPart(id); if (q && !q.deleted && q.triCount > _HEAVY_TRIS) nHeavy++; } if (nHeavy) tags.push(`<span class="tree-badge warn has-ico" title="${fmtNum(nHeavy)} of the selected parts have more than ${fmtNum(_HEAVY_TRIS)} triangles"><i data-lucide="weight"></i>${fmtNum(nHeavy)} heavy</span>`); }
     if (anyHidden)    tags.push(`<span class="tree-badge muted">${fmtNum(nHidden)} hidden</span>`);
     tagsHtml = tags.join('');
     subHtml = fmtNum(ids.length) + ' parts' + (matNote ? ' · ' + matNote : '');
@@ -21676,6 +21958,7 @@ function refreshPropertiesPanel() {
                `<span class="prop-name"${has ? '' : ' style="color:var(--tx3)"'} title="${escapeHtml(nm)}">${escapeHtml(nm)}</span>`;
     const tags = [];
     if (t.hidden)  tags.push(`<span class="tree-badge muted">${fmtNum(t.hidden)} hidden</span>`);
+    { let nHeavy = 0; for (const q of state.parts) if (q && !q.deleted && q.triCount > _HEAVY_TRIS) nHeavy++; if (nHeavy) tags.push(`<span class="tree-badge warn has-ico" data-prop-act="select-heavy" title="${fmtNum(nHeavy)} ${nHeavy === 1 ? 'part has' : 'parts have'} more than ${fmtNum(_HEAVY_TRIS)} triangles: click to select ${nHeavy === 1 ? 'it' : 'them'}"><i data-lucide="weight"></i>${fmtNum(nHeavy)} heavy</span>`); }
     // (no "N flagged" tag on the scene: the status bar already counts the flagged parts)
     tagsHtml = tags.join('');
     subHtml = has ? 'Whole scene · ' + fmtNum(t.count) + ' part' + (t.count === 1 ? '' : 's') : 'Open a file or drop one here';
@@ -21947,6 +22230,16 @@ function refreshPropertiesPanel() {
       applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo();
     });
   });
+  el.querySelectorAll('[data-prop-act="select-heavy"]').forEach(badge => {
+    badge.addEventListener('click', e => {
+      e.stopPropagation();
+      const heavy = state.parts.filter(q => q && !q.deleted && q.triCount > _HEAVY_TRIS).map(q => q.partId);
+      if (!heavy.length) return;
+      state.selected.clear(); state.selectedGroupIds?.clear?.();
+      for (const id of heavy) state.selected.add(id);
+      applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo();
+    });
+  });
   _lucide();
   _syncPropMatHighlight();
   _updateSelectedChip();
@@ -22208,7 +22501,7 @@ const _UNDO_MAX_HEAVY = 30;
 // set (a dry run) nothing falls off the far end, so the run can be taken back whole and none of the user's steps is lost.
 let _undoPushes = 0, _undoKeepAll = false;
 function _setUndoMax(n) { _UNDO_MAX = Math.max(10, Math.min(1000, +n || 200)); }
-const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'axisXform', 'recenter', 'normals', 'merge', 'flatten', 'duplicate', 'paste-group', 'paste-hier', 'addPart', 'decimate', 'budget']);
+const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'axisXform', 'recenter', 'normals', 'merge', 'flatten', 'duplicate', 'paste-group', 'paste-hier', 'addPart', 'decimate', 'bake', 'budget']);
 // ── Geometry nobody can reach any more ───────────────────────────────────────
 // Decimate, Budget, Repair, Remesh … each put the geometry they make into state.geomByHash and keep the old one so that undo can put
 // it back. When the undo (or redo) entry that held it falls off the end, nothing frees it: on a large scene every superseded
@@ -22339,6 +22632,8 @@ function _purgeDropped(op) {
 }
 function pushUndo(op) {
   let droppedAny = false;
+  if (op && op.type === 'decimate' && _instFollowOn && !op.noFollow) { try { _instFollowOp(op); } catch (e) { console.warn('[instances] follow:', e); } }      // (Edit all instances together)
+  if (op && op._t == null) op._t = Date.now();      // (when it was done: the History card)
   state.history.push(op); _undoPushes++;
   if (op.type === 'vis') _flagVisSoon();
   // (the entry that falls off the far end can no longer be undone: the
@@ -22445,6 +22740,7 @@ function _refreshUndoRedoButtons() {
   const u = $('btn-undo'); if (u) u.disabled = state.history.length === 0;
   const r = $('btn-redo'); if (r) r.disabled = !state.redo || state.redo.length === 0;
   try { _Dirty.sync(); } catch (_) {}        // (not yet defined during start-up)
+  try { document.dispatchEvent(new CustomEvent('mo-history')); } catch (_) {}      // (a card that built a step hears of its undo and redo)
 }
 // ── Scene tabs ────────────────────────────────────────────────────────────
 // Every tab is a scene of its own: its own parts, tree, materials, undo
@@ -22745,7 +23041,26 @@ const _Tabs = (() => {
     for (const t of listed()) for (const k of (t.tasks || [])) out.push({ ...k, tab: t.id, tabTitle: t.title });
     return out;
   };
-  let pop = null, popTimer = 0, popSig = '';
+  let pop = null, popTimer = 0, popSig = '', stateOpen = false;
+  // The State section at the end of the list (what may be holding a function back; see _Diag), and the way to let go of it.
+  function paintState() {
+    const d = pop && pop.querySelector('.bgp-state'); if (!d) return;
+    const rows = _Diag.rows();
+    d.classList.toggle('has-warn', rows.some(r => r[2]));
+    if (!d.open) return;
+    d.querySelector('.bgp-sbody').innerHTML = rows.map(([k, v, bad]) => '<div class="bgp-sr' + (bad ? ' bad' : '') + '"><span>' + escapeHtml(k) + '</span><b>' + escapeHtml(String(v)) + '</b></div>').join('');
+  }
+  function appendState() {
+    const d = document.createElement('details');
+    d.className = 'bgp-state';
+    if (_Diag.wantOpen) { stateOpen = true; _Diag.wantOpen = false; }
+    d.open = stateOpen;
+    d.innerHTML = '<summary>State</summary><div class="bgp-sbody"></div><button type="button" class="btn bgp-reset" title="Stop waiting for a job that never ended, turn orbiting back on, show messages again and close the open card">Reset stuck state</button>';
+    d.addEventListener('toggle', () => { stateOpen = d.open; paintState(); });
+    d.querySelector('.bgp-reset').addEventListener('click', (e) => { e.stopPropagation(); _unstick(); popSig = ''; renderPop(); });
+    pop.appendChild(d);
+    paintState();
+  }
   const fmtAge = (t0) => { const s = Math.max(0, Math.round((Date.now() - t0) / 1000)); return s >= 60 ? Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's' : s + 's'; };
   function closePop() {
     if (!pop) return;
@@ -22763,6 +23078,7 @@ const _Tabs = (() => {
     const sig = JSON.stringify(list.map(k => [k.tab, k.id, k.label, k.detail, k.pct == null ? null : Math.round(k.pct)]));
     if (sig === popSig) {                                         // nothing changed but the clock: only the times are written again
       for (const el of pop.querySelectorAll('[data-t0]')) el.textContent = fmtAge(+el.dataset.t0);
+      paintState();
       return;
     }
     popSig = sig;
@@ -22776,6 +23092,7 @@ const _Tabs = (() => {
       none.className = 'bgp-none';
       none.textContent = 'Nothing is running in any tab.';
       pop.appendChild(none);
+      appendState();
       return;
     }
     for (const k of list) {
@@ -22803,6 +23120,7 @@ const _Tabs = (() => {
       row.addEventListener('click', () => { if (k.tab !== myId) { closePop(); activate(k.tab); } });
       pop.appendChild(row);
     }
+    appendState();
   }
   function openPop(chip) {
     if (pop) { closePop(); return; }
@@ -22842,7 +23160,7 @@ const _Tabs = (() => {
     const txt = chip.querySelector('.sb-bg-txt');
     if (!list.length) { txt.textContent = ''; chip.title = 'Tasks: nothing is running'; }
     else if (list.length === 1) { const k = list[0]; txt.textContent = k.label + (k.pct == null ? '' : ' · ' + Math.round(k.pct) + '%'); chip.title = 'Tasks: ' + k.label + ' in "' + k.tabTitle + '" — click for the list'; }
-    else { txt.textContent = list.length + ' tasks' + (allKnown ? ' · ' + Math.round(avg) + '%' : ''); chip.title = list.length + ' tasks are running — click for the list'; }
+    else { const k = list[list.length - 1]; txt.textContent = k.label + ' +' + (list.length - 1) + (allKnown ? ' · ' + Math.round(avg) + '%' : ''); chip.title = list.length + ' tasks are running (' + list.map(x => x.label).join(', ') + ') — click for the list'; }
     if (pop) renderPop();
   }
   function render() {
@@ -23078,7 +23396,7 @@ const _Dirty = (() => {
   }
   const wire = () => document.getElementById('doc-save')?.addEventListener('click', (e) => { e.stopPropagation(); if (dirty()) document.getElementById('btn-save-scene')?.click(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
-  return { sync, mark, dirty, dropped, force };
+  return { sync, mark, dirty, dropped, force, saved: () => savedTop };      // (saved: the step the scene was saved at, null for as opened; the History card marks it)
 })();
 // ── Crash safety ─────────────────────────────────────────────────────────────
 // Whatever goes wrong should never be a silent freeze:
@@ -23542,7 +23860,7 @@ const _reloadAllowed = () => { if (_reloadOk) return true; try { return !!window
 const _allowReload = () => { _reloadOk = true; try { window.top.__moReloadOk = true; } catch (_) {} };
 // A file is converting (in this tab or another): a reload ends the conversion, since the page that asked for it is gone.
 const _convertingNow = () => {
-  try { if (state._activeConvertJob) return true; return _Tabs.list().some(t => (t.tasks || []).some(k => k.id === 'load')); }
+  try { if (state._activeConvertJob) return true; return _Tabs.list().some(t => (t.tasks || []).some(k => k.id === 'load' && !k.passive)); }      // ("Preparing the view" is passive: the model is already in)
   catch (_) { return !!state._activeConvertJob; }
 };
 window.addEventListener('keydown', async (e) => {
@@ -23557,8 +23875,8 @@ window.addEventListener('keydown', async (e) => {
   const act = await _confirmQuitDialog(converting
     ? { title: 'Reload while converting?',
         text: 'A file is still converting. Reloading stops the conversion' + (unsaved ? ' and loses the changes you have not saved' : '') + ': you would have to start the import again.' + (unsaved ? ' Save your scene first?' : ''),
-        discard: 'Reload and cancel', cancel: 'Keep converting', save: unsaved ? true : false }
-    : { title: 'Reload MeshOptimiser?', text: 'Save your scene before reloading? Unsaved changes will be lost. (Recovery copies are for crashes: a reload you choose does not bring the scene back.)', discard: 'Reload anyway' });
+        discard: 'Slide to reload and cancel', slide: true, cancel: 'Keep converting', save: unsaved ? true : false }
+    : { title: 'Refresh?', text: 'Save your scene before reloading? Unsaved changes will be lost. (Recovery copies are for crashes: a reload you choose does not bring the scene back.)', discard: 'Slide to reload anyway', slide: true });
   if (act === 'cancel') return;
   if (act === 'save') { const ok = await saveScene(); if (ok === false) return; }
   _allowReload();
@@ -24473,6 +24791,7 @@ const _transformHandlers = {
     const n = _applyTransformOp(items, 'before');
     if (n <= 0) return false;
     _groupScaleApply(op, 'before');
+    _groupFramesApply(op, 'before');
     state.redo.push(op);
     _finalizeUndo();
   },
@@ -24482,10 +24801,15 @@ const _transformHandlers = {
     const n = _applyTransformOp(items, 'after');
     if (n <= 0) return false;
     _groupScaleApply(op, 'after');
+    _groupFramesApply(op, 'after');
     state.history.push(op);
     _finalizeUndo();
   },
 };
+_UndoOps.register('groupPivot', {
+  undo(op) { _groupPivotApply(op, 'before'); state.redo.push(op); _finalizeUndo(); },
+  redo(op) { _groupPivotApply(op, 'after'); state.history.push(op); _finalizeUndo(); },
+});
 _UndoOps.register('transform', _transformHandlers);
 _UndoOps.register('transformGroup', _transformHandlers);
 _UndoOps.register('shading', {
@@ -24577,6 +24901,25 @@ function undoLast() {
   _refreshUndoRedoButtons();
   requestRender();
 }
+
+// Forget every step (the History card's Clear): the model stays as it is. The unsaved marker is told of each step that goes, as when the
+// far end falls off, and the geometry only the steps held is freed.
+function _clearUndoHistory() {
+  for (const op of state.history) { try { _Dirty.dropped(op); } catch (_) {} _purgeDropped(op); }
+  state.history.length = 0;
+  if (state.redo) state.redo.length = 0;
+  try { _geomSweepSoon(); } catch (_) {}
+  _refreshUndoRedoButtons();
+}
+let _historyCard = null;
+function _installHistoryCard() {
+  _historyCard = installHistoryCard({
+    state, undoLast: () => undoLast(), redoLast: () => redoLast(), canRedo: (op) => _UndoOps.canRedo(op), clear: _clearUndoHistory,
+    savedOp: () => _Dirty.saved(), max: () => _UNDO_MAX, confirm: (o) => _confirmQuitDialog(o), toast: (...x) => toast(...x), lucide: () => _lucide(),
+  });
+  window.__moHistory = _historyCard;      // (tests/e2e-history-card.mjs)
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _installHistoryCard); else _installHistoryCard();
 
 function _dropRedo() {
   if (!state.redo || !state.redo.length) return;
@@ -25046,32 +25389,97 @@ function _shapeFingerprint(part) {
 let _simStrict = 60;
 try { const v = parseInt(localStorage.getItem('stepopt-sim-strict'), 10); if (v >= 0 && v <= 100) _simStrict = v; } catch (_) {}
 function _simTol() { const k = (100 - _simStrict) / 100; return { tri: 0.5 * k, dim: 0.25 * k }; }
+// The shape itself, not the box round it: surface area, enclosed volume and the three principal spreads of the surface (its
+// PCA axes, so a part turned any way gives the same numbers and a different tessellation of the same shape comes close).
+// One pass over the triangles, kept per geometry (copies share it). Lengths are in the part's own units, scaled by its world scale.
+const _shapeSigCache = new WeakMap();
+const _SIG_M = new THREE.Matrix4();
+function _geomSig(g) {
+  let s = _shapeSigCache.get(g);
+  if (s) return s;
+  const pos = g.attributes && g.attributes.position;
+  if (!pos) return null;
+  const idx = g.index, nT = idx ? idx.count / 3 : pos.count / 3;
+  let A = 0, V = 0, W = 0, mx = 0, my = 0, mz = 0, xx = 0, yy = 0, zz = 0, xy = 0, xz = 0, yz = 0;
+  for (let t = 0; t < nT; t++) {
+    const i0 = idx ? idx.getX(t * 3) : t * 3, i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    const ax = pos.getX(i0), ay = pos.getY(i0), az = pos.getZ(i0);
+    const bx = pos.getX(i1), by = pos.getY(i1), bz = pos.getZ(i1);
+    const cx = pos.getX(i2), cy = pos.getY(i2), cz = pos.getZ(i2);
+    const ux = bx - ax, uy = by - ay, uz = bz - az, vx = cx - ax, vy = cy - ay, vz = cz - az;
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const a = 0.5 * Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (!(a > 0)) continue;
+    A += a;
+    V += (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6;
+    const gx = (ax + bx + cx) / 3, gy = (ay + by + cy) / 3, gz = (az + bz + cz) / 3;
+    W += a; mx += a * gx; my += a * gy; mz += a * gz;
+    xx += a * gx * gx; yy += a * gy * gy; zz += a * gz * gz; xy += a * gx * gy; xz += a * gx * gz; yz += a * gy * gz;
+  }
+  if (!(A > 0)) return null;
+  mx /= W; my /= W; mz /= W;
+  const c00 = xx / W - mx * mx, c11 = yy / W - my * my, c22 = zz / W - mz * mz, c01 = xy / W - mx * my, c02 = xz / W - mx * mz, c12 = yz / W - my * mz;
+  const p1 = c01 * c01 + c02 * c02 + c12 * c12, q = (c00 + c11 + c22) / 3;
+  let e = [c00, c11, c22];
+  if (p1 > 1e-18 * (Math.abs(q) + 1e-30) * (Math.abs(q) + 1e-30)) {
+    const p2 = (c00 - q) ** 2 + (c11 - q) ** 2 + (c22 - q) ** 2 + 2 * p1, p = Math.sqrt(p2 / 6);
+    const b00 = (c00 - q) / p, b11 = (c11 - q) / p, b22 = (c22 - q) / p, b01 = c01 / p, b02 = c02 / p, b12 = c12 / p;
+    const det = b00 * (b11 * b22 - b12 * b12) - b01 * (b01 * b22 - b12 * b02) + b02 * (b01 * b12 - b11 * b02);
+    const phi = Math.acos(Math.max(-1, Math.min(1, det / 2))) / 3;
+    const e1 = q + 2 * p * Math.cos(phi), e3 = q + 2 * p * Math.cos(phi + 2 * Math.PI / 3);
+    e = [e1, 3 * q - e1 - e3, e3];
+  }
+  e = e.map(v => Math.sqrt(Math.max(0, v))).sort((a, b) => a - b);
+  s = { A, V: Math.abs(V), sp: e };
+  _shapeSigCache.set(g, s);
+  return s;
+}
+// The signature of a part in the scene: its geometry's, scaled by the part's world scale (lengths k, areas k², volumes k³).
+function _partSig(part) {
+  const g = _partGeom(part); if (!g) return null;
+  const s = _geomSig(g); if (!s) return null;
+  let k = 1;
+  try {
+    if (part.mesh) { part.mesh.updateWorldMatrix(true, false); _SIG_M.copy(part.mesh.matrixWorld); }
+    else { part.instancedMesh.getMatrixAt(part.instanceIndex, _SIG_M); _SIG_M.premultiply(part.instancedMesh.matrixWorld); }
+    k = Math.cbrt(Math.abs(_SIG_M.determinant())) || 1;
+  } catch (_) {}
+  const len = Math.sqrt(s.A) * k;
+  return { len, vol: s.V > 1e-3 * Math.pow(s.A, 1.5) ? Math.cbrt(s.V) * k : 0, sp: s.sp.map(v => v * k) };
+}
 function _isSimilarShape(part, ref, tol0) {
   const tolT = tol0 || _simTol();
-  const dt = Math.abs(part.triCount - ref.tri);
-  if (dt > Math.max(4, tolT.tri * Math.max(part.triCount, ref.tri))) return false;
-  const d = part._fpDims, tol = tolT.dim * Math.max(d[2], ref.dims[2]);
-  return Math.abs(d[0] - ref.dims[0]) <= tol && Math.abs(d[1] - ref.dims[1]) <= tol && Math.abs(d[2] - ref.dims[2]) <= tol;
+  const sg = _partSig(part);
+  if (!sg || !ref.sig) return false;
+  const tol = 0.02 + tolT.dim * 0.8, r = ref.sig;
+  const rel = (x, y) => Math.abs(x - y) <= tol * Math.max(x, y);
+  if (!rel(sg.len, r.len)) return false;
+  if (sg.vol && r.vol && !rel(sg.vol, r.vol)) return false;
+  // (the spreads are judged against the longest one, so a thin plate's tiny third spread is not held to a tight relative error)
+  const top = Math.max(sg.sp[2], r.sp[2], 1e-9);
+  for (let i = 0; i < 3; i++) if (Math.abs(sg.sp[i] - r.sp[i]) > tol * top) return false;
+  return true;
 }
 
 function selectSimilar() {
   if (state.selected.size === 0) return toast('Select at least one part first', '', 'warn');
   // Build the set of fingerprints from the current selection
-  const wantPrints = new Set(), refs = [];
+  const wantPrints = new Set(), wantGeoms = new Set(), refs = [];
   for (const id of state.selected) {
     const p = getPart(id);
     if (!p) continue;
+    const g0 = _partGeom(p); if (g0) wantGeoms.add(g0);     // (a copy that shares the buffer is the same shape, turned or not)
     const fp = _shapeFingerprint(p);
     if (wantPrints.has(fp)) continue;                 // (one reference per distinct shape)
     wantPrints.add(fp);
-    refs.push({ tri: p.triCount, dims: p._fpDims });
+    refs.push({ sig: _partSig(p) });
   }
   // Add every part that is the same shape, or close enough to it
   let added = 0;
   const tolT = _simTol(), exactOnly = _simStrict >= 100;
   for (const p of state.parts) {
     if (p.deleted || state.selected.has(p.partId)) continue;
-    if (wantPrints.has(_shapeFingerprint(p)) || (!exactOnly && refs.some(r => _isSimilarShape(p, r, tolT)))) { state.selected.add(p.partId); added++; }
+    if (wantPrints.has(_shapeFingerprint(p)) || (_partGeom(p) && wantGeoms.has(_partGeom(p))) || (!exactOnly && refs.some(r => _isSimilarShape(p, r, tolT)))) { state.selected.add(p.partId); added++; }
   }
   applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel();
   if (typeof updateGizmo === 'function') updateGizmo();
@@ -25264,9 +25672,8 @@ function toggleIsolate() {
 }
 // the Isolate button in Delete small parts is a switch: on while the small parts are all that shows
 function _syncIsolateSmall() {
-  const b = document.getElementById('btn-isolate-small'); if (!b) return;
   const on = !!(state._isolated && state._isolatedBy === 'flagged');
-  b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  for (const b of document.querySelectorAll('[data-isolate-flagged]')) { b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
 }
 function isolateFlagged() {
   if (state.pendingFlagged.size === 0) return toast('Nothing flagged', 'Set a size threshold first', 'warn');
@@ -25373,7 +25780,7 @@ function setViewMode(mode) {
   //      `new`, bypassing the pool. Without this third pass the
   //      view-mode toggle silently skips every custom-added shape.
   const seenMat = new Set();
-  const applyOnce = (m) => { if (!m || seenMat.has(m)) return; seenMat.add(m); apply(m); };
+  const applyOnce = (m) => { if (!m || seenMat.has(m) || (m.userData && m.userData.isGhost)) return; seenMat.add(m); apply(m); };      // (an X-ray isolate ghost is not touched by a view mode)
   for (const m of state.materialByColor.values()) applyOnce(m);
   for (const g of state.instancedGroups) applyOnce(g.instanced.material);
   for (const p of state.parts) {
@@ -25465,6 +25872,11 @@ function _resolvePartWorldMatrix(p) {
 // 12-bolt radial cloner.
 // Each entry's `world` is the matrix the part is drawn with, the scene's up
 // axis and scale included; a file writer takes those out (_sceneSettingsOut).
+// The material a part really has: a ghost (X-ray isolate) stands in for it on the mesh, so what is exported or saved asks through here.
+function _ghostOrig(m) {
+  if (Array.isArray(m)) return m.map(x => (x && x.userData && x.userData.isGhost && x.userData._ghostOf) || x);
+  return (m && m.userData && m.userData.isGhost && m.userData._ghostOf) || m;
+}
 function _exportDrawList(visibleOnly) {
   const out = [];
   // the parts a live cloner draws copies of (its sources): one it hides is not exported itself. Asked of the cloners, not of the
@@ -25484,7 +25896,7 @@ function _exportDrawList(visibleOnly) {
     if (hiddenGenerator) continue;
     out.push({
       part: p, geom: g, world: _resolvePartWorldMatrix(p), color: p.originalColor, name: p.name,
-      srcMat: p.mesh ? p.mesh.material : (p.instancedMesh ? p.instancedMesh.material : null),
+      srcMat: _ghostOrig(p.mesh ? p.mesh.material : (p.instancedMesh ? p.instancedMesh.material : null)),
     });
   }
   const local = new THREE.Matrix4();
@@ -25546,7 +25958,37 @@ function _animationClipForExport(meshByPart, postMat, settingsOut) {
   }
   return tracks.length ? new THREE.AnimationClip('Animation', baked.duration, tracks) : null;
 }
-function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false, lines = false, quads = false, pivot = 'origin' }) {
+// The group pivots, written into the file as the transforms of the group nodes: a tree group's stored origin and turn become the position
+// and rotation of its node (and of the Null model in an FBX), and each child gets the matrix that keeps it where it is. Cinema 4D, Blender
+// and the rest then show the group's axis where the app does. `groups` is group object -> tree group id; `lin` takes a point of the
+// scene to a point of the file (the scene's up axis and unit, the recentring, the turn into Y-up and the scale).
+function _writeGroupPivots(root, groups, lin) {
+  _initGroupOrigins();
+  const lp = new THREE.Vector3(), lq = new THREE.Quaternion(), ls = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+  lin.decompose(lp, lq, ls);
+  const world = new Map();       // every node of the export -> its world matrix in the file
+  const inv = new THREE.Matrix4();
+  let any = false;
+  for (const [g, gid] of groups) {
+    const o = _groupOrigins.get(gid); if (!o) continue;
+    const q = _groupRotations.get(gid) || new THREE.Quaternion();
+    world.set(g, new THREE.Matrix4().compose(o.clone().applyMatrix4(lin), lq.clone().multiply(q), one));
+    any = true;
+  }
+  if (!any) return;
+  // (every container was at identity, so a mesh's own matrix is its world matrix)
+  root.traverse((n) => { if (n !== root && !world.has(n)) world.set(n, n.matrix.clone()); });
+  root.traverse((n) => {
+    if (n === root) return;
+    const w = world.get(n), p = n.parent;
+    const local = p && p !== root && world.has(p) ? inv.copy(world.get(p)).invert().multiply(w) : w;
+    n.matrix.copy(local);
+    n.matrix.decompose(n.position, n.quaternion, n.scale);
+  });
+  root.updateMatrixWorld(true);
+}
+
+function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false, lines = false, quads = false, pivot = 'origin', groupPivots = false }) {
   const root = new THREE.Group();
   let count = 0;
   const drawList = _exportDrawList(visibleOnly);
@@ -25632,6 +26074,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
 
     // Cache containers so siblings under the same group share one parent node.
     const groupCache = new Map();
+    const treeContainers = new Map();      // group object -> tree group id (the groups whose pivot is written, see _writeGroupPivots)
     function getContainer(part) {
       if (flat) return root;                 // "Flatten groups": every part at the top level
       const ug = partToUserGroup.get(part.partId);
@@ -25660,6 +26103,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
           c.name = (tn && tn.name) ? tn.name : 'Group';
           parent.add(c);
           groupCache.set(cumKey, c);
+          treeContainers.set(c, gid);
         }
         parent = c;
       }
@@ -25804,6 +26248,9 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
       (p ? getContainer(p) : root).add(m);
       if (p && !item.isClone) meshByPart.set(p.partId, m);
       count++;
+    }
+    if (groupPivots && !flat && treeContainers.size) {
+      try { _writeGroupPivots(root, treeContainers, new THREE.Matrix4().multiplyMatrices(postMat, settingsOut)); } catch (e) { console.warn('[export] group pivots:', e); }
     }
     if (lines) { try { _appendSplinesToExport(root, postMat, settingsOut, visibleOnly, pivotAtPart); } catch (e) { console.warn('[export] lines:', e); } }
     return { root, count, meshByPart, postMat, settingsOut };
@@ -26394,9 +26841,14 @@ const SCENE_STATE_VERSION = 1;
 // (the control gets its value and an input / change event, so everything it does is done): the unit the sizes are shown in, the grid, the
 // lights and the shadows, and the up axis and the scale of the scene (the file itself is written unscaled and Z up). (The other controls are the application's own preferences, which belong to the person and not to the scene.)
 const _SCENE_CONTROLS = ['scene-up-axis', 'scene-scale', 'display-units', 'grid-cell', 'light-exposure', 'light-sun', 'light-ambient', 'light-azi', 'light-ele', 'toggle-shadows'];
-function _collectSceneControls() {
+// which Settings switch decides whether a file keeps each of them
+const _CONTROL_PREF = { 'scene-up-axis': 'saveUnits', 'scene-scale': 'saveUnits', 'display-units': 'saveUnits', 'grid-cell': 'saveUnits', 'light-exposure': 'saveLights', 'light-sun': 'saveLights', 'light-ambient': 'saveLights', 'light-azi': 'saveLights', 'light-ele': 'saveLights', 'toggle-shadows': 'saveShadows' };
+// full: a copy of the whole scene (a duplicate tab, a recovery copy) keeps everything but the shadows, whatever the switches say
+const _keeps = (k, full) => k === 'saveShadows' ? _Prefs.get(k) === true : (full || _Prefs.get(k) !== false);
+function _collectSceneControls(full) {
   const out = {};
   for (const id of _SCENE_CONTROLS) {
+    if (!_keeps(_CONTROL_PREF[id], full)) continue;
     const el = document.getElementById(id);
     if (!el) continue;
     out[id] = el.type === 'checkbox' ? !!el.checked : String(el.value);
@@ -26407,6 +26859,7 @@ function _applySceneControls(c) {
   if (!c || typeof c !== 'object') return;
   for (const id of _SCENE_CONTROLS) {
     if (!(id in c)) continue;
+    if (id === 'toggle-shadows' && _Prefs.get('saveShadows') !== true) continue;      // (the shadows start off: a file turns them on only when asked to keep them)
     const el = document.getElementById(id);
     if (!el) continue;
     try {
@@ -26419,9 +26872,11 @@ function _applySceneControls(c) {
 }
 function _animPayload() { try { return _Anim.serialize(); } catch (e) { console.warn('[scene-save] animation', e); return undefined; } }
 function _collectSceneState(o) {
-  const wantView = !o || o.view !== false, wantNotes = !o || o.notes !== false;
+  const full = !!(o && o.full), K = (k) => _keeps(k, full);
+  const wantView = !o || o.view !== false, wantNotes = (!o || o.notes !== false) && K('saveNotes');
   const notesPayload = wantNotes && window.MONotesUI && window.MONotesUI.count() > 0 ? window.MONotesUI.serialize() : undefined;
-  if (!wantView) return { v: SCENE_STATE_VERSION, app: 'step-optimizer', savedAt: new Date().toISOString(), sourceName: state._loadedFilename || null, notes: notesPayload, anim: _animPayload() };
+  const animPayload = K('saveAnim') ? _animPayload() : undefined;
+  if (!wantView) return { v: SCENE_STATE_VERSION, app: 'step-optimizer', savedAt: new Date().toISOString(), sourceName: state._loadedFilename || null, notes: notesPayload, anim: animPayload };
   const partsPayload = [];
   for (const p of state.parts) {
     if (p.deleted) continue;
@@ -26437,7 +26892,7 @@ function _collectSceneState(o) {
     });
   }
   // Camera distance can be huge for unscaled CAD models, so store full doubles.
-  const cam = camera ? {
+  const cam = camera && K('saveCamera') ? {
     pos:    camera.position.toArray(),
     target: controls ? controls.target.toArray() : [0,0,0],
     up:     camera.up.toArray(),
@@ -26451,7 +26906,7 @@ function _collectSceneState(o) {
     savedAt: new Date().toISOString(),
     sourceName: state._loadedFilename || null,
     camera: cam,
-    view: {
+    view: !K('saveDisplay') ? undefined : {
       viewMode:        state._viewModeShown || state.viewMode,
       showGrid:        state.showGrid,
       threshold:       state.threshold,
@@ -26468,12 +26923,12 @@ function _collectSceneState(o) {
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
-    controls: _collectSceneControls(),
+    controls: _collectSceneControls(full),
     notes: notesPayload,
-    anim: _animPayload(),      // (what Animate animates, as it is: found again by name when the file is opened)
-    isolated: state._isolated ? true : undefined,     // (the view was isolated: Show all / S then leave it, as before the save)
-    explode: state.explode && (state.explode.x || state.explode.y || state.explode.z) ? { x: state.explode.x, y: state.explode.y, z: state.explode.z, mode: state.explodeMode || 'scene' } : null,
-    parts: partsPayload,
+    anim: animPayload,      // (what Animate animates, as it is: found again by name when the file is opened)
+    isolated: state._isolated && K('saveParts') ? true : undefined,     // (the view was isolated: Show all / S then leave it, as before the save)
+    explode: K('saveExplode') && state.explode && (state.explode.x || state.explode.y || state.explode.z) ? { x: state.explode.x, y: state.explode.y, z: state.explode.z, mode: state.explodeMode || 'scene' } : null,
+    parts: K('saveParts') ? partsPayload : [],
   };
 }
 
@@ -26709,7 +27164,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   const ex0 = state.explode ? { ...state.explode } : null, wasExploded = !!(ex0 && (ex0.x || ex0.y || ex0.z));
   if (wasExploded) { state.explode = { x: 0, y: 0, z: 0 }; try { applyExplode(); } catch (_) {} }
   try {
-    ({ root, count, meshByPart } = buildExportRoot({ visibleOnly: partial, merge: false, scale: 1, axis: 'z-up', origin: 'model', lines: true }));
+    ({ root, count, meshByPart } = buildExportRoot({ visibleOnly: partial, merge: false, scale: 1, axis: 'z-up', origin: 'model', lines: true, groupPivots: true }));
   } catch (e) {
     console.error('[scene-save]', e);
     if (!quiet) setLoader(false);
@@ -26733,9 +27188,11 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
     const em = meshByPart && meshByPart.get(p.partId);
     if (!em) continue;
     if (withNotes && p.uid) em.userData.soUid = p.uid;
-    if (!p.visible) em.userData.soHidden = true;
-    if (p.flagged) em.userData.soFlagged = true;
-    if (p.locked) em.userData.soLocked = true;
+    if (_keeps('saveParts', !!toBlob)) {      // (Settings › "Saved in a scene file": which parts are hidden, flagged or locked)
+      if (!p.visible) em.userData.soHidden = true;
+      if (p.flagged) em.userData.soFlagged = true;
+      if (p.locked) em.userData.soLocked = true;
+    }
     if (ask.view && state.selected.has(p.partId)) em.userData.soSel = true;      // (what was selected: a view thing, so only when the view is saved)
     if (p.layers && p.layers.length) em.userData.soLayers = p.layers.slice();
   }
@@ -26750,7 +27207,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   // default, which silently dropped the whole saved state (camera, view
   // settings, hidden parts, measurements). It is an empty Object3D, so
   // there is nothing to draw either way.
-  marker.userData[SCENE_STATE_KEY] = _collectSceneState({ view: !!ask.view, notes: withNotes });
+  marker.userData[SCENE_STATE_KEY] = _collectSceneState({ view: !!ask.view, notes: withNotes, full: !!toBlob });
   root.add(marker);             // (always: the animation, the explode amount and the measurements ride on it too, not only the view and the notes)
   // Export the root's children rather than the root itself, otherwise every
   // save / reopen cycle nests the whole scene inside one more "Group".
@@ -28102,6 +28559,20 @@ function _cadEdgesPartSwapped(p) {
   try { for (const k of _cadEdgeKids(m)) m.remove(k); _cadEdgeMeta.delete(m); } catch (_) {}
   try { _cadEdgesGeomChanged(m.geometry); } catch (_) {}
 }
+// A shape with parameters that is being dragged (width, height, segments): its CAD lines are made again at once from the new shape, in
+// the same frame, instead of staying on the old one until the timer below has run and the edges are ready. Only for a shape small
+// enough to find its edges inline; a heavier one keeps the old way.
+function _cadEdgesLive(p) {
+  const m = p && p.mesh, g = m && m.geometry;
+  if (!_cadEdgesActive || !g || !m.isMesh) return false;
+  const tris = g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+  if (tris > _PRIM_WF_LIVE_TRIS) return false;
+  const e = _getEdgesGeom(g);
+  for (const k of _cadEdgeKids(m)) m.remove(k);
+  if (e && e.attributes.position && e.attributes.position.count) _cadAddLine(m, e);
+  _cadEdgeMeta.set(m, g); _cadEdgeStale.delete(g);
+  return true;
+}
 function _cadEdgesGeomChanged(g) { _cadEdgeStale.add(g); _cadEdgesSchedule(); try { _wireDrop(g); } catch (_) {} }   // (a geometry was edited: its edges are stale)
 // A part that has just become its own mesh (a copy that was selected or edited) gets its lines in the same breath, from the
 // edges its group already has: it never shows a frame without them.
@@ -28703,7 +29174,20 @@ function _whileTogether(fn) {
   try { return fn(); }
   finally { if (was) { state.explode = ex0; try { applyExplode(); } catch (_) {} } }
 }
-async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', pivot='part', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='', animate=false }) {
+// "Include materials" off: every mesh gets one plain grey material, and loses its colours on the points, its UVs and its material groups
+// (the geometries of the export root are copies, so the scene is not touched). Lines (the CAD edges) keep theirs.
+function _stripMaterialsForExport(root) {
+  const plain = new THREE.MeshStandardMaterial({ color: 0xb4b4b4, metalness: 0, roughness: 0.8 });
+  plain.name = 'Material';
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.material = plain;
+    const g = o.geometry; if (!g) return;
+    g.clearGroups();
+    for (const k of ['color', 'uv', 'uv1', 'uv2', 'uv3']) if (g.attributes[k]) g.deleteAttribute(k);
+  });
+}
+async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', pivot='part', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='', animate=false, materials=true, texSize=0, texWebp=false }) {
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
   { const own = _exportConvention(format); if (axis === 'auto') axis = own.axis; if (scale === 'auto' || !(scale > 0)) scale = own.scale; }      // ("each format's own": see _exportConvention)
   setLoader(true, 'Preparing export…', fmtLabel);
@@ -28714,13 +29198,14 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
   // explode offsets while the nodes were written at rest, and a spinning part circled its offset in the file.
   let _clip = null, _clipErr = null;
   const { root, count, meshByPart, postMat: _postMat, settingsOut: _settingsOut } = _whileTogether(() => {
-    const r = buildExportRoot({ visibleOnly, merge, scale, axis, origin, pivot, flat, lines: (format === 'glb' || format === 'gltf') && !merge, quads: quadsOn });
+    const r = buildExportRoot({ visibleOnly, merge, scale, axis, origin, pivot, flat, lines: (format === 'glb' || format === 'gltf') && !merge, quads: quadsOn, groupPivots: (format === 'glb' || format === 'gltf' || format === 'fbx') && !merge && !animate });
     if (animate && !merge && r.meshByPart && (format === 'glb' || format === 'gltf')) {
       try { _clip = _animationClipForExport(r.meshByPart, r.postMat, r.settingsOut); } catch (e) { _clipErr = e; }
     }
     return r;
   });
   if (count === 0) { setLoader(false); toast('Nothing to export', 'No visible parts', 'warn'); return; }
+  if (!materials && format !== 'stl') { try { _stripMaterialsForExport(root); } catch (e) { console.warn('[export] materials left in:', e); } }
   // Force-recompute matrixWorld for the entire export subtree. applyMatrix4
   // updates a mesh's local matrix but NOT matrixWorld, and detached subtrees
   // never get an auto-update — the OBJ streaming writer reads matrixWorld
@@ -28782,13 +29267,15 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
         if (typeof first === 'string' && first.indexOf('Creating normalized normal attribute') !== -1) return;
         return _origWarn.apply(this, args);
       };
-      let result, texUndo = null;
+      let result, texUndo = null, sizeUndo = null;
       try {
-        texUndo = setExportTextureFormats(root);      // (each picture in its own format, not all as PNG: see texformat.js)
+        if (materials && texSize > 0) sizeUndo = shrinkExportTextures(root, texSize);      // (the pictures drawn smaller while the file is written: texformat.js)
+        texUndo = setExportTextureFormats(root, { force: materials && texWebp ? 'image/webp' : '' });      // (each picture in its own format, not all as PNG: see texformat.js)
         result = await new Promise((res, rej) => exp.parse(root, res, rej, { binary: isBin, embedImages: true, animations }));
       } finally {
         console.warn = _origWarn;
         if (texUndo) texUndo();
+        if (sizeUndo) sizeUndo();
       }
       if (isBin) {
         if (brepPack) { try { result = _Brep.embedGlb(result, brepPack); } catch (e) { console.warn('[export] CAD edges not written:', e); } }
@@ -28906,9 +29393,14 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       // requires STORED to allow mmap'd reads).
       const { USDZExporter } = await import('three/addons/exporters/USDZExporter.js');
       const exp = new USDZExporter();
+      let arr;
       // (three's writer draws every picture at most 1024 px on its long side unless told: a 2K or 4K map went out at a quarter or a
       // sixteenth of its pixels. Pictures keep their size up to 4096, the most iPhones and iPads take in AR Quick Look.)
-      const arr = await exp.parseAsync(root, { maxTextureSize: 4096 });
+      let sizeUndo = null;
+      try {
+        if (materials && texSize > 0 && texSize < 4096) sizeUndo = shrinkExportTextures(root, texSize);
+        arr = await exp.parseAsync(root, { maxTextureSize: 4096 });
+      } finally { if (sizeUndo) sizeUndo(); }
       downloadBlob(new Blob([arr], { type: 'model/vnd.usdz+zip' }), base + '.usdz');
     }
     else if (format === 'stl') {
@@ -29893,7 +30385,7 @@ function wireUI() {
     iso?.addEventListener('pointerenter', syncIso);
     iso?.addEventListener('focus', syncIso);
   }
-  $('btn-isolate-small')?.addEventListener('click', () => {      // (one switch: on shows only the small parts, off shows everything again)
+  for (const b of document.querySelectorAll('[data-isolate-flagged]')) b.addEventListener('click', () => {      // (one switch: on shows only the flagged parts, off shows everything again; Delete small parts and Filters & flags share it)
     if (state._isolated && state._isolatedBy === 'flagged') showAllParts(); else isolateFlagged();
     _syncIsolateSmall();
   });
@@ -29912,7 +30404,7 @@ function wireUI() {
   // Viewport corner toggle mirrors the settings-popup checkbox. Click here
   // is equivalent to flipping the checkbox — fire 'change' so the handler
   // above runs once (state, tree class, render).
-  $('tg-hilite')?.addEventListener('click', () => {
+  for (const b of document.querySelectorAll('[data-hilite]')) b.addEventListener('click', () => {
     const cb = $('toggle-highlight');
     cb.checked = !cb.checked;
     cb.dispatchEvent(new Event('change', { bubbles: true }));
@@ -29933,7 +30425,7 @@ function wireUI() {
   });
   // Transform panel — slide-in at the bottom of the left sidebar showing
   // editable position/rotation + read-only size for the active selection.
-  $('tg-transform')?.addEventListener('click', () => _toggleTransformPanel());
+  _initTransformDock();                  // (the Transform block of the right sidebar is always shown)
   $('tg-screenshot')?.addEventListener('click', () => _captureViewportScreenshot());
   $('tg-turntable')?.addEventListener('click', () => _openTurntableDialog());
 
@@ -30434,6 +30926,10 @@ function wireUI() {
   // (each change re-links every material, so flicking the switch several times in a second queued a pile of shader compiles and
   // lost the viewport; the clicks now settle for a moment and only the last state is applied, and only if it differs from what is shown)
   let _shadowTimer = 0;
+  // Shadows are off every time the app starts, whatever they were left at: the browser puts a switch back the way it was on a reload,
+  // so it is set off here (and again once the page has loaded), and it takes no part in what the browser remembers. Photo mode and a
+  // scene file that was saved with shadows on still turn them on, and they stay as they are across Photo mode.
+  { const off = () => { const sh = $('toggle-shadows'); if (!sh || sh.disabled || _Photo.on) return; sh.autocomplete = 'off'; if (sh.checked || state.shadowsEnabled) { sh.checked = false; state.shadowsEnabled = false; try { _applyShadows(); requestRender(); } catch (_) {} } }; off(); window.addEventListener('load', off, { once: true }); }
   $('toggle-shadows')?.addEventListener('change', e => {
     state.shadowsEnabled = e.target.checked;
     clearTimeout(_shadowTimer);
@@ -30543,12 +31039,15 @@ function wireUI() {
     const flat = !!$('exp-flat')?.checked;
     const animate = (fmt === 'glb' || fmt === 'gltf') && !merge && $('exp-anim-row')?.style.display !== 'none' && !!$('exp-anim')?.checked;
     const stlAscii = !!$('exp-stl-ascii')?.checked && fmt === 'stl';
+    const materials = $('exp-materials')?.checked !== false;
+    const texSize = (fmt === 'glb' || fmt === 'gltf' || fmt === 'usdz') ? (parseInt($('exp-texsize')?.value, 10) || 0) : 0;
+    const texWebp = (fmt === 'glb' || fmt === 'gltf') && !!$('exp-texwebp')?.checked;
     const fileName = $('exp-filename')?.value || '';
     // The choices that are the same from one export to the next are kept.
     // (Not "selected only": it depends on what is selected right now. Not the file name: it belongs to the scene.)
     _Prefs.set('exportOpts', {
       scale: scaleSel, scaleCustom: $('exp-scale-custom')?.value || '1', axis, origin, pivot, conv: 2,
-      merge, visible: visibleOnly, flat,
+      merge, visible: visibleOnly, flat, materials, texSize, texWebp,
     });
 
     // Validate selected-only.
@@ -30614,7 +31113,7 @@ function wireUI() {
       }
     }
     try {
-      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, pivot, draco, meshopt, reorder, flat, stlAscii, fileName, animate });
+      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, pivot, draco, meshopt, reorder, flat, stlAscii, fileName, animate, materials, texSize, texWebp });
     } finally {
       if (snapshot.length) {
         for (const s of snapshot) s.p.visible = s.prev;
@@ -30738,6 +31237,9 @@ function wireUI() {
     const show = (el, on) => { if (el) el.style.display = on ? '' : 'none'; };
     const onlyFor = (rowId, cbId, on) => { show($(rowId), on); const cb = $(cbId); if (cb && !on) cb.checked = false; };
     { const has = (fmt === 'glb' || fmt === 'gltf') && !!(typeof _Anim !== 'undefined' && _Anim.count && _Anim.count() > 0); show($('exp-anim-row'), has); const ar = $('exp-anim-row'); if (ar) { const off = !!$('exp-merge')?.checked; ar.style.opacity = off ? '.42' : ''; ar.style.pointerEvents = off ? 'none' : ''; } }      // (Include animation: a glTF with something animated; not one merged mesh, which has no parts to move)
+    show($('exp-texsize-row'), fmt === 'glb' || fmt === 'gltf' || fmt === 'usdz');
+    onlyFor('exp-texwebp-row', 'exp-texwebp', fmt === 'glb' || fmt === 'gltf');
+    { const off = $('exp-materials')?.checked === false; for (const id of ['exp-texsize-row', 'exp-texwebp-row']) { const r = $(id); if (r) { r.style.opacity = off ? '.42' : ''; r.style.pointerEvents = off ? 'none' : ''; } } }      // (no materials, no pictures)
     onlyFor('exp-draco-row', 'exp-draco', fmt === 'glb');
     onlyFor('exp-meshopt-row', 'exp-meshopt', fmt === 'glb');
     onlyFor('exp-reorder-row', 'exp-reorder', fmt === 'glb');
@@ -30746,7 +31248,8 @@ function wireUI() {
     onlyFor('exp-stl-ascii-row', 'exp-stl-ascii', fmt === 'stl');
     show($('exp-quads-row'), fmt === 'obj' || fmt === 'fbx');                  // (on by default: its state is not reset when the row is out of sight)
     { const qr = $('exp-quads-row'), off = !!$('exp-merge')?.checked; if (qr) { qr.style.opacity = off ? '.42' : ''; qr.style.pointerEvents = off ? 'none' : ''; } }      // (one merged mesh is triangles)
-    show($('exp-fmt-group'), fmt === 'glb' || fmt === 'fbx' || fmt === 'stl' || fmt === 'obj');
+    show($('exp-mat-row'), ['glb', 'gltf', 'fbx', 'usdz', 'obj', 'ply'].includes(fmt));      // (STL and the parts list carry no materials)
+    show($('exp-fmt-group'), ['glb', 'gltf', 'fbx', 'stl', 'obj', 'usdz', 'ply'].includes(fmt));
 
     // Pivot points: only the formats that carry a position for each object (OBJ, STL and PLY have no objects to put one on), and not one merged mesh.
     { const pr = rowOf('exp-pivot'); show(pr, ['glb', 'gltf', 'fbx', 'usdz'].includes(fmt)); if (pr) { const off = !!$('exp-merge')?.checked; pr.style.opacity = off ? '.42' : ''; pr.style.pointerEvents = off ? 'none' : ''; } }
@@ -30766,7 +31269,7 @@ function wireUI() {
   }
   document.querySelectorAll('#format-grid .fmt-card').forEach(c =>
     c.addEventListener('click', () => setTimeout(_refreshFormatToggles, 0)));
-  for (const id of ['exp-merge', 'exp-draco', 'exp-stl-ascii', 'exp-meshopt', 'exp-reorder']) $(id)?.addEventListener('change', _refreshFormatToggles);
+  for (const id of ['exp-merge', 'exp-draco', 'exp-stl-ascii', 'exp-meshopt', 'exp-reorder', 'exp-materials']) $(id)?.addEventListener('change', _refreshFormatToggles);
   $('exp-draco')?.addEventListener('change', () => { if ($('exp-draco').checked && $('exp-meshopt')) { $('exp-meshopt').checked = false; _refreshFormatToggles(); } });      // one compression at a time
   $('exp-meshopt')?.addEventListener('change', () => { if ($('exp-meshopt').checked && $('exp-draco')) { $('exp-draco').checked = false; _refreshFormatToggles(); } });
   for (const id of ['exp-visible', 'exp-selected']) $(id)?.addEventListener('change', () => _refreshExpSummary());
@@ -30787,7 +31290,8 @@ function wireUI() {
       const setSel = (id, v) => { const el = $(id); if (el && v != null && [...el.options].some(op => op.value === v)) el.value = v; };
       setSel('exp-axis', o.axis); setSel('exp-origin', o.origin); setSel('exp-pivot', o.pivot);
       const setCb = (id, v) => { const el = $(id); if (el && typeof v === 'boolean') el.checked = v; };
-      setCb('exp-merge', o.merge); setCb('exp-visible', o.visible); setCb('exp-flat', o.flat);
+      setCb('exp-merge', o.merge); setCb('exp-visible', o.visible); setCb('exp-flat', o.flat); setCb('exp-materials', o.materials); setCb('exp-texwebp', o.texWebp);
+      setSel('exp-texsize', String(o.texSize || 0));
     }
   } catch (_) {}
   _refreshFormatToggles();
@@ -35237,6 +35741,7 @@ function _rebuildPrimitiveGeometry(p) {
     if (state._primDragKind !== 'size' || (p.triCount || 0) <= _PRIM_WF_LIVE_TRIS) {
       try { _syncPrimWireframe(p); } catch (_) {}
     }
+    try { _cadEdgesLive(p); } catch (_) {}      // (the black CAD lines follow the shape in the same frame)
   } else {
     try { if (typeof updateGizmo === 'function') updateGizmo(); } catch (_) {}
     try { if (typeof applySelectionColors === 'function') applySelectionColors(); } catch (_) {}
@@ -35574,6 +36079,27 @@ function _layersOfNode(m) {
 //   STL, 3MF     Z up, millimetres: as they are.
 // Writing goes the other way (see _exportConvention). Before this, every file was taken as Z-up millimetres, so a model from
 // Blender lay on its back, a GLB was a thousand times too small and an FBX ten times too big next to it.
+// A group node of the file that carries a transform has a pivot of its own (where Cinema 4D, Blender and the others put its axis): that is
+// the group's origin and turn here, instead of the middle of what is inside it. A node at identity has none to give, and keeps the middle.
+function _seedGroupPivotsFromFile(fileRoot) {
+  fileRoot.updateWorldMatrix(true, false);
+  const rootInv = new THREE.Matrix4().copy(fileRoot.matrixWorld).invert(), rel = new THREE.Matrix4();
+  const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  for (const n of state.treeNodes || []) {
+    if (n.kind !== 'group' || !n.obj3d || _groupOrigins.has(n.id)) continue;
+    let inside = false;
+    for (let o = n.obj3d; o; o = o.parent) if (o === fileRoot) { inside = true; break; }
+    if (!inside) continue;
+    rel.multiplyMatrices(rootInv, n.obj3d.matrixWorld);
+    const e = rel.elements;
+    let plain = true;
+    for (let i = 0; i < 16; i++) if (Math.abs(e[i] - (i % 5 === 0 ? 1 : 0)) > 1e-9) { plain = false; break; }
+    if (plain) continue;
+    n.obj3d.matrixWorld.decompose(p, q, s);
+    _groupOrigins.set(n.id, p.clone());
+    _groupRotations.set(n.id, q.clone());
+  }
+}
 function _toSceneConvention(root, conv) {
   if (!conv) return false;
   const k = conv.mmPerUnit > 0 ? conv.mmPerUnit : 1, turn = !!conv.yUp;
@@ -35815,6 +36341,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   }
   state.partsRoot.add(sceneRoot);
   state.partsRoot.updateMatrixWorld(true);
+  try { _seedGroupPivotsFromFile(sceneRoot); } catch (e) { console.warn('[import] group pivots:', e); }
   // Capture each mesh's EXACT world matrix BEFORE anything can corrupt it
   // (taken first, before anything else can touch the meshes).
   const rootMoved = !state.partsRoot.matrixWorld.equals(new THREE.Matrix4());
@@ -36131,11 +36658,83 @@ async function _gltfExternalFiles(file) {
   if (!found) return false;
   return _gltfFinish(file, json, uris, found);
 }
+// A list of models, one after another. Each one opens in a scene tab of its own (the scene that is open is not touched), is optimised (a
+// saved recipe, a size or triangle goal, or Smart optimise), is exported into the exports folder as name_optimised, and its tab is closed.
+// Claude's batch_optimise and the Batch optimise card both run this.
+//   items:  [{ name, get: async () => File }]
+//   o:      { recipe, goal, preset, target_mb, target_triangles, level, draco, exp, timeout_seconds }
+//   hooks:  { stopped(), note(prefix, step, total), stage(text), row(i, row, phase) }, all optional
+// Returns { results, cancelled }: a row per file ({ file, before, after, saved, ok, error }).
+async function _batchCore(items, o, hooks = {}) {
+  const reg = (() => { try { return window.top.__moTabs; } catch (_) { return null; } })();
+  if (!reg || typeof _Tabs === 'undefined') throw new Error('Scene tabs are not available here.');
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const stopped = hooks.stopped || (() => false), note = hooks.note || (() => {}), stage = hooks.stage || (() => {}), onRow = hooks.row || (() => {});
+  const origin = reg.active, results = [];
+  let cancelled = false;
+  note('', 0, items.length);
+  try {
+    for (let i = 0; i < items.length; i++) {
+      if (stopped()) { cancelled = true; break; }
+      const it = items[i], name = it.name, row = { file: name };
+      note('File ' + (i + 1) + ' of ' + items.length + ' · ' + name + ' · ', i, items.length);
+      stage('opening'); onRow(i, row, 'opening');
+      let tabId = null;
+      try {
+        const file = await it.get();
+        try { file.__moBatch = true; file.__moNoRecent = true; } catch (_) {}      // (no import window for it, and it does not push the files you opened yourself off the Recent list)
+        tabId = _Tabs.add({ file });
+        const lim = Date.now() + Math.min(3600, Math.max(30, o.timeout_seconds | 0 || 900)) * 1000;
+        let wt = null, last = '', same = 0, sum = null;
+        while (Date.now() < lim) {
+          if (stopped()) throw new Error('stopped');
+          const w = reg.wins[tabId]; wt = w && w.__moBridgeTools;
+          if (wt) {
+            try { sum = JSON.parse((await wt.scene_summary())[0].text); } catch (_) { sum = null; }
+            if (sum && sum.parts > 0) { const k = sum.parts + ':' + sum.triangles; same = k === last ? same + 1 : 0; last = k; if (same >= 2) break; }
+          }
+          await sleep(1000);
+        }
+        if (!sum || !(sum.parts > 0) || same < 2) throw new Error('the file did not open in time');
+        row.before = { parts: sum.parts, triangles: sum.triangles };
+        stage('optimising'); onRow(i, row, 'optimising');
+        const level = o.level === undefined ? 'light' : String(o.level);
+        if (o.recipe) await wt.run_recipe({ name: o.recipe });
+        else if (o.goal) await wt.optimise_to_target({ preset: o.preset, target_mb: o.target_mb, target_triangles: o.target_triangles, level, draco: o.draco });
+        else await wt.smart_optimise({ level: level === 'none' ? 'light' : level });
+        if (stopped()) throw new Error('stopped');
+        stage('exporting'); onRow(i, row, 'exporting');
+        const after = JSON.parse((await wt.scene_summary())[0].text);
+        row.after = { parts: after.parts, triangles: after.triangles };
+        const stem = name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'model';
+        const ex = JSON.parse((await wt.export_model({ ...o.exp, file_name: stem + '_optimised' }))[0].text);
+        row.saved = (ex.files || []).map(f => ({ path: f.path, megabytes: f.megabytes }));
+        row.ok = true;
+      } catch (e) {
+        row.ok = false; row.error = (e && e.message) || String(e);
+        if (row.error === 'stopped') { cancelled = true; row.error = 'stopped'; }
+      } finally {
+        if (tabId) { try { const tb = reg.tabs.find(x => x.id === tabId); if (tb) tb.dirty = false; await _Tabs.close(tabId); } catch (_) {} }
+      }
+      results.push(row);
+      onRow(i, row, row.ok ? 'done' : 'failed');
+      if (cancelled) break;
+    }
+  } finally {
+    try { if (reg.tabs.some(x => x.id === origin && !x.closed)) _Tabs.activate(origin); } catch (_) {}
+  }
+  return { results, cancelled };
+}
 // A folder dropped on the app: the model in it is opened, and a .gltf finds its own files in the same folder.
 const _FOLDER_MODEL_ORDER = ['gltf', 'glb', 'step', 'stp', 'iges', 'igs', 'brep', 'brp', 'fbx', 'usdz', 'usd', 'usdc', 'usda', 'dae', 'obj', '3mf', 'stl'];
 async function _openDroppedFolder(ents) {
   let rels;
   try { rels = await _readDropEntries(ents); } catch (e) { console.warn('[drop] folder:', e); toast('Could not read that folder', '', 'error'); return; }
+  // two or more models in it: the Batch optimise card (it can still open just one); one model: opened, as it always was
+  if (rels.filter(([p]) => _FOLDER_MODEL_ORDER.indexOf((p.split('.').pop() || '').toLowerCase()) >= 0).length >= 2) { _BatchFolder.open(rels, (ents[0] && ents[0].name) || 'folder'); return; }
+  return _openFolderModel(rels);
+}
+async function _openFolderModel(rels) {
   const rank = (p) => { const i = _FOLDER_MODEL_ORDER.indexOf((p.split('.').pop() || '').toLowerCase()); return i < 0 ? 99 : i; };
   const pick = rels.filter(([p]) => rank(p) < 99).sort((x, y) => rank(x[0]) - rank(y[0]) || x[0].split('/').length - y[0].split('/').length)[0];
   if (!pick) { toast('No model in that folder', 'Supported: STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF, STL, USD, Collada', 'warn', 5000); return; }
@@ -36150,6 +36749,110 @@ async function _openDroppedFolder(ents) {
   }
   _dropOpen(file);
 }
+
+// ── Batch optimise: the models of a folder, optimised one after another ───────────────────────────────────
+// Where it starts: a folder dropped on the app with two or more models in it, "Batch folder…" on the start screen, or the command of that
+// name (a folder picker). The card lists the models; Optimise runs _batchCore on them: each opens in a scene tab of its own, is optimised
+// (Smart optimise at the level chosen) and is exported into the exports folder as name_optimised; the scene that is open is not touched.
+const _BatchFolder = (() => {
+  const $i = (id) => document.getElementById(id);
+  const MAX = 100;
+  const LEVELS = ['light', 'balanced', 'strong'];
+  const rankOf = (p) => _FOLDER_MODEL_ORDER.indexOf((p.split('.').pop() || '').toLowerCase());
+  let items = [], rels = [], folder = '', skipped = 0, running = false, stopFlag = false, wired = false, level = 'light';
+  try { const l = localStorage.getItem('stepopt-batch-level'); if (LEVELS.includes(l)) level = l; } catch (_) {}
+  const size = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  const say = (t) => { const el = $i('bt-info'); if (el) el.textContent = t; };
+  const rowEl = (i) => { const l = $i('bt-list'); return l && l.children[i]; };
+  function sync() {
+    const run = $i('bt-run'), stop = $i('bt-stop'), seg = $i('bt-level');
+    const label = 'Optimise ' + items.length + (items.length === 1 ? ' file' : ' files');
+    if (run) { run.disabled = running || !items.length; const lb = run.querySelector('span'); if (lb) lb.textContent = label; }
+    const fo = document.querySelector('.section-cmd[data-cmd="batch"] .cmd-foot .cmd-ok span'); if (fo) fo.textContent = label;      // (the footer's button stands for it)
+    if (stop) stop.hidden = !running;
+    if (seg) for (const b of seg.querySelectorAll('button')) { b.classList.toggle('active', b.dataset.l === level); b.setAttribute('aria-pressed', String(b.dataset.l === level)); b.disabled = running; }
+    const one = $i('bt-open-one'); if (one) one.disabled = running;
+  }
+  function render() {
+    const l = $i('bt-list'); if (!l) return;
+    l.innerHTML = items.map((it, i) => '<div class="bt-row" data-i="' + i + '"><span class="bt-n" title="' + escapeHtml(it.path) + '">' + escapeHtml(it.path) + '</span><span class="bt-s">' + size(it.size) + '</span><span class="bt-st"></span></div>').join('');
+    const total = items.reduce((n, it) => n + it.size, 0);
+    const lede = $i('bt-lede'); if (lede) lede.textContent = items.length + (items.length === 1 ? ' model' : ' models') + ' in ' + folder + ' · ' + size(total) + (skipped ? ' · the first ' + MAX + ' of ' + (items.length + skipped) : '');
+    say('Each model opens in a tab of its own, is optimised and is saved in the exports folder as name_optimised. The scene you have open is not touched.');
+  }
+  function onRow(i, row, phase) {
+    const el = rowEl(i); if (!el) return;
+    el.classList.remove('is-run', 'is-ok', 'is-bad');
+    const st = el.querySelector('.bt-st');
+    if (phase === 'done') { el.classList.add('is-ok'); st.textContent = fmtNum(row.before.triangles) + ' → ' + fmtNum(row.after.triangles) + ' triangles'; }
+    else if (phase === 'failed') { el.classList.add('is-bad'); st.textContent = row.error === 'stopped' ? 'Stopped' : (row.error || 'Failed'); }
+    else { el.classList.add('is-run'); st.textContent = ({ opening: 'Opening…', optimising: 'Optimising…', exporting: 'Saving…' })[phase] || ''; try { el.scrollIntoView({ block: 'nearest' }); } catch (_) {} }
+  }
+  async function run() {
+    if (running || !items.length) return;
+    running = true; stopFlag = false;
+    for (let i = 0; i < items.length; i++) { const el = rowEl(i); if (el) { el.classList.remove('is-run', 'is-ok', 'is-bad'); el.querySelector('.bt-st').textContent = ''; } }
+    sync(); say('Working…');
+    let out = null;
+    try {
+      out = await _batchCore(items.map(it => ({ name: it.path.split('/').pop(), get: it.get })), { level, exp: { preset: 'web' } }, { stopped: () => stopFlag, row: onRow, note: (p, i, n) => say(p ? p.replace(/ · $/, '') : 'Starting…') });
+    } catch (e) { say((e && e.message) || String(e)); toast('Batch optimise', (e && e.message) || String(e), 'error', 6000); }
+    finally { running = false; sync(); }
+    if (!out) return;
+    const good = out.results.filter(r => r.ok), tb = good.reduce((n, r) => n + r.before.triangles, 0), ta = good.reduce((n, r) => n + r.after.triangles, 0);
+    const msg = good.length + ' of ' + items.length + ' done' + (good.length ? ' · ' + fmtNum(tb) + ' → ' + fmtNum(ta) + ' triangles' : '') + (out.cancelled ? ' · stopped' : '') + '. Saved in the exports folder as name_optimised.';
+    say(msg);
+    toast(out.cancelled ? 'Batch stopped' : 'Batch done', msg, good.length === items.length && !out.cancelled ? 'success' : 'warn', 8000);
+  }
+  function wire() {
+    if (wired) return; wired = true;
+    const sec = document.querySelector('.section-cmd[data-cmd="batch"]');
+    sec?.addEventListener('cmd-close', () => { if (running) { stopFlag = true; say('Stopping after this file…'); } });
+    $i('bt-run')?.addEventListener('click', run);
+    $i('bt-stop')?.addEventListener('click', () => { stopFlag = true; say('Stopping after this file…'); });
+    $i('bt-level')?.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-l]'); if (!b || running) return;
+      level = b.dataset.l; try { localStorage.setItem('stepopt-batch-level', level); } catch (_) {} sync();
+    });
+    $i('bt-open-one')?.addEventListener('click', () => { if (running) return; const r = rels; _CmdCards.close('batch'); _openFolderModel(r); });
+  }
+  // rels: [[path inside the folder, File], ...]
+  function open(r, name) {
+    if (running) { toast('Batch optimise', 'Still working on the last folder', 'info', 2500); return; }
+    const models = r.filter(([p]) => rankOf(p) >= 0).sort((x, y) => x[0].localeCompare(y[0]));
+    if (!models.length) { toast('No model in that folder', 'Supported: STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF, STL, USD, Collada', 'warn', 5000); return; }
+    rels = r; folder = name || 'the folder';
+    const siblings = r.map(x => x[1]);
+    skipped = Math.max(0, models.length - MAX);
+    items = models.slice(0, MAX).map(([p, f]) => ({ path: p, size: f.size, get: async () => {
+      if (/\.gltf$/i.test(f.name)) {                       // (a .gltf finds its own files in the folder)
+        const json = JSON.parse(await f.text()), uris = _gltfExternalUris(json);
+        if (uris.length && !_gltfFinish(f, json, uris, _foundFromRels(r, uris))) throw new Error('its pictures or data are not in the folder');
+      }
+      try { f.__moSiblings = siblings; } catch (_) {}      // (an OBJ finds its .mtl among them)
+      return f;
+    } }));
+    try { _Welcome.hide(); } catch (_) {}
+    wire(); render(); sync();
+    _CmdCards.open('batch');
+  }
+  // the folder picker (the whole folder is read by the browser, with its sub-folders)
+  function pick() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.multiple = true; inp.webkitdirectory = true; inp.style.display = 'none';
+    inp.addEventListener('change', () => {
+      const fl = [...inp.files]; inp.remove();
+      if (!fl.length) return;
+      const root = ((fl[0].webkitRelativePath || '').split('/')[0]) || 'the folder';
+      open(fl.map(f => [(f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name, f]), root);
+    });
+    inp.addEventListener('cancel', () => inp.remove());
+    document.body.appendChild(inp);
+    inp.click();
+  }
+  window.__moAgent = Object.assign(window.__moAgent || {}, { batchFolder: (r, name) => open(r, name), batchBusy: () => running, dropFolder: (ents) => _openDroppedFolder(ents) });
+  return { open, pick, get running() { return running; } };
+})();
 
 async function loadGlbFile(file) {
   const _ext = await _gltfExternalFiles(file);
@@ -36742,6 +37445,21 @@ function flagByTriangleCount(minTri) {
   toast('Flagged', `${state.pendingFlagged.size} part${state.pendingFlagged.size === 1 ? '' : 's'} under ${minTri} tris`, 'info');
 }
 
+// The Low-poly / Slivers choice in Filters & flags: one replaces the other, so it is one segmented control, and only the slider of the lit one shows.
+// A slider moved: flag again by it (once the moving has paused), when it is the lit kind and something was flagged by it already.
+let _flagLiveT = 0, _flagArmed = false;
+function _flagLive(id) {
+  if (!_flagArmed) return;
+  clearTimeout(_flagLiveT);
+  _flagLiveT = setTimeout(() => { const b = $(id); if (b && b.classList.contains('active')) b.click(); }, 160);
+}
+function _paintFlagKind(id) {
+  document.querySelectorAll('#flag-kind > button').forEach(b => b.classList.toggle('active', b.id === id));
+  const f1 = $('flag-f-tri'), f2 = $('flag-f-sliver');
+  if (f1) f1.hidden = id !== 'btn-flag-tri';
+  if (f2) f2.hidden = id !== 'btn-flag-sliver';
+}
+
 // Flag thin sliver parts (long-but-narrow shapes like wires, gaskets, labels).
 function flagSlivers(ratio) {
   state._flagSource = 'other';
@@ -36827,7 +37545,7 @@ function selectByColor() {
 
 // Hide selected (non-destructive — restorable via "Show everything")
 function hideSelected() {
-  if (state.selected.size === 0) return toast('Nothing selected', '', 'warn');
+  if (_nothingSelected()) return;
   // (a hidden part has no outline: once the parts are hidden, the selection's outline is built again without them)
   queueMicrotask(() => { try { applySelectionColors(); requestRender(); } catch (_) {} });
   setTimeout(() => { try { _scenePropsSoon(); } catch (_) {} }, 0);          // the scene card counts hidden parts
@@ -36913,10 +37631,12 @@ const _partGeom = (p) => (p && !p.deleted) ? (p.mesh ? p.mesh.geometry : (p.inst
 // How many live parts use this part's geometry right now (the icon and the ×N badge of the tree and of Properties read it, so they
 // follow Make unique, deleting copies and the like at once). One pass over the parts, kept for the current task only.
 let _shareCache = null, _firstCache = null;
+const _instMaster = new WeakMap();      // a shared geometry → the part that was made its original (see instMakeOriginal)
 function _shareFill() {
   if (_shareCache) return;
   _shareCache = _geomUseCounts(); _firstCache = new Map();
   for (const q of state.parts) { const g = _partGeom(q); if (g && !_firstCache.has(g)) _firstCache.set(g, q.partId); }
+  for (const g of _firstCache.keys()) { const pid = _instMaster.get(g); if (pid == null) continue; const q = getPart(pid); if (q && !q.deleted && _partGeom(q) === g) _firstCache.set(g, pid); }
   queueMicrotask(() => { _shareCache = null; _firstCache = null; });
 }
 function _liveShareCount(p) {
@@ -36950,8 +37670,9 @@ function selectInstances() {
 // Select the original: the first part (in file order) that has the same geometry stands for the original, the others are its copies.
 function selectInstanceOriginal() {
   if (state.selected.size === 0) return toast('Select at least one part first', '', 'warn');
-  const first = new Map();                                  // geometry → the first live part that uses it
-  for (const p of state.parts) { const g = _partGeom(p); if (g && !first.has(g)) first.set(g, p); }
+  _shareFill();
+  const first = new Map();                                  // geometry → the part that is its original (the first one, or the one picked with Make original)
+  for (const [g, pid] of _firstCache) first.set(g, getPart(pid));
   const out = new Set(); let copies = 0;
   for (const id of state.selected) {
     const p = getPart(id), g = _partGeom(p), o = g && first.get(g);
@@ -37012,6 +37733,498 @@ _UndoOps.register('makeUnique', {
   redo(op) { _swapUniqueGeom(op, true); state.history.push(op); _finalizeUndo(); },
 });
 
+// ── The Instances panel: how many copies of what, which part is the original, and everything one does with them ──────────
+// "Make original" picks which part of a shared shape is the original (the one the tree and Properties mark, and "Select the
+// original" goes to). Without a pick it is the first part in file order. The pick is a view of the scene, not a change of it.
+var _instFollowOn = false;          // Edit all instances together (the switch in the panel; kept in this browser)
+try { _instFollowOn = _Prefs.get('instFollow') === true; } catch (_) {}
+function instMakeOriginal(id) {
+  const p = getPart(id), g = _partGeom(p);
+  if (!g) return toast('Select a part first', '', 'warn');
+  _shareFill();
+  if ((_shareCache.get(g) || 0) < 2) return toast('Not shared', 'This part has a shape of its own, so it is its own original.', 'info', 2200);
+  if (_firstCache.get(g) === id) return toast('Already the original', '', 'info', 1800);
+  const before = _instMaster.has(g) ? _instMaster.get(g) : null;
+  _instMaster.set(g, id);
+  pushUndo({ type: 'instMaster', label: 'Make original', geom: g, before, after: id });
+  _shareCache = null;
+  rebuildTree(); refreshPropertiesPanel(); requestRender();
+  toast('Original changed', (p.name || 'The part') + ' is now the original', 'success', 1800);
+}
+function _swapInstMaster(op, toAfter) {
+  const v = toAfter ? op.after : op.before;
+  if (v == null) _instMaster.delete(op.geom); else _instMaster.set(op.geom, v);
+  _shareCache = null;
+  rebuildTree(); refreshPropertiesPanel(); requestRender();
+}
+_UndoOps.register('instMaster', {
+  undo(op) { _swapInstMaster(op, false); state.redo.push(op); _finalizeUndo(); },
+  redo(op) { _swapInstMaster(op, true); state.history.push(op); _finalizeUndo(); },
+});
+
+const _geomBytes = (g) => {
+  let n = 0; const seen = new Set();
+  for (const k in g.attributes) { const a = g.attributes[k], arr = a && (a.isInterleavedBufferAttribute ? a.data.array : a.array); if (arr && !seen.has(arr)) { seen.add(arr); n += arr.byteLength; } }
+  if (g.index && g.index.array) n += g.index.array.byteLength;
+  return n;
+};
+const _instPickIds = (ids) => {
+  state.selected = new Set(ids); state.selectedGroupIds?.clear?.();
+  applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel();
+  if (typeof updateGizmo === 'function') updateGizmo();
+  $('del-sel-count').textContent = state.selected.size;
+};
+// Every shape that more than one part uses, biggest sets first, and what the sharing saves.
+function _instSurvey() {
+  _shareFill();
+  const by = new Map();
+  let parts = 0;
+  for (const p of state.parts) {
+    const g = _partGeom(p); if (!g) continue;
+    parts++;
+    let e = by.get(g);
+    if (!e) by.set(g, e = { geom: g, ids: [], original: _firstCache.get(g), tris: 0, bytes: 0 });
+    e.ids.push(p.partId);
+  }
+  const shared = []; let copies = 0, trisSaved = 0, bytesSaved = 0;
+  for (const e of by.values()) {
+    if (e.ids.length < 2) continue;
+    const pos = e.geom.attributes.position;
+    e.tris = e.geom.index ? e.geom.index.count / 3 : (pos ? pos.count / 3 : 0);
+    e.bytes = _geomBytes(e.geom);
+    copies += e.ids.length - 1; trisSaved += (e.ids.length - 1) * e.tris; bytesSaved += (e.ids.length - 1) * e.bytes;
+    shared.push(e);
+  }
+  shared.sort((a, b) => b.ids.length - a.ids.length || b.tris - a.tris);
+  return { parts, shapes: by.size, shared, copies, trisSaved, bytesSaved, by };
+}
+// The copies (not the originals) of the shapes the selected parts use.
+function selectInstanceCopies() {
+  if (state.selected.size === 0) return toast('Select at least one part first', '', 'warn');
+  _shareFill();
+  const geoms = new Set();
+  for (const id of state.selected) { const g = _partGeom(getPart(id)); if (g && (_shareCache.get(g) || 0) > 1) geoms.add(g); }
+  const out = [];
+  for (const p of state.parts) { const g = _partGeom(p); if (g && geoms.has(g) && _firstCache.get(g) !== p.partId) out.push(p.partId); }
+  if (!out.length) return toast('No copies', 'The selected parts are not shared with any other part.', 'info', 2200);
+  _instPickIds(out);
+  toast('Copies selected', out.length + ' part' + (out.length === 1 ? '' : 's'), 'success', 1600);
+}
+function _instCopyIds(sv) {
+  const out = [];
+  for (const e of sv.shared) for (const id of e.ids) if (id !== e.original) out.push(id);
+  return out;
+}
+
+// ── Share identical shapes, Replace with original ───────────────────────────────────────────────────────────────────────
+// Parts that hold the same mesh twice (the file stored it once for each) are made instances of one. Only meshes that match to the
+// last number are joined (every vertex attribute, the index and the material slots), so nothing changes in the picture. With "turned
+// and moved copies" on, a part whose vertices are the original's, turned and moved (a model that has each copy written in place),
+// joins too: its mesh becomes the original's and the part's own turn and place take up the difference. A part that is drawn as an
+// instance already stays as it is.
+function _sameArr(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length || a.constructor !== b.constructor) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && !(a[i] !== a[i] && b[i] !== b[i])) return false;
+  return true;
+}
+function _instFeed(h, a) {
+  if (!a) return h;
+  if (a.byteLength % 4 === 0 && a.byteOffset % 4 === 0) { const u = new Uint32Array(a.buffer, a.byteOffset, a.byteLength >> 2); for (let i = 0; i < u.length; i++) h = Math.imul(h ^ u[i], 16777619); }
+  else for (let i = 0; i < a.length; i++) h = Math.imul(h ^ (a[i] | 0), 16777619);
+  return h;
+}
+const _instHash = (g) => (_instFeed(_instFeed(2166136261 | 0, g.attributes.position.array), g.index && g.index.array) >>> 0).toString(36);
+const _instIndexHash = (g) => (_instFeed(2166136261 | 0, g.index && g.index.array) >>> 0).toString(36);
+// Same attributes, index, material slots and CAD state; loose: the positions and normals may differ (they are what a turn moves).
+function _instSameGeometry(a, b, loose) {
+  const ka = Object.keys(a.attributes), kb = Object.keys(b.attributes);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    const x = a.attributes[k], y = b.attributes[k];
+    if (!y || x.itemSize !== y.itemSize || x.normalized !== y.normalized || x.count !== y.count) return false;
+    if (loose && (k === 'position' || k === 'normal')) continue;
+    if (!_sameArr(x.array, y.array)) return false;
+  }
+  if (!!a.index !== !!b.index || (a.index && !_sameArr(a.index.array, b.index.array))) return false;
+  if (JSON.stringify(a.groups) !== JSON.stringify(b.groups)) return false;
+  if (!!_Brep.record(a) !== !!_Brep.record(b)) return false;
+  if (_triOnly.has(a) !== _triOnly.has(b)) return false;
+  if (_polyIds.has(a) !== _polyIds.has(b) || (_polyIds.has(a) && !_sameArr(_polyIds.get(a), _polyIds.get(b)))) return false;
+  return true;
+}
+// The eigenvector (w, x, y, z) of the largest eigenvalue of a symmetric 4 × 4 matrix (Jacobi turns).
+function _instTopEigen4(M) {
+  const a = M.map(r => r.slice()), v = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  let norm = 0; for (let i = 0; i < 4; i++) norm += a[i][i] * a[i][i];
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let off = 0; for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) off += a[i][j] * a[i][j];
+    if (off <= 1e-22 * (norm + off)) break;
+    for (let p = 0; p < 3; p++) for (let q = p + 1; q < 4; q++) {
+      if (a[p][q] === 0) continue;
+      const th = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+      const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+      const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < 4; k++) { const x = a[k][p], y = a[k][q]; a[k][p] = c * x - s * y; a[k][q] = s * x + c * y; }
+      for (let k = 0; k < 4; k++) { const x = a[p][k], y = a[q][k]; a[p][k] = c * x - s * y; a[q][k] = s * x + c * y; }
+      for (let k = 0; k < 4; k++) { const x = v[k][p], y = v[k][q]; v[k][p] = c * x - s * y; v[k][q] = s * x + c * y; }
+    }
+  }
+  let best = 0; for (let i = 1; i < 4; i++) if (a[i][i] > a[best][best]) best = i;
+  return [v[0][best], v[1][best], v[2][best], v[3][best]];
+}
+// The turn and move T (a matrix) that takes the vertices of `a` onto those of `b`, vertex for vertex, or null when no turn and move
+// does it to within `tolRel` of the shape's size (the vertices must be in the same order; a mirror image is not a match).
+function _instAlign(a, b, tolRel) {
+  const pa = a.attributes.position, pb = b.attributes.position, n = pa.count;
+  if (!pb || pb.count !== n || n < 3 || pa.itemSize !== 3 || pb.itemSize !== 3) return null;
+  const A = pa.array, B = pb.array;
+  let cax = 0, cay = 0, caz = 0, cbx = 0, cby = 0, cbz = 0, lx = Infinity, ly = Infinity, lz = Infinity, hx = -Infinity, hy = -Infinity, hz = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const x = A[3 * i], y = A[3 * i + 1], z = A[3 * i + 2];
+    cax += x; cay += y; caz += z; cbx += B[3 * i]; cby += B[3 * i + 1]; cbz += B[3 * i + 2];
+    if (x < lx) lx = x; if (x > hx) hx = x; if (y < ly) ly = y; if (y > hy) hy = y; if (z < lz) lz = z; if (z > hz) hz = z;
+  }
+  cax /= n; cay /= n; caz /= n; cbx /= n; cby /= n; cbz /= n;
+  const diag = Math.hypot(hx - lx, hy - ly, hz - lz) || 1;
+  let Sxx = 0, Sxy = 0, Sxz = 0, Syx = 0, Syy = 0, Syz = 0, Szx = 0, Szy = 0, Szz = 0;
+  for (let i = 0; i < n; i++) {
+    const ax = A[3 * i] - cax, ay = A[3 * i + 1] - cay, az = A[3 * i + 2] - caz, bx = B[3 * i] - cbx, by = B[3 * i + 1] - cby, bz = B[3 * i + 2] - cbz;
+    Sxx += ax * bx; Sxy += ax * by; Sxz += ax * bz; Syx += ay * bx; Syy += ay * by; Syz += ay * bz; Szx += az * bx; Szy += az * by; Szz += az * bz;
+  }
+  const q = _instTopEigen4([
+    [Sxx + Syy + Szz, Syz - Szy, Szx - Sxz, Sxy - Syx],
+    [Syz - Szy, Sxx - Syy - Szz, Sxy + Syx, Szx + Sxz],
+    [Szx - Sxz, Sxy + Syx, -Sxx + Syy - Szz, Syz + Szy],
+    [Sxy - Syx, Szx + Sxz, Syz + Szy, -Sxx - Syy + Szz]]);
+  const R = new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion(q[1], q[2], q[3], q[0]).normalize()), e = R.elements;
+  const tx = cbx - (e[0] * cax + e[4] * cay + e[8] * caz), ty = cby - (e[1] * cax + e[5] * cay + e[9] * caz), tz = cbz - (e[2] * cax + e[6] * cay + e[10] * caz);
+  const tol = Math.max(tolRel * diag, 1e-9), tol2 = tol * tol;
+  for (let i = 0; i < n; i++) {
+    const x = A[3 * i], y = A[3 * i + 1], z = A[3 * i + 2];
+    const rx = e[0] * x + e[4] * y + e[8] * z + tx - B[3 * i], ry = e[1] * x + e[5] * y + e[9] * z + ty - B[3 * i + 1], rz = e[2] * x + e[6] * y + e[10] * z + tz - B[3 * i + 2];
+    if (rx * rx + ry * ry + rz * rz > tol2) return null;
+  }
+  R.setPosition(tx, ty, tz);
+  return R;
+}
+const _instX = (mesh) => ({ pos: mesh.position.clone(), quat: mesh.quaternion.clone(), scl: mesh.scale.clone() });
+// The part's own turn, place and size after its mesh is swapped for one that is T away from the old one (null: it cannot be written
+// as a turn, a place and a size, e.g. the part is stretched along one axis).
+function _instMoved(mesh, T) {
+  if (Math.abs(mesh.scale.x - mesh.scale.y) > 1e-6 * Math.abs(mesh.scale.x) || Math.abs(mesh.scale.x - mesh.scale.z) > 1e-6 * Math.abs(mesh.scale.x)) return null;
+  mesh.updateMatrix();
+  const m = mesh.matrix.clone().multiply(T), pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3();
+  m.decompose(pos, quat, scl);
+  const back = new THREE.Matrix4().compose(pos, quat, scl);
+  for (let i = 0; i < 16; i++) if (Math.abs(back.elements[i] - m.elements[i]) > 1e-6 * Math.max(1, Math.abs(m.elements[i]))) return null;
+  return { pos, quat, scl };
+}
+const _instCan = (p) => !p.deleted && !p.isCloner && !p.isSpline && !p.isPrimitive;
+const _instOk = (host) => { const g = host && host.geometry; return !!(g && g.attributes && g.attributes.position && !host.isSkinnedMesh && !(g.morphAttributes && Object.keys(g.morphAttributes).length) && !Object.values(g.attributes).some(a => a.isInterleavedBufferAttribute)); };
+
+function shareIdenticalShapes(o = {}) {
+  const moved = !!o.moved, tol = o.tol > 0 ? o.tol : 1e-4;
+  const uses = _geomUseCounts(), hashOf = new Map(), movable = new Map(), exact = new Map();
+  for (const p of state.parts) {
+    if (!_instCan(p)) continue;
+    const host = p.mesh || p.instancedMesh;
+    if (!_instOk(host)) continue;
+    const g = host.geometry;
+    if (!hashOf.has(g)) {
+      hashOf.set(g, p.hash);
+      const key = g.attributes.position.count + ':' + (g.index ? g.index.count : 0) + ':' + Object.keys(g.attributes).sort().join(',') + ':' + _instHash(g);
+      (exact.get(key) || exact.set(key, []).get(key)).push(g);
+    }
+    if (p.mesh) (movable.get(g) || movable.set(g, []).get(g)).push(p);
+  }
+  const plan = [], left = [];                       // plan: [geometry, the one it joins, T or null]; left: what the turned and moved pass looks at
+  for (const list of exact.values()) {
+    if (list.length < 2) { left.push(list[0]); continue; }
+    const classes = [];
+    for (const g of list) { const c = classes.find(c => _instSameGeometry(c[0], g, false)); if (c) c.push(g); else classes.push([g]); }
+    for (const c of classes) {
+      let master = c[0];
+      for (const g of c) if ((uses.get(g) || 0) > (uses.get(master) || 0)) master = g;
+      for (const g of c) if (g !== master) plan.push([g, master, null]);
+      left.push(master);
+    }
+  }
+  let turned = 0;
+  if (moved) {
+    const loose = new Map();
+    for (const g of left) {
+      const key = g.attributes.position.count + ':' + (g.index ? g.index.count : 0) + ':' + Object.keys(g.attributes).sort().join(',') + ':' + _instIndexHash(g);
+      (loose.get(key) || loose.set(key, []).get(key)).push(g);
+    }
+    const hop = new Map();
+    for (const list of loose.values()) {
+      if (list.length < 2) continue;
+      list.sort((x, y) => (uses.get(y) || 0) - (uses.get(x) || 0));
+      const masters = [];
+      for (const g of list) {
+        let hit = false;
+        for (const m of masters) {
+          if (!_instSameGeometry(m, g, true)) continue;
+          const T = _instAlign(m, g, tol);
+          if (T) { plan.push([g, m, T]); hop.set(g, [m, T]); hit = true; break; }
+        }
+        if (!hit) masters.push(g);
+      }
+    }
+    for (const e of plan) { const h = hop.get(e[1]); if (h && e[2] === null) { e[1] = h[0]; e[2] = h[1]; } }      // (what had joined a shape that has moved on goes with it)
+  }
+  if (!plan.length) { toast('Nothing to share', moved ? 'No two parts hold the same mesh, turned or not.' : 'No two parts hold the same mesh twice.', 'info', 2600); return 0; }
+  try { _detachGizmo(); } catch (_) {}
+  const items = [], oldGeoms = new Set();
+  for (const [g, master, T] of plan) {
+    for (const p of movable.get(g) || []) {
+      const it = { partId: p.partId, geomBefore: g, hashBefore: p.hash, geomAfter: master, hashAfter: hashOf.get(master) };
+      if (T) { const x = _instMoved(p.mesh, T); if (!x) continue; it.xBefore = _instX(p.mesh); it.xAfter = x; turned++; }
+      items.push(it); oldGeoms.add(g);
+    }
+  }
+  if (!items.length) { toast('Nothing to share', 'The matching parts are drawn as instances already.', 'info', 2600); return 0; }
+  const op = { type: 'instShare', label: 'Share identical shapes', items, dropped: [] };
+  _applyInstShare(op, true);
+  pushUndo(op);
+  let saved = 0; for (const g of oldGeoms) saved += _geomBytes(g);
+  const shapes = new Set(items.map(i => i.geomAfter)).size;
+  toast('Shapes shared', items.length + ' part' + (items.length === 1 ? ' is' : 's are') + ' now instances of ' + shapes + ' shape' + (shapes === 1 ? '' : 's') + (turned ? ' (' + turned + ' turned and moved to fit)' : '') + ' · ' + (saved / 1048576).toFixed(1) + ' MB of duplicate vertices dropped from the scene', 'success', 4600);
+  return items.length;
+}
+// Replace with original: the selected parts that have the shape of the original (the selected part that already has the most
+// copies; with none, the one picked first) take its mesh and keep their place. A part that is the same shape but written in another
+// place or turn gets the turn and move that makes up the difference; one that does not have the shape is left alone and counted.
+function replaceWithOriginal(ids, o = {}) {
+  ids = (ids || [...state.selected]).filter(id => { const p = getPart(id); return p && _instCan(p) && _partGeom(p); });
+  if (ids.length < 2) { toast('Pick the original and the parts to replace', 'Select two or more parts. The one that already has copies is the original; with none, the one picked first.', 'warn', 4200); return 0; }
+  const uses = _geomUseCounts();
+  let M = null;
+  for (const id of ids) { const p = getPart(id), g = _partGeom(p), u = uses.get(g) || 0; if (!M || u > M.u) M = { p, g, u }; }
+  const tol = o.tol > 0 ? o.tol : 1e-4, items = [];
+  let left = 0;
+  try { _detachGizmo(); } catch (_) {}
+  for (const id of ids) {
+    const p = getPart(id);
+    if (p === M.p || _partGeom(p) === M.g) continue;
+    const tg = p.mesh && p.mesh.geometry;
+    if (!tg || !_instOk(p.mesh) || !_instOk(M.p.mesh || M.p.instancedMesh)) { left++; continue; }
+    const it = { partId: p.partId, geomBefore: tg, hashBefore: p.hash, geomAfter: M.g, hashAfter: M.p.hash };
+    if (!_instSameGeometry(M.g, tg, false)) {
+      if (!_instSameGeometry(M.g, tg, true)) { left++; continue; }
+      const T = _instAlign(M.g, tg, tol), x = T && _instMoved(p.mesh, T);
+      if (!x) { left++; continue; }
+      it.xBefore = _instX(p.mesh); it.xAfter = x;
+    }
+    items.push(it);
+  }
+  if (!items.length) { toast('Nothing replaced', (left ? fmtNum(left) + ' of the selected parts do not have the shape of ' + M.p.name + ' (the same points in the same order, turned or not).' : 'Every selected part shares its shape with ' + M.p.name + ' already.'), 'info', 4600); return 0; }
+  const op = { type: 'instShare', label: 'Replace with original', items, dropped: [] };
+  _applyInstShare(op, true);
+  pushUndo(op);
+  toast('Replaced with ' + M.p.name, items.length + ' part' + (items.length === 1 ? '' : 's') + ' now share its mesh' + (left ? ' · ' + left + ' left alone (not its shape)' : ''), 'success', 4600);
+  return items.length;
+}
+function _applyInstShare(op, toAfter) {
+  _detachGizmo();
+  for (const it of op.items) {
+    const p = getPart(it.partId); if (!p || !p.mesh) continue;
+    p.mesh.geometry = toAfter ? it.geomAfter : it.geomBefore;
+    p.hash = toAfter ? it.hashAfter : it.hashBefore;
+    const x = it.xAfter && (toAfter ? it.xAfter : it.xBefore);
+    if (x) { p.mesh.position.copy(x.pos); p.mesh.quaternion.copy(x.quat); p.mesh.scale.copy(x.scl); p.mesh.updateMatrix(); p.mesh.updateMatrixWorld(true); try { _refreshPartBBox(p); } catch (_) {} }
+    p._fp = null; p._fpKey = null;
+    try { _cadEdgesPartSwapped(p); } catch (_) {}
+  }
+  if (toAfter) {
+    const live = _geomUseCounts();
+    for (const it of op.items) if (!live.get(it.geomBefore) && state.geomByHash.get(it.hashBefore) === it.geomBefore) { state.geomByHash.delete(it.hashBefore); op.dropped.push([it.hashBefore, it.geomBefore]); }
+  } else {
+    for (const [h, g] of op.dropped) state.geomByHash.set(h, g);
+    op.dropped = [];
+  }
+  _shareCache = null;
+  try { recomputeStats(); } catch (_) {}
+  rebuildTree(); applySelectionColors(); refreshPropertiesPanel(); requestRender();
+}
+_UndoOps.register('instShare', {
+  undo(op) { _applyInstShare(op, false); state.redo.push(op); _finalizeUndo(); },
+  redo(op) { _applyInstShare(op, true); state.history.push(op); _finalizeUndo(); },
+});
+
+// ── Edit all instances together ─────────────────────────────────────────────────────────────────────────────────────────
+// With the switch on, a tool that gives a part a new mesh (Decimate, the repairs, Remesh, Remove ridges, Delete triangles and the
+// like: every step of the kind 'decimate') hands that mesh to every other part that still has the old one, in the same undo step:
+// the copies follow the part the tool was run on, and stay instances. (A boolean is left out: its result depends on the other part.)
+// A tool run on several copies of one shape keeps the first result for all of them.
+function _instSnap(p) {
+  try { _Brep.seen(p.mesh); } catch (_) {}
+  return { geom: p.mesh.geometry, hash: p.hash, triCount: p.triCount, vertCount: p.vertCount, dev: p.simpDev || 0, shadeAngle: p.shadeAngle, bbox: p.bbox ? p.bbox.clone() : null, sizeMetrics: p.sizeMetrics ? { ...p.sizeMetrics } : null };
+}
+function _instAdopt(p, st) {
+  p.hash = st.hash; p.triCount = st.triCount; p.vertCount = st.vertCount; p.simpDev = st.dev || 0;
+  if ('shadeAngle' in st) p.shadeAngle = st.shadeAngle;
+  p._fp = null; p._fpKey = null;
+}
+// The part drawn from one instanced mesh take a new geometry together (and give it back on undo).
+function _applyImSwap(x, dir) {
+  const to = dir === 'after' ? x.geomAfter : x.geomBefore;
+  x.im.geometry = to;
+  try { if (!to.boundingBox) to.computeBoundingBox(); x.im.computeBoundingSphere?.(); } catch (_) {}
+  for (const e of x.parts) { const st = e[dir]; e.p.hash = st.hash; e.p.triCount = st.triCount; e.p.vertCount = st.vertCount; e.p.simpDev = st.dev || 0; e.p._fp = null; e.p._fpKey = null; }
+  try { _cadEdgesGeomChanged(to); } catch (_) {}
+}
+function _instFollowOp(op) {
+  const inOp = new Set(op.items.map(i => i.partId)), first = new Map();
+  for (const it of op.items) {
+    const b = it.before && it.before.geom, a = it.after && it.after.geom;
+    if (!b || !a || a === b) continue;
+    const f = first.get(b);
+    if (!f) { first.set(b, it); continue; }
+    const p = getPart(it.partId); if (!p || !p.mesh) continue;
+    p.mesh.geometry = f.after.geom; _instAdopt(p, f.after);
+    try { _refreshPartBBox(p); _cadEdgesPartSwapped(p); } catch (_) {}
+    it.after = _instSnap(p);
+  }
+  const extra = [], swaps = [];
+  for (const [b, it] of first) {
+    const a = it.after, ims = new Map();
+    for (const q of state.parts) {
+      if (q.deleted || inOp.has(q.partId)) continue;
+      if (q.mesh && q.mesh.geometry === b) {
+        const before = _instSnap(q);
+        q.mesh.geometry = a.geom; _instAdopt(q, a);
+        try { _refreshPartBBox(q); _cadEdgesPartSwapped(q); } catch (_) {}
+        extra.push({ partId: q.partId, before, after: _instSnap(q) });
+      } else if (q.instancedMesh && q.instancedMesh.geometry === b) {
+        (ims.get(q.instancedMesh) || ims.set(q.instancedMesh, []).get(q.instancedMesh)).push(q);
+      }
+    }
+    for (const [im, list] of ims) {
+      const x = { im, geomBefore: b, geomAfter: a.geom, parts: list.map(q => ({ p: q, before: { hash: q.hash, triCount: q.triCount, vertCount: q.vertCount, dev: q.simpDev || 0 }, after: { hash: a.hash, triCount: a.triCount, vertCount: a.vertCount, dev: a.dev || 0 } })) };
+      _applyImSwap(x, 'after'); swaps.push(x);
+    }
+  }
+  if (!extra.length && !swaps.length) return;
+  if (extra.length) op.items.push(...extra);
+  if (swaps.length) op.imSwaps = (op.imSwaps || []).concat(swaps);
+  _shareCache = null;
+  const n = extra.length + swaps.reduce((s, x) => s + x.parts.length, 0);
+  try { recomputeStats(); _buildBVHsForAllGeoms(); } catch (_) {}
+  queueMicrotask(() => { try { rebuildTree(); refreshPropertiesPanel(); requestRender(); } catch (_) {} });
+  toast('Instances follow', n + ' cop' + (n === 1 ? 'y has' : 'ies have') + ' the same change, in the same undo step', 'success', 3200);
+}
+
+// What each export does with a shared shape. GLB and glTF write it once (the exporter shares one mesh among the parts that have the
+// same `hash`, which is why Share identical shapes gives the parts the original's hash); OBJ, STL, PLY and FBX have no instances in
+// the way the app writes them, so every copy is written out.
+const _INST_EXPORT_NOTE = 'On export, GLB and glTF write a shared shape once. OBJ, STL, PLY and FBX write every copy.';
+
+window.__moInstances = { survey: () => { const s = _instSurvey(); return { parts: s.parts, shapes: s.shapes, sets: s.shared.map(e => ({ ids: e.ids.slice(), original: e.original, tris: e.tris })), copies: s.copies, trisSaved: s.trisSaved, bytesSaved: s.bytesSaved }; }, makeOriginal: instMakeOriginal, share: shareIdenticalShapes, replace: replaceWithOriginal, copies: selectInstanceCopies, makeUnique: (ids) => makeUnique(ids), follow: (v) => { _instFollowOn = !!v; }, align: (a, b, t) => _instAlign(a, b, t) };
+
+(function _wireInstances() {
+  const sec = document.querySelector('.section-cmd[data-cmd="instances"]');
+  if (!sec) return;
+  const $id = (id) => document.getElementById(id);
+  const info = $id('in-info'), save = $id('in-save'), list = $id('in-list'), who = $id('in-sel'), note = $id('in-export');
+  const followEl = $id('in-follow'), movedEl = $id('in-moved'), tolEl = $id('in-tol'), filtEl = $id('in-filter');
+  const B = (id) => $id('btn-in-' + id);
+  const mb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  const plural = (n, a, b) => fmtNum(n) + ' ' + (n === 1 ? a : b);
+  const DEF_TOL = 0.01;
+  let sig = '', sort = 'count', moved = false, tolPct = DEF_TOL;
+  try { moved = _Prefs.get('instMoved') === true; const t = +_Prefs.get('instTol'); if (t > 0 && t <= 5) tolPct = t; } catch (_) {}
+  const key = () => [state.parts.length, state.selected.size, state.history.length, state.redo ? state.redo.length : 0].join(':');
+  function show() {
+    const sv = _instSurvey();
+    sig = key();
+    if (followEl) followEl.checked = _instFollowOn;
+    if (movedEl) movedEl.checked = moved;
+    if (tolEl && document.activeElement !== tolEl) tolEl.value = String(tolPct);
+    $id('in-adv')?.classList.toggle('is-changed', tolPct !== DEF_TOL);
+    for (const b of sec.querySelectorAll('#in-sort button')) b.classList.toggle('active', b.dataset.sort === sort);
+    if (info) {
+      info.textContent = !sv.parts ? 'No model open' : sv.shared.length ? plural(sv.copies, 'copy', 'copies') + ' of ' + plural(sv.shared.length, 'shape', 'shapes') : 'Nothing shared';
+      info.title = !sv.parts ? '' : plural(sv.parts, 'part', 'parts') + ', ' + plural(sv.shapes, 'shape', 'shapes') + (sv.shared.length ? '. Sharing keeps ' + fmtNum(Math.round(sv.trisSaved)) + ' triangles and about ' + mb(sv.bytesSaved) + ' of vertices out of the scene. ' + _INST_EXPORT_NOTE : '');
+    }
+    // what the selection is
+    let o = 0, c = 0, u = 0, one = null;
+    for (const id of state.selected) {
+      const p = getPart(id), g = _partGeom(p); if (!g) continue;
+      const n = _shareCache.get(g) || 0;
+      if (n < 2) u++; else if (_firstCache.get(g) === id) o++; else c++;
+      one = p;
+    }
+    const total = o + c + u;
+    if (who) who.textContent = !total ? 'Select a part to see whether it is an original or a copy.'
+      : total === 1 ? (o ? 'Original of ' + plural(_shareCache.get(_partGeom(one)) - 1, 'copy', 'copies') : c ? 'Copy of ' + (getPart(_firstCache.get(_partGeom(one)))?.name || 'the original') : 'Unique: no other part shares its shape')
+      : [o && plural(o, 'original', 'originals'), c && plural(c, 'copy', 'copies'), u && fmtNum(u) + ' unique'].filter(Boolean).join(' · ');
+    const dis = (id, off) => { const b = B(id); if (b) b.disabled = !!off; };
+    dis('all', o + c === 0); dis('original', c === 0); dis('copies', o + c === 0);
+    dis('master', !(total === 1 && c === 1)); dis('unique', o + c === 0);
+    dis('share', sv.parts < 2); dis('replace', total < 2); dis('unique-all', !sv.copies);
+    if (list) {
+      let rows = sv.shared.map(e => ({ e, name: (getPart(e.original) || {}).name || '' }));
+      const q = filtEl ? filtEl.value.trim().toLowerCase() : '';
+      if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q));
+      if (sort === 'saved') rows.sort((a, b) => (b.e.ids.length - 1) * b.e.tris - (a.e.ids.length - 1) * a.e.tris);
+      else if (sort === 'name') rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      list.hidden = !sv.shared.length;
+      list.textContent = '';
+      const sel = state.selected;
+      for (const { e, name } of rows.slice(0, 80)) {
+        const row = document.createElement('div');
+        const on = e.ids.length === sel.size && e.ids.every(id => sel.has(id));
+        row.className = 'fa-row in-row' + (on ? ' is-on' : '');
+        row.tabIndex = 0; row.setAttribute('role', 'button');
+        row.title = 'Select the ' + e.ids.length + ' parts that share ' + (name || 'this shape') + '. The original is ' + (name || 'the first');
+        const n = document.createElement('b'), t = document.createElement('span'), s = document.createElement('small'), iso = document.createElement('button');
+        n.textContent = '×' + fmtNum(e.ids.length); t.textContent = name || 'Part'; t.className = 'in-name'; s.textContent = fmtNum(Math.round(e.tris)) + ' tris';
+        iso.type = 'button'; iso.className = 'in-iso'; iso.title = 'Show only these parts'; iso.setAttribute('aria-label', 'Show only these parts'); iso.innerHTML = _ico('focus');
+        row.append(n, t, s, iso);
+        const pick = () => { _instPickIds(e.ids); try { frameSelected(undefined, 2.6); } catch (_) {} show(); };
+        row.addEventListener('click', (ev) => { if (ev.target.closest('.in-iso')) return; pick(); });
+        row.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); } });
+        iso.addEventListener('click', (ev) => { ev.stopPropagation(); _instPickIds(e.ids); try { isolateSelected(); } catch (_) {} show(); });
+        list.appendChild(row);
+      }
+      if (rows.length > 80) { const m = document.createElement('div'); m.className = 'field-help'; m.textContent = 'and ' + fmtNum(rows.length - 80) + ' more sets'; list.appendChild(m); }
+      if (q && !rows.length && sv.shared.length) { const m = document.createElement('div'); m.className = 'field-help'; m.textContent = 'No shared shape has that in its name.'; list.appendChild(m); }
+    }
+  }
+  const opts = () => ({ moved, tol: tolPct / 100 });
+  const go = (id, fn) => B(id)?.addEventListener('click', () => { fn(); B(id).blur(); show(); });
+  go('all', selectInstances);
+  go('original', selectInstanceOriginal);
+  go('copies', selectInstanceCopies);
+  go('master', () => { if (state.selected.size === 1) instMakeOriginal([...state.selected][0]); });
+  go('unique', () => makeUnique());
+  go('share', () => shareIdenticalShapes(opts()));
+  go('replace', () => replaceWithOriginal(null, opts()));
+  B('unique-all')?.addEventListener('click', async () => {
+    const s = _instSurvey();
+    if (!s.copies) return;
+    if (!(await appConfirm('Give ' + plural(s.copies, 'copy', 'copies') + ' a mesh of their own? The scene grows by about ' + mb(s.bytesSaved) + ' of vertices. Undo takes it back.', { title: 'Make every copy unique', okLabel: 'Make unique' }))) return;
+    makeUnique(_instCopyIds(s));
+    show();
+  });
+  followEl?.addEventListener('change', () => { _instFollowOn = followEl.checked; try { _Prefs.set('instFollow', _instFollowOn); } catch (_) {} show(); });
+  movedEl?.addEventListener('change', () => { moved = movedEl.checked; try { _Prefs.set('instMoved', moved); } catch (_) {} show(); });
+  tolEl?.addEventListener('change', () => {
+    const v = parseFloat(String(tolEl.value).replace(',', '.'));
+    tolPct = isFinite(v) && v > 0 ? Math.min(5, v) : DEF_TOL;
+    try { _Prefs.set('instTol', tolPct); } catch (_) {}
+    show();
+  });
+  $id('in-reset')?.addEventListener('click', () => { tolPct = DEF_TOL; try { _Prefs.set('instTol', tolPct); } catch (_) {} show(); });
+  for (const b of sec.querySelectorAll('#in-sort button')) b.addEventListener('click', () => { sort = b.dataset.sort; b.blur(); show(); });
+  filtEl?.addEventListener('input', show);
+  sec.addEventListener('cmd-open', show);
+  setInterval(() => { if (document.hidden || sec.hidden) return; if (key() !== sig) show(); }, 350);
+  show();
+})();
+
 // Copy of everything the in-place tools overwrite on a set of parts. Returns
 // null when the copy would exceed the budget.
 function _snapGeomXform(parts) {
@@ -37068,8 +38281,6 @@ _UndoOps.register('geomXform', {
   // Redo re-runs the tool: both are deterministic given the same input.
   redo(op) {
     if (op.tool === 'bake') bakeTransforms({ fromRedo: true });
-    else if (op.tool === 'centerPivot') centerPivotsOnSelection({ fromRedo: true, ids: op.ids });
-    else if (op.tool === 'orientPivot') orientPivotsTo('custom', { fromRedo: true, targets: op.targets, ids: op.ids });
     state.history.push(op);
     _finalizeUndo();
   },
@@ -37175,8 +38386,8 @@ function recomputeNormals() {
 // the origin. One undo step. The rest of the model stays where it is.
 function _recenterSelectedParts() {
   _detachGizmo();      // selected parts sit outside partsRoot until released
-  const picked = [...state.selected].map(id => getPart(id)).filter(p => p && !p.deleted && !p.locked);
-  const lockedN = [...state.selected].map(id => getPart(id)).filter(p => p && !p.deleted && p.locked).length;
+  const picked = _selectedParts(p => !p.locked);
+  const lockedN = _selectedParts(p => p.locked).length;
   if (!picked.length) { toast('Nothing to move', lockedN ? 'The selected parts are locked.' : '', 'warn'); return; }
   // an exploded view is put back first: what is centred is the part at rest, not where the explosion pushed it
   { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { try { resetExplode(); } catch (_) {} } }
@@ -38034,200 +39245,6 @@ function bakeTransforms(opts = {}) {
   requestRender();
 }
 
-// Re-center each selected part's local origin to its geometry bbox center
-// without changing visual position. Fixes the "gizmo floats out in space"
-// problem common to Cinema 4D / Blender exports where the mesh's local
-// origin sits far from the actual vertices, so when you select that part
-// the translate/rotate gizmo appears nowhere near the visible geometry.
-//
-// Implementation:
-//   1. Get the geometry's local-space bbox center C.
-//   2. Translate vertex positions by -C → the new local origin coincides
-//      with what was the bbox center.
-//   3. Compensate by translating the mesh in its parent frame by R·S·C
-//      (rotation+scale applied to C). This keeps every vertex's WORLD
-//      position identical: the geometry's old (0,0,0) was at p.position
-//      in parent space; the new (0,0,0) needs to be at where C was, i.e.
-//      p.position + R·S·C. Math derivation in the comment block below.
-//
-//   For vertex v: world_old = parent · T(p_old) · R · S · v
-//                 world_new = parent · T(p_new) · R · S · (v - C)
-//   Equating gives  T(p_new) = T(p_old + R·S·C), hence p_new = p_old + R·S·C.
-//
-// Geometry-sharing safety: if multiple parts share the BufferGeometry
-// (sub-3 instance pairs the auto-instance pass left uncollapsed), the
-// translation would corrupt their pivots too. As in bakeTransforms, a part
-// whose buffer any other part still draws gets a copy of its own first
-// (_ownGeometryFor), with a fresh hash.
-function centerPivotsOnSelection(opts = {}) {
-  // `opts` is a click event when called from the button; only a redo passes ids.
-  const targetIds = (opts && opts.fromRedo && opts.ids) ? opts.ids : [...state.selected];
-  if (targetIds.length === 0) {
-    toast('Nothing selected', 'Select one or more parts to centre their pivots', 'warn');
-    return;
-  }
-  _detachGizmo();   // Restore meshes from pivot to partsRoot before mutating
-  // As for Smart fit: with the view exploded, each part sits at rest + offset,
-  // and that sum would become its new rest position.
-  { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z) && typeof resetExplode === 'function') resetExplode(); }
-
-  const geomUses = _geomUseCounts();
-  const offsetLocal = new THREE.Vector3();
-  let centered = 0, skipped = 0, cloned = 0;
-  const fromRedo = !!(opts && opts.fromRedo);
-  let undoBefore = null, undoTooBig = false;
-  if (!fromRedo) {
-    const todo = targetIds.map(id => getPart(id)).filter(p => p && !p.deleted && p.mesh);
-    undoBefore = _snapGeomXform(todo);
-    undoTooBig = undoBefore === null && todo.length > 0;
-  }
-
-  for (const id of targetIds) {
-    const p = getPart(id);
-    if (!p || p.deleted || !p.mesh) { skipped++; continue; }
-    let geom = p.mesh.geometry;
-    if (!geom || !geom.attributes?.position) { skipped++; continue; }
-
-    // 1. Compute current local bbox + center.
-    if (!geom.boundingBox) geom.computeBoundingBox();
-    const center = new THREE.Vector3().addVectors(geom.boundingBox.min, geom.boundingBox.max).multiplyScalar(0.5);
-    // Already centered (within 0.001% of bbox diagonal)? Skip — re-centering
-    // would be a no-op but would still trash caches.
-    const diag = geom.boundingBox.min.distanceTo(geom.boundingBox.max) || 1;
-    if (center.length() < diag * 1e-5) { skipped++; continue; }
-
-    // 2. Geometry sharing — a buffer that any OTHER part still draws
-    //    (selected or not) is copied first, so shifting these vertices
-    //    can't move a part that merely shares the shape.
-    const sharedGeom = geom;
-    geom = _ownGeometryFor(p, geomUses, 'c');
-    if (geom !== sharedGeom) cloned++;
-
-    // 3. Shift vertices so bbox center sits at the local origin.
-    geom.translate(-center.x, -center.y, -center.z);
-    geom.computeBoundingBox(); geom.computeBoundingSphere();
-
-    // 4. Compensate the mesh's local position. R·S·C using mesh's current
-    //    quat + scale; using mesh.matrix would include translation which we
-    //    don't want here.
-    offsetLocal.copy(center).multiply(p.mesh.scale).applyQuaternion(p.mesh.quaternion);
-    p.mesh.position.add(offsetLocal);
-    p.mesh.updateMatrixWorld(true);
-    // The vertices and the transform both changed; export uses this snapshot.
-    p._exactWorld = p.mesh.matrixWorld.clone();
-    // The exploded view's rest positions for this part are of the old origin.
-    p._origPos = null; p._origWorldPos = null; p._partCenter = null;
-    state._explodeBaselineDone = false;
-
-    // 5. Refresh caches that depend on geometry positions.
-    _refreshPartBBox(p);
-    p._fp = null; p._fpKey = null;
-    if (geom.boundsTree) geom.disposeBoundsTree?.();
-    _disposeEdgesFor(geom, false); try { _Brep.moved(geom, new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z)); } catch (_) {}
-
-    centered++;
-  }
-
-  if (centered > 0 && !fromRedo) {
-    if (undoBefore && undoBefore.length) pushUndo({ type: 'geomXform', tool: 'centerPivot', label: 'Centre pivot', before: undoBefore, ids: targetIds });
-    else if (undoTooBig) _dropUndoHistory('Centre pivot');
-  }
-  if (centered > 0) {
-    _buildBVHsForAllGeoms();          // rebuild for any disposed/cloned geoms
-    applySelectionColors();           // outline buffer references stale edges
-    updateGizmo();                    // gizmo now sits at the new (correct) origin
-    requestRender();
-  } else {
-    // Nothing moved (every part was already centred, or is instanced): the gizmo was taken off at the start, so it goes back on.
-    // Without this the second press made the gizmo, and with it the part's handles, disappear.
-    try { updateGizmo(); applySelectionColors(); requestRender(); } catch (_) {}
-  }
-
-  const detail = (cloned > 0 ? ` (${cloned} given their own copy of shared geometry)` : '') +
-                 (skipped > 0 ? `, ${skipped} skipped (already centred or instanced)` : '');
-  if (centered === 0) {
-    toast('Nothing to do', skipped > 0 ? 'All selected parts are already centred or are instanced' : '', 'info');
-  } else {
-    toast('Pivot centred', `${centered} part${centered === 1 ? '' : 's'}${detail}`, 'success');
-  }
-}
-
-// Turn the pivot of every selected part: its own X, Y and Z (what Local shows, what the Transform card's rotation is measured
-// from) are set to the chosen axes, and the vertices are turned the opposite way, so the part looks exactly as it did.
-//   world / active / view / spread : the same targets the gizmo's axes list offers; custom : X, Y, Z degrees in the scene's axes.
-// A part drawn with uneven scale is skipped (turning its axes would shear it). A buffer another part shares is copied first.
-// Undo restores the vertices and the transform (geomXform); a redo applies the stored target of each part again.
-function orientPivotsTo(mode, opts = {}) {
-  const fromRedo = !!opts.fromRedo;
-  const ids = (fromRedo && opts.ids) ? opts.ids : [...state.selected];
-  if (!ids.length) { toast('Nothing selected', 'Select one or more parts to turn their pivots', 'warn'); return; }
-  const parts = ids.map(id => getPart(id)).filter(p => p && !p.deleted && p.mesh && p.mesh.geometry?.attributes?.position);
-  if (!parts.length) { toast('Nothing to turn', 'The selection has no meshes (instanced parts cannot have their pivot turned)', 'info'); return; }
-  _detachGizmo();
-  { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z) && typeof resetExplode === 'function') resetExplode(); }
-
-  const targets = {};
-  if (fromRedo) { for (const p of parts) targets[p.partId] = new THREE.Quaternion().fromArray(opts.targets[p.partId]); }
-  else {
-    if (mode === 'object') {
-      for (const p of parts) { const oq = _partObjectQuat(p); if (oq) targets[p.partId] = oq; }
-    }
-    const q = mode === 'object' ? true : mode === 'custom'
-      ? (() => { const e = opts.euler || [0, 0, 0], D = Math.PI / 180; return new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * D, e[1] * D, e[2] * D, 'XYZ')); })()
-      : _gizmoOrientQuat(parts, mode);
-    if (!q) { toast('Cannot align', mode === 'spread' ? 'Spread needs three or more parts that are not in one spot' : 'No axes for this choice', 'info'); try { updateGizmo(); } catch (_) {} return; }
-    if (mode !== 'object') for (const p of parts) targets[p.partId] = q.clone();
-    else if (!Object.keys(targets).length) { toast('No clear axes', 'These shapes have no flat faces to follow (curved or round parts)', 'info'); try { updateGizmo(); } catch (_) {} return; }
-  }
-
-  let undoBefore = null, undoTooBig = false;
-  if (!fromRedo) { undoBefore = _snapGeomXform(parts); undoTooBig = undoBefore === null; }
-  const geomUses = _geomUseCounts();
-  const qp = new THREE.Quaternion(), ql = new THREE.Quaternion(), dq = new THREE.Quaternion();
-  let turned = 0, skipped = 0, cloned = 0;
-  for (const p of parts) {
-    if (!targets[p.partId]) { skipped++; continue; }
-    const m = p.mesh, sc = m.scale;
-    const mx = Math.max(Math.abs(sc.x), Math.abs(sc.y), Math.abs(sc.z)) || 1;
-    if (Math.abs(sc.x - sc.y) > mx * 1e-4 || Math.abs(sc.y - sc.z) > mx * 1e-4) { skipped++; continue; }
-    if (m.parent) { m.parent.updateWorldMatrix(true, false); m.parent.getWorldQuaternion(qp); } else qp.identity();
-    ql.copy(qp).invert().multiply(targets[p.partId]);               // the part's new local rotation
-    dq.copy(ql).invert().multiply(m.quaternion);                    // what the vertices turn by: new⁻¹ · old
-    if (Math.abs(dq.w) > 1 - 1e-9) { skipped++; continue; }         // already on those axes
-    const shared = m.geometry;
-    const geom = _ownGeometryFor(p, geomUses, 'o');
-    if (geom !== shared) { cloned++; try { _disposeEdgesFor(shared, false); } catch (_) {} }
-    if (geom.boundsTree) geom.disposeBoundsTree?.();
-    geom.applyQuaternion(dq);
-    geom.computeBoundingBox(); geom.computeBoundingSphere();
-    m.quaternion.copy(ql);
-    m.updateMatrix(); m.updateMatrixWorld(true);
-    p._exactWorld = m.matrixWorld.clone();
-    p._origPos = null; p._origWorldPos = null; p._partCenter = null;
-    state._explodeBaselineDone = false;
-    _refreshPartBBox(p);
-    p._fp = null; p._fpKey = null;
-    _disposeEdgesFor(geom, false); try { _Brep.moved(geom, new THREE.Matrix4().makeRotationFromQuaternion(dq)); } catch (_) {}
-    turned++;
-  }
-  if (turned > 0 && !fromRedo) {
-    const tg = {}; for (const p of parts) if (targets[p.partId]) tg[p.partId] = targets[p.partId].toArray();
-    if (undoBefore && undoBefore.length) pushUndo({ type: 'geomXform', tool: 'orientPivot', label: 'Turn pivot', before: undoBefore, targets: tg, ids: parts.filter(p => targets[p.partId]).map(p => p.partId) });
-    else if (undoTooBig) _dropUndoHistory('Turn pivot');
-  }
-  if (turned > 0) _buildBVHsForAllGeoms();
-  // The gizmo shows the pivot only in Local axes: with World (or one of the view-only choices) kept from the axes list the turn
-  // would be invisible, so it goes back to Local.
-  try { if (turned > 0 && _gizmoSpaceGet() !== 'local') _gizmoSpaceSet('local'); } catch (_) {}
-  applySelectionColors();
-  updateGizmo();
-  requestRender();
-  if (fromRedo) return;
-  const detail = (cloned ? ` (${cloned} given their own copy of shared geometry)` : '') + (skipped ? `, ${skipped} skipped (already on those axes, or unevenly scaled)` : '');
-  if (turned) toast('Pivot turned', `${turned} part${turned === 1 ? '' : 's'}${detail}`, 'success');
-  else toast('Nothing to do', skipped ? 'The pivots are already on those axes, or the parts are unevenly scaled' : '', 'info');
-}
-
 // ── The axis of a part, as Cinema 4D's Axis Center handles it ───────────────────────────────────────────────────────────────────
 // A part's axis is the origin and the X, Y, Z of its mesh (what the gizmo shows in Local axes). These commands move or turn the axis
 // with the shape staying exactly where it is (the vertices are carried the opposite way), or move the object with its axis:
@@ -38344,6 +39361,18 @@ function _axisRun(label, parts, plan, note) {
   else toast('Nothing to do', locked && !skipped.length ? 'The parts are locked' : 'The axes are already there', 'info', 2000);
   return done.length;
 }
+// The one answer every tool gives when nothing is selected (true: it said so, the caller returns), and the selected parts that are still
+// there (and pass `keep`, when one is given).
+function _nothingSelected(hint = 'Select one or more parts first', type = 'warn') {
+  if (state.selected.size) return false;
+  toast('Nothing selected', hint, type);
+  return true;
+}
+function _selectedParts(keep) {
+  const out = [];
+  for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted && (!keep || keep(p))) out.push(p); }
+  return out;
+}
 function _axisParts(ids) {
   const list = (ids && ids.length ? ids : [...state.selected]).map(id => getPart(id)).filter(p => p && !p.deleted);
   if (!list.length) { toast('Nothing selected', 'Select one or more parts first', 'warn'); return null; }
@@ -38357,15 +39386,31 @@ function _axisLocalOf(m, worldPos, worldQuat) {
   if (worldQuat) out.quat = _axisParentQuat(m).invert().multiply(worldQuat);
   return out;
 }
-// where the axis goes: the target is 'centre' (the middle of the part), 'origin', 'selection', 'active', 'view' or 'keep'
+// where the axis goes: the target is 'centre' (the middle of the part), 'bottom' / 'top' (the middle of its lowest / highest face, Z up),
+// 'origin', 'selection', 'active', 'view' or 'keep'
 // how it turns: 'keep', 'world' (0, 0, 0), 'parent', 'active', 'view' or 'object' (the part's own flat faces)
 function axisSet(where, turn, opts = {}) {
   const parts = _axisParts(opts.ids); if (!parts) return 0;
   const ctx = _axisContext(parts), selC = where === 'selection' ? _axisSelCentre(parts) : null;
+  // The ways of turning that need the whole selection, or the shape, worked out once before the first part moves:
+  //   spread : the axes the selected parts are spread along (three parts or more that are not in one spot)
+  //   custom : the angles in opts.euler (degrees, the scene's X, Y, Z)
+  //   object : the part's own biggest flat faces, one answer for each part (a ball or a very rough surface has none)
+  if (turn === 'spread') {
+    ctx.spreadQuat = _gizmoOrientQuat(parts.filter(p => p && p.mesh), 'spread');
+    if (!ctx.spreadQuat) { toast('Cannot align', 'Spread needs three or more parts that are not in one spot', 'info'); return 0; }
+  } else if (turn === 'custom') {
+    const e = opts.euler || [0, 0, 0], D = Math.PI / 180;
+    ctx.customQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * D, e[1] * D, e[2] * D, 'XYZ'));
+  } else if (turn === 'object') {
+    ctx.objectQuats = new Map();
+    for (const p of parts) { if (p && p.mesh && !p.locked) { const q = _partObjectQuat(p); if (q) ctx.objectQuats.set(p.partId, q); } }
+    if (!ctx.objectQuats.size) { toast('No clear axes', 'These shapes have no flat faces to follow (curved or round parts)', 'info'); return 0; }
+  }
   if (where === 'active' && parts.length < 2) { toast('Pick a second part', 'The last selected part is the target: select the part to move first, then the target', 'info', 3200); return 0; }
   if (where === 'selection' && !selC) { toast('Nothing to centre on', '', 'info'); return 0; }
-  const names = { centre: 'Axis Center', origin: 'Center Axis to the origin', selection: 'Center Axis to the selection', active: 'Center Axis to the last selected', view: 'Center Axis to the view', keep: 'Align axis' };
-  const label = opts.label || (turn !== 'keep' && where === 'keep' ? 'Align axis to ' + ({ world: 'the world', parent: 'its parent', active: 'the last selected', view: 'the view', object: 'its faces' }[turn] || turn) : names[where] || 'Axis');
+  const names = { centre: 'Centre pivot', bottom: 'Pivot to the bottom', top: 'Pivot to the top', origin: 'Pivot to the origin', selection: 'Pivot to the selection', active: 'Pivot to the last selected', view: 'Pivot to the view', keep: 'Align pivot' };
+  const label = opts.label || (turn !== 'keep' && where === 'keep' ? 'Align pivot to ' + ({ world: 'the world', parent: 'its parent', active: 'the last selected', view: 'the view', object: 'its faces', spread: 'the way the parts are spread', custom: 'the typed angles' }[turn] || turn) : names[where] || 'Pivot');
   const n = _axisRun(label, parts, (p) => {
     const m = p.mesh; m.updateWorldMatrix(true, false);
     if (where === 'active' && p === ctx.active) return null;
@@ -38376,11 +39421,17 @@ function axisSet(where, turn, opts = {}) {
     else if (turn === 'parent') Qw = _axisParentQuat(m);
     else if (turn === 'active') Qw = ctx.activeQuat && ctx.activeQuat.clone();
     else if (turn === 'view') Qw = ctx.viewQuat && ctx.viewQuat.clone();
-    else if (turn === 'object') Qw = _partObjectQuat(p);
+    else if (turn === 'spread') Qw = ctx.spreadQuat.clone();
+    else if (turn === 'custom') Qw = ctx.customQuat.clone();
+    else if (turn === 'object') { const oq = ctx.objectQuats.get(p.partId); Qw = oq ? oq.clone() : null; }
     if (!Qw) return null;
     let Pw;
     if (where === 'keep') Pw = m.getWorldPosition(new THREE.Vector3());
     else if (where === 'centre') Pw = _axisCentreOf(p, Qw);
+    else if (where === 'bottom' || where === 'top') {      // (measured in the scene's own axes: the foot of a part is its lowest point whichever way it is turned)
+      const b = _axisBoxIn(p, new THREE.Quaternion());
+      if (b) { Pw = b.min.clone().add(b.max).multiplyScalar(0.5); Pw.z = where === 'bottom' ? b.min.z : b.max.z; }
+    }
     else if (where === 'origin') Pw = new THREE.Vector3();
     else if (where === 'selection') Pw = selC.clone();
     else if (where === 'active') Pw = ctx.activePos && ctx.activePos.clone();
@@ -38393,7 +39444,7 @@ function axisSet(where, turn, opts = {}) {
   return n;
 }
 // Axis Center: the axis to the middle of the part, with its rotation reset to 0, 0, 0 (the scene's axes)
-function axisCenter(opts = {}) { return axisSet('centre', 'world', { ...opts, label: 'Axis Center' }); }
+function axisCenter(opts = {}) { return axisSet('centre', 'world', { ...opts, label: 'Centre pivot' }); }
 // Center Object to: the object moves so that its axis lands on the target; the shape keeps its place relative to the axis
 function axisMoveObject(where, opts = {}) {
   const parts = _axisParts(opts.ids); if (!parts) return 0;
@@ -38417,7 +39468,7 @@ function axisMoveObject(where, opts = {}) {
     items.push({ partId: p.partId, from, to, bboxBefore: p.bbox ? p.bbox.clone() : null });
   }
   if (!items.length) { toast('Nothing to do', 'The axes are already there', 'info', 2000); return 0; }
-  const op = { type: _AXIS_UNDO.move, label: where === 'origin' ? 'Center Object to the origin' : where === 'active' ? 'Center Object to the last selected' : 'Center Object to the view', items };
+  const op = { type: _AXIS_UNDO.move, label: where === 'origin' ? 'Move to the origin' : where === 'active' ? 'Move to the last selected' : 'Move to the view', items };
   _axisMoveApply(op, true);
   pushUndo(op);
   toast(op.label, items.length + ' part' + (items.length === 1 ? '' : 's'), 'success', 2000);
@@ -38458,29 +39509,18 @@ _UndoOps.register(_AXIS_UNDO.move, {
   undo(op) { _axisMoveApply(op, false); state.redo.push(op); _finalizeUndo(); },
   redo(op) { _axisMoveApply(op, true); state.history.push(op); _finalizeUndo(); },
 });
-// the Axis card
-function _wireAxisCard() {
-  const card = document.querySelector('.section-cmd[data-cmd="axis"]');
-  if (!card || card._wired) return;
-  card._wired = true;
-  const rot = () => !!(document.getElementById('axis-reset-rot') && document.getElementById('axis-reset-rot').checked);
-  const run = {
-    centre: () => axisCenter(),
-    'axis-origin': () => axisSet('origin', rot() ? 'world' : 'keep'),
-    'axis-selection': () => axisSet('selection', rot() ? 'world' : 'keep'),
-    'axis-active': () => axisSet('active', rot() ? 'active' : 'keep'),
-    'axis-view': () => axisSet('view', rot() ? 'world' : 'keep'),
-    'obj-origin': () => axisMoveObject('origin'),
-    'obj-active': () => axisMoveObject('active'),
-    'obj-view': () => axisMoveObject('view'),
-    'turn-world': () => axisSet('keep', 'world'),
-    'turn-parent': () => axisSet('keep', 'parent'),
-    'turn-object': () => axisSet('keep', 'object'),
-    scale: () => axisResetScale(),
-  };
-  card.querySelectorAll('[data-axis-act]').forEach(b => b.addEventListener('click', () => { const f = run[b.dataset.axisAct]; try { if (f) f(); } catch (e) { console.error('[axis]', e); toast('The axis could not be changed', String((e && e.message) || e), 'error', 5000); } b.blur(); }));
+// the Pivot card (pivot-card.js): its tabs and buttons; the work is the functions above
+function _installPivotCard() {
+  _pivotCard = installPivotCard({ groupPivot: (...a) => _groupPivotAct(...a), state, THREE, toast: (...a) => toast(...a), axisSet: (...a) => axisSet(...a), axisCenter: (...a) => axisCenter(...a), axisMoveObject: (...a) => axisMoveObject(...a), axisResetScale: (...a) => axisResetScale(...a) });
 }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wireAxisCard); else _wireAxisCard();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _installPivotCard); else _installPivotCard();
+// X-ray isolate (xray-ghost.js): the flagged parts as they are, the others as ghosts, and the dial under the comma key
+let _xrayGhost = null;
+function _installXrayGhost() {
+  _xrayGhost = installXrayGhost({ state, THREE, _Prefs, _UiSound, _Job, getScene: () => scene, toast: (...a) => toast(...a), requestRender: (...a) => requestRender(...a) });
+  window.__moXrayGhost = _xrayGhost;      // (tests/e2e-xray-ghost.mjs)
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _installXrayGhost); else _installXrayGhost();
 
 function wireAdvancedUI() {
   // Min triangle count scrubber: quadratic curve so 0–500 spans most of the
@@ -38495,9 +39535,9 @@ function wireAdvancedUI() {
     format: (v) => ({ value: v.toLocaleString(), unit: 'tri' }),
     initialValue: 12,
     promptTitle: 'Min triangle count',
-    onChange: () => {},
+    onChange: () => _flagLive('btn-flag-tri'),
   });
-  $('btn-flag-tri')?.addEventListener('click', () => flagByTriangleCount(_triScrub ? _triScrub.getValue() : 12));
+  $('btn-flag-tri')?.addEventListener('click', () => { flagByTriangleCount(_triScrub ? _triScrub.getValue() : 12); _flagArmed = true; _paintFlagKind('btn-flag-tri'); });
 
   // Sliver aspect ratio scrubber: linear 3..200, integer step.
   const _aspScrub = initScrubber({
@@ -38509,9 +39549,9 @@ function wireAdvancedUI() {
     format: (v) => ({ value: v.toFixed(0), unit: ':1' }),
     initialValue: 20,
     promptTitle: 'Sliver aspect ratio',
-    onChange: () => {},
+    onChange: () => _flagLive('btn-flag-sliver'),
   });
-  $('btn-flag-sliver')?.addEventListener('click', () => flagSlivers(_aspScrub ? _aspScrub.getValue() : 20));
+  $('btn-flag-sliver')?.addEventListener('click', () => { flagSlivers(_aspScrub ? _aspScrub.getValue() : 20); _flagArmed = true; _paintFlagKind('btn-flag-sliver'); });
   // "By name" — no inline regex input exists in the HTML, so prompt for one.
   // (Earlier versions used `$('name-regex')` which crashed because that field
   // was never added to the markup. The Dialog.prompt helper is the canonical
@@ -38527,7 +39567,42 @@ function wireAdvancedUI() {
   $('btn-select-color')?.addEventListener('click', selectByColor);
   $('btn-recompute-normals')?.addEventListener('click', recomputeNormals);
   // the Tools card: the tiles with a data-act run that command of the palette (Merge, Split, Group...), the others are the old buttons
-  $('tools-card')?.addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (!b) return; const a = _Actions.list.find(x => x.id === b.dataset.act); if (a) { try { a.run(); } catch (err) { console.warn('[tools]', err); } } });
+  $('sel-bar')?.addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (!b) return; const a = _Actions.list.find(x => x.id === b.dataset.act); if (a) { try { a.run(); } catch (err) { console.warn('[tools]', err); } } });
+  // The tool buttons after the first row of the selection bar are behind the chevron below it (what it left open is remembered, in this browser).
+  (function _wireSelMore() {
+    const tg = $('sel-more-toggle'), grid = document.querySelector('#sel-bar .sel-bar-grid');
+    if (!tg || !grid) return;
+    const KEY = 'stepopt-sel-more';
+    let open = false; try { open = localStorage.getItem(KEY) === '1'; } catch (_) {}
+    const extra = () => [...grid.querySelectorAll('.sel-more')].filter(b => b.dataset.act !== 'recenter');      // (the Recentre button is never shown)
+    const show = (on) => { for (const b of extra()) b.style.display = on ? '' : 'none'; };
+    const label = () => { tg.setAttribute('aria-expanded', String(open)); const t = open ? 'Fewer tools' : 'More tools'; tg.title = t; tg.setAttribute('aria-label', t); };
+    const calm = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const stop = () => { for (const b of extra()) { try { b.getAnimations().forEach(x => x.cancel()); } catch (_) {} } };
+    let endT = 0;
+    // The end state, whatever came before it: no height held, no animation running, the buttons shown or not.
+    const settle = () => { clearTimeout(endT); stop(); grid.style.height = ''; grid.style.overflow = ''; grid.style.transition = ''; show(open); };
+    // The rows open and close by their height and the buttons ease in (a little apart, from the top) or out, instead of jumping. Closing keeps
+    // the buttons until the rows have closed over them; a second press in the middle of it starts from the height it has reached.
+    const animate = () => {
+      const was = grid.getBoundingClientRect().height;
+      clearTimeout(endT); stop();
+      grid.style.transition = 'none'; grid.style.height = ''; grid.style.overflow = '';
+      show(open);
+      const to = grid.getBoundingClientRect().height;               // the height it ends at
+      if (Math.abs(to - was) < 1) { settle(); return; }
+      if (!open) show(true);
+      grid.style.overflow = 'hidden'; grid.style.height = was + 'px';
+      void grid.offsetHeight;
+      grid.style.transition = 'height calc(var(--dur-slow) * 1.5) var(--ease-ios)'; grid.style.height = to + 'px';
+      extra().forEach((b, i) => {
+        try { b.animate(open ? [{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 1 }, { opacity: 0 }], { duration: open ? 300 : 180, delay: open ? Math.min(i, 9) * 18 : 0, easing: 'cubic-bezier(.32,.72,0,1)', fill: 'both' }); } catch (_) {}
+      });
+      endT = setTimeout(settle, 560);
+    };
+    tg.addEventListener('click', () => { open = !open; try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (_) {} label(); if (calm()) settle(); else animate(); });
+    label(); show(open);
+  })();
   $('btn-recenter')?.addEventListener('click', recenterModel);
   $('tree-scroll-top')?.addEventListener('click', () => { const t = $('tree'); if (t) t.scrollTo({ top: 0, behavior: 'instant' }); });
 }
@@ -38783,7 +39858,7 @@ const _ModelInspector = (() => {
   const _CmdKRun = (id) => { try { _Actions.list.find(a => a.id === id)?.run(); } catch (_) {} };
 
   // ── the geometry scan: one mesh, by meshcheck.js (the same code the node tests run) ──
-  function analyseGeo(g) {
+  function analyseGeo(g, detail = false) {
     const pa = g.attributes && g.attributes.position; if (!pa) return null;
     const vc = pa.count, ia = g.index, T = ia ? Math.floor(ia.count / 3) : Math.floor(vc / 3);
     if (T > SCAN_MAX_TRIS) return { skipped: true, tris: T };
@@ -38792,8 +39867,58 @@ const _ModelInspector = (() => {
       p = new Float32Array(vc * 3);
       for (let i = 0; i < vc; i++) { p[i * 3] = pa.getX(i); p[i * 3 + 1] = pa.getY(i); p[i * 3 + 2] = pa.getZ(i); }
     }
-    return checkMesh(p, ia ? ia.array : null);
+    return checkMesh(p, ia ? ia.array : null, detail ? { detail: true } : {});
   }
+  // ── the faults drawn on the model (geo-overlay.js): "Show in the view" in the window ──
+  const showKinds = new Set();                // the kinds that are on ('open', 'flip', …)
+  const detailCache = new Map();              // mesh uuid → { fp, d }: where the faults of a mesh are (looked for only when a kind is on)
+  let overlayObjs = [], ovBusy = false, ovAgain = false;
+  const tone = (name) => new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#ff6b6b');
+  function clearOverlays() {
+    for (const o of overlayObjs) { try { if (o.parent) o.parent.remove(o); geoDispose(o); } catch (_) {} }
+    overlayObjs = [];
+    try { requestRender(); } catch (_) {}
+  }
+  const settle = () => new Promise(res => setTimeout(res, 0));
+  async function refreshOverlays() {
+    if (ovBusy) { ovAgain = true; return; }
+    ovBusy = true;
+    try {
+      do {
+        ovAgain = false;
+        clearOverlays();
+        if (!showKinds.size) break;
+        if (!scan && !scanning) await runScan();
+        while (scanning) await new Promise(res => setTimeout(res, 60));
+        if (!scan || !showKinds.size) break;
+        const byGeo = new Map();
+        for (const p of live()) { const g = geomOf(p); if (!g) continue; if (!byGeo.has(g.uuid)) byGeo.set(g.uuid, { g, parts: [] }); byGeo.get(g.uuid).parts.push(p); }
+        const kinds = GEO_KINDS.filter(K => showKinds.has(K.key));
+        let last = performance.now();
+        for (const [uuid, e] of byGeo) {
+          const c = cache.get(uuid); if (!c || !c.r || c.r.skipped) continue;
+          const want = kinds.filter(K => (K.count(c.r) || 0) > 0); if (!want.length) continue;
+          let d = detailCache.get(uuid);
+          if (!d || d.fp !== fpOf(e.g)) { let r = null; try { r = analyseGeo(e.g, true); } catch (err) { console.warn('[inspector] detail failed:', err); } d = { fp: fpOf(e.g), d: r && r.detail }; detailCache.set(uuid, d); }
+          if (!d.d) continue;
+          for (const p of e.parts) for (const K of want) {
+            const obj = geoBuild(THREE, e.g, d.d, K.key, tone(K.color)); if (!obj) continue;
+            if (p.mesh) p.mesh.add(obj);
+            else if (p.instancedMesh && state.partsRoot) {
+              const im = p.instancedMesh, m = new THREE.Matrix4();
+              im.getMatrixAt(p.instanceIndex, m); im.updateWorldMatrix(true, false); state.partsRoot.updateWorldMatrix(true, false);
+              m.premultiply(im.matrixWorld).premultiply(new THREE.Matrix4().copy(state.partsRoot.matrixWorld).invert());
+              obj.matrixAutoUpdate = false; obj.matrix.copy(m); obj.matrixWorldNeedsUpdate = true; state.partsRoot.add(obj);
+            } else { geoDispose(obj); continue; }
+            overlayObjs.push(obj);
+          }
+          if (performance.now() - last > 60) { last = performance.now(); try { requestRender(); } catch (_) {} await settle(); }
+        }
+        try { requestRender(); } catch (_) {}
+      } while (ovAgain);
+    } finally { ovBusy = false; }
+  }
+  window.__moGeoOverlay = { show: (k, on) => { if (on) showKinds.add(k); else showKinds.delete(k); return refreshOverlays(); }, count: () => overlayObjs.length, kinds: () => [...showKinds] };      // (tests/e2e-geo-overlay.mjs)
   // What a mesh's scan result depends on: its vertices and triangles. A tool that edits a mesh in place bumps the attribute's version;
   // one that makes a new mesh gives it a new uuid. Either way the fingerprint changes and only that mesh is scanned again.
   const verOf = (a) => a ? (a.version || 0) + (a.data ? a.data.version || 0 : 0) : -1;
@@ -38852,6 +39977,9 @@ const _ModelInspector = (() => {
     // sheet, a part made of loose bodies or a fine fillet has them by design, and they are not errors.
     const per = { inside, flip, degenerate: deg, dup, nonman: non, nmv };
     for (const r of scan.rows) r.per = per[r.key] ? per[r.key].per : null;   // how much of it each part has, for the list under the row
+    scan.kinds = {};
+    for (const K of GEO_KINDS) { let n = 0; for (const { r, parts } of results.values()) n += (K.count(r) || 0) * parts.length; scan.kinds[K.key] = n; }
+    if (showKinds.size) setTimeout(refreshOverlays, 0);      // (what is drawn follows the scan: after a fix the faults that are gone go too)
     geoSig = geoSignature();
     render();
   }
@@ -38886,7 +40014,7 @@ const _ModelInspector = (() => {
     const count = r.n === null ? '—' : fmtNum(r.n);
     const parts = r.unit && r.ids && r.ids.length ? ' <span class="mi2-parts">' + fmtNum(new Set(r.ids).size) + ' part' + (new Set(r.ids).size === 1 ? '' : 's') + '</span>' : '';
     const key = (r._g || '') + ':' + r.key, canOpen = !!(r.ids && r.ids.length), isOpen = canOpen && openRows.has(key);
-    return '<div class="mi2-row t-' + r.tone + (isOpen ? ' open' : '') + '">' +
+    return '<div class="mi2-row t-' + r.tone + (isOpen ? ' open' : '') + (canOpen ? ' can-open' : '') + '">' +
       (canOpen ? '<button type="button" class="mi2-x" data-mi2="expand" data-k="' + esc(key) + '" title="' + (isOpen ? 'Hide the parts' : 'Show the parts') + '" aria-expanded="' + isOpen + '"><i data-lucide="chevron-right"></i></button>' : '<span class="mi2-x"></span>') +
       '<span class="mi2-dot" title="' + esc(TONE[r.tone]) + '"></span>' +
       '<div class="mi2-main"><div class="mi2-l">' + esc(r.label) + '</div><div class="mi2-n">' + esc(r.note || '') + '</div></div>' +
@@ -38934,6 +40062,13 @@ const _ModelInspector = (() => {
       if (scan) h += '<div class="mi2-rows">' + rowsS.map((r, i) => row(r, i)).join('') + '</div>';
       h += '<div class="mi2-scanrow"><span>' + (scan ? 'The scan reads every mesh once.' : 'Looks at every mesh once for mesh errors: faces turned the wrong way, doubled and empty triangles, edges shared by three or more faces.') + '</span><button type="button" class="mi2-go" data-mi2="scan">' + (scan ? 'Scan again' : 'Scan the geometry') + '</button></div>';
     }
+    h += '<div class="mi2-sec">Show in the view <span class="mi2-sub">' + (showKinds.size ? fmtNum(showKinds.size) + ' on' : 'draw the faults on the model') + '</span></div><div class="mi2-show">' +
+      GEO_KINDS.map(K => {
+        const n = scan && scan.kinds ? scan.kinds[K.key] : null, on = showKinds.has(K.key), none = n === 0 && !on;
+        return '<button type="button" class="mi2-chip' + (on ? ' on' : '') + (none ? ' none' : '') + '" data-mi2="show" data-k="' + K.key + '" aria-pressed="' + on + '" style="--c:var(' + K.color + ')"' + (none ? ' disabled' : '') + ' title="' + esc(K.note) + '">' +
+          '<span class="mi2-sw"></span><span class="mi2-cl">' + esc(K.label) + '</span><span class="mi2-cn">' + (n === null ? '' : fmtNum(n)) + '</span></button>';
+      }).join('') + '</div>' +
+      (showKinds.size ? '<div class="mi2-scanrow"><span>' + (scan ? 'Lines and points show through the model; filled triangles sit on it.' : 'The scan runs first.') + '</span><button type="button" data-mi2="hideall">Hide all</button></div>' : '');
     body.innerHTML = h;
     try { _lucide(); } catch (_) {}
     sig = signature();
@@ -38955,76 +40090,25 @@ const _ModelInspector = (() => {
   };
   const signature = () => geoSignature() + ':' + state.parts.filter(p => p.visible === false).length;
   let geoSig = '';
-  function css() {
-    if (document.getElementById('mi2-style')) return;
-    const st = document.createElement('style'); st.id = 'mi2-style';
-    st.textContent = `
-      #_model-inspector .dlg-body{padding:0}
-      .mi2{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--tx)}
-      .mi2-file{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--s2)}
-      .mi2-file>i,.mi2-file>svg{width:22px;height:22px;color:var(--tx3);flex:0 0 22px}
-      .mi2-file>div{min-width:0;flex:1}
-      .mi2-fn{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .mi2-fs{color:var(--tx3);font-size:11px;margin-top:2px}
-      .mi2-sec{margin:12px 0 4px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--tx3)}
-      .mi2-sub{text-transform:none;letter-spacing:0;margin-left:8px;opacity:.8}
-      .mi2-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-      .mi2-stat{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:10px;background:var(--s1);min-width:0}
-      .mi2-stat span{font-size:10px;color:var(--tx3)}
-      .mi2-stat b{font-weight:400;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .mi2-stat em{font-style:normal;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
-      .mi2-none{color:var(--tx3);padding:4px 8px}
-      .mi2-rows{display:flex;flex-direction:column;gap:2px}
-      .mi2-row{display:grid;grid-template-columns:16px 10px minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:8px 8px 8px 4px;border-radius:9px}
-      .mi2-x{width:16px;height:16px;padding:0;border:0;border-radius:var(--r-xs);background:transparent;color:var(--tx3);cursor:pointer;display:flex;align-items:center;justify-content:center}
-      button.mi2-x:hover{background:var(--s3);color:var(--tx)}
-      .mi2-x svg{width:12px;height:12px;transition:transform 120ms ease}
-      .mi2-row.open .mi2-x svg{transform:rotate(90deg)}
-      .mi2-plist{display:flex;flex-direction:column;gap:1px;margin:0 0 6px 30px;padding-left:8px;border-left:1px solid var(--s3);max-height:260px;overflow-y:auto}
-      .mi2-pi{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;height:24px;padding:0 8px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--tx2);font:inherit;font-size:11px;cursor:pointer;text-align:left}
-      .mi2-pi:hover{background:var(--s3);color:var(--tx)}
-      .mi2-pi.on{background:var(--ac-soft);color:var(--tx);box-shadow:inset 2px 0 0 var(--ac)}
-      .mi2-pi.off .mi2-pn{opacity:.55}
-      .mi2-pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .mi2-pv{color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
-      .mi2-row:hover{background:var(--s1)}
-      .mi2-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3)}
-      .mi2-row.t-ok .mi2-dot{background:var(--ok)}
-      .mi2-row.t-warn .mi2-dot{background:var(--wn)}
-      .mi2-row.t-bad .mi2-dot{background:var(--er)}
-      .mi2-row.t-info .mi2-dot{background:var(--ac-text)}
-      .mi2-l{color:var(--tx)}
-      .mi2-n{color:var(--tx3);font-size:11px;line-height:1.4;margin-top:1px}
-      .mi2-c{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:96px}
-      .mi2-c b{font-weight:400;font-size:13px}
-      .mi2-c em{font-style:normal;color:var(--tx3);font-size:10px}
-      .mi2-parts{display:block;color:var(--tx3);font-size:10px}
-      .mi2-row.t-ok .mi2-c b{color:var(--tx3)}
-      .mi2-b{display:flex;gap:6px;justify-content:flex-end;min-width:0}
-      .mi2 button[data-mi2]:not(.mi2-pi):not(.mi2-x){height:24px;padding:0 10px;border:0;border-radius:7px;background:var(--s3);color:var(--tx2);font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
-      .mi2 button[data-mi2]:not(.mi2-pi):not(.mi2-x):hover{background:var(--s5);color:var(--tx)}
-      .mi2-ref{flex:0 0 auto}
-      .mi2-scanrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px;color:var(--tx3);font-size:11px}
-      .mi2 .mi2-go{background:var(--btn-primary-bg)!important;color:var(--btn-primary-fg)!important}
-      .mi2-prog{height:3px;border-radius:2px;background:var(--s4);overflow:hidden;margin:6px 8px 0}
-      .mi2-prog i{display:block;height:100%;background:var(--ac);transition:width 120ms linear}
-    `;
-    document.head.appendChild(st);
-  }
+  function css() { /* the styles are in index.html: "Model inspector" */ }
   function open() {
     css();
     if (!pop) {
       pop = _DraggablePopup.create({
         id: '_model-inspector', title: 'Model inspector', subtitle: 'What the model is, and what is wrong with it', iconName: 'bug',
-        width: 640, height: 640, minWidth: 460, minHeight: 360, bodyHtml: '<div class="mi2" id="mi2-body"></div>', bodyScroll: true,
-        onClose: () => { clearInterval(timer); timer = 0; abort = true; },
+        width: 640, height: 740, minWidth: 460, minHeight: 360, bodyHtml: '<div class="mi2" id="mi2-body"></div>', bodyScroll: true,
+        onClose: () => { clearInterval(timer); timer = 0; abort = true; showKinds.clear(); refreshOverlays(); },
       });
       body = pop.body.querySelector('#mi2-body') || pop.body;
       body.addEventListener('click', (e) => {
-        const b = e.target.closest && e.target.closest('[data-mi2]'); if (!b) return;
+        let b = e.target.closest && e.target.closest('[data-mi2]');
+        if (!b) { const rw = e.target.closest && e.target.closest('.mi2-row'); b = rw && rw.querySelector('[data-mi2="expand"]'); }      // (the whole strip opens its parts, not only the arrow)
+        if (!b) return;
         const act = b.dataset.mi2;
         if (act === 'refresh') { render(); return; }
         if (act === 'scan') { runScan(); return; }
+        if (act === 'show') { const k = b.dataset.k; if (showKinds.has(k)) showKinds.delete(k); else showKinds.add(k); render(); refreshOverlays(); return; }
+        if (act === 'hideall') { showKinds.clear(); render(); refreshOverlays(); return; }
         if (act === 'stop') { abort = true; return; }
         if (act === 'expand') { const k = b.dataset.k; if (openRows.has(k)) openRows.delete(k); else openRows.add(k); render(); return; }
         if (act === 'part') { selectParts([+b.dataset.id], false); markSelected(); return; }   // a click highlights it in the viewport
@@ -39436,11 +40520,49 @@ function _matDockFilterSort(mats) {
   return out;                                  // 'used' is the order they arrive in
 }
 let _matDockWired = false;
+// Empty space in the Materials list: a click lets go of every picked material, a drag draws a square and picks the materials it
+// touches (with Shift, Ctrl or Cmd held it adds to what is picked). A press on a material is not this (it picks it, or drags it
+// onto the view); neither is the bar above the list or the scroll bar.
+function _wireMatMarquee() {
+  const list = document.getElementById('mat-list'), host = list && list.closest('.pop-section');
+  if (!list || !host || host._marquee) return;
+  host._marquee = true;
+  host.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('.mat-cell, .mat-row, .mat-list-bar, button, input, select, textarea')) return;
+    const hr = host.getBoundingClientRect();
+    if (e.clientX > hr.left + host.clientWidth || e.clientY > hr.top + host.clientHeight) return;      // (the scroll bar)
+    const add = e.shiftKey || e.ctrlKey || e.metaKey, base = add ? new Set(_matPanelSelected) : new Set();
+    const x0 = e.clientX, y0 = e.clientY;
+    let box = null, moved = false;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const move = (ev) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+      moved = true;
+      if (!box) { box = document.createElement('div'); box.className = 'mat-marquee'; document.body.appendChild(box); }
+      const x1 = clamp(ev.clientX, hr.left, hr.right), y1 = clamp(ev.clientY, hr.top, hr.bottom);
+      const l = Math.min(x0, x1), t = Math.min(y0, y1), r = Math.max(x0, x1), b = Math.max(y0, y1);
+      box.style.left = l + 'px'; box.style.top = t + 'px'; box.style.width = (r - l) + 'px'; box.style.height = (b - t) + 'px';
+      const next = new Set(base);
+      for (const c of list.querySelectorAll('.mat-cell, .mat-row')) { const q = c.getBoundingClientRect(); if (c._mat && q.left < r && q.right > l && q.top < b && q.bottom > t) next.add(c._mat); }
+      if (next.size === _matPanelSelected.size && [...next].every(m => _matPanelSelected.has(m))) return;
+      _matPanelSelected.clear(); for (const m of next) _matPanelSelected.add(m);
+      _refreshPanelSelection();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      if (box) box.remove();
+      if (!moved && !add && _matPanelSelected.size) { _matPanelSelected.clear(); _refreshPanelSelection(); }
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+    e.preventDefault();
+  });
+}
 function _wireMatDock() {
   if (_matDockWired) return;
   const search = document.getElementById('mat-search'), sort = document.getElementById('mat-sort'), insp = document.getElementById('mat-inspector');
   if (!search || !sort || !insp) return;
   _matDockWired = true;
+  _wireMatMarquee();
   try { const saved = localStorage.getItem('stepopt-mat-sort'); if (saved && [...sort.options].some(o => o.value === saved)) sort.value = saved; } catch (_) {}
   let t = 0;
   search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(_populateMaterialsList, 90); });
@@ -39524,15 +40646,17 @@ function _renderMatInspector() {
     L('Triangles') + `<span class="mi-wide">${fmtNum(tris)}${share >= 0.05 ? ' · ' + share.toFixed(share < 10 ? 1 : 0) + '% of the model' : ''}</span>`;
   const bar = (v) => `<span class="mi-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></i></span><span class="mi-num">${(+v).toFixed(2)}</span>`;
   const nMat = infos.length;
+  // The buttons are icons in one row (the name is the tooltip and the screen reader label)
+  const ib = (key, icon, label, title, extra = '', off = false) => `<button class="btn mi-ib${extra}" data-mi="${key}" title="${title}" aria-label="${label}"${off ? ' disabled' : ''}>${_ico(icon)}</button>`;
   const actions = (one) =>
     `<div class="mi-actions">` +
-      (one ? `<button class="btn" data-mi="edit" title="Open the material editor (same as a double-click)">Edit…</button>` : '') +
-      `<button class="btn" data-mi="select" title="Select every part that uses ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Select parts</button>` +
-      `<button class="btn" data-mi="isolate" title="Show only the parts that use ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Isolate</button>` +
+      (one ? ib('edit', 'pencil', 'Edit', 'Edit: open the material editor (same as a double-click)') : '') +
+      ib('select', 'mouse-pointer-2', 'Select parts', `Select parts: every part that uses ${one ? 'this material' : 'these materials'}`, '', !parts) +
+      ib('isolate', 'focus', 'Isolate', `Isolate: show only the parts that use ${one ? 'this material' : 'these materials'}`, '', !parts) +
+      (one ? ib('assign', 'paint-bucket', 'Assign', `Assign: give this material to the ${nSel} selected part${nSel === 1 ? '' : 's'}`, '', !nSel) : '') +
+      (one ? ib('duplicate', 'copy-plus', 'Duplicate', 'Duplicate this material (Ctrl+D)') : '') +
+      ib('delete', 'trash-2', 'Delete', `Delete ${one ? 'this material' : nMat + ' materials'}: its parts are left with none`, ' mi-danger') +
       (!one ? `<button class="btn mi-merge-btn" data-mi="merge" title="Merge the picked materials, keeping the first (Ctrl+M)">Merge ${nMat} materials</button>` : '') +
-      (one ? `<button class="btn" data-mi="assign" title="Give this material to the ${nSel} selected part${nSel === 1 ? '' : 's'}"${nSel ? '' : ' disabled'}>Assign${nSel ? ' to ' + fmtNum(nSel) : ''}</button>` : '') +
-      (one ? `<button class="btn" data-mi="duplicate" title="Duplicate this material (Ctrl+D)">Duplicate</button>` : '') +
-      `<button class="btn mi-danger" data-mi="delete" title="Delete ${one ? 'this material' : 'these materials'}: its parts are left with none">Delete${one ? '' : ' ' + nMat}</button>` +
     `</div>`;
   if (infos.length > 1) {
     // What Merge makes: the first picked material takes every part of the others (see the Merge handler), so the result is that
@@ -39896,12 +41020,10 @@ function _renderMatListRows(list, mats) {
         <span class="mat-row-name">${escapeHtml(name)}</span>
         <span class="mat-row-meta">${hex} · ${info.count}</span>
       </span>
-      <button class="mat-row-edit" title="Edit material"><i data-lucide="sliders-horizontal"></i></button>
     `;
     if (!previewUrl) _matLazy(row.querySelector('.mat-row-thumb'), m, 'mat-row-thumb', '');
     if (_matPanelSelected.has(m)) row.classList.add('selected');
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.mat-row-edit')) return;
       const multi = e.ctrlKey || e.metaKey || e.shiftKey;
       if (multi) {
         if (_matPanelSelected.has(m)) _matPanelSelected.delete(m);
@@ -39924,10 +41046,6 @@ function _renderMatListRows(list, mats) {
       e.preventDefault();
       const nameEl = e.target.closest('.mat-row-name');
       if (nameEl) { e.stopPropagation(); _renameMaterialInline(nameEl, m); return; }
-      _openMaterialEditor(info);
-    });
-    row.querySelector('.mat-row-edit')?.addEventListener('click', (e) => {
-      e.stopPropagation();
       _openMaterialEditor(info);
     });
     list.appendChild(row);
@@ -41015,7 +42133,7 @@ const _MAT_PRESETS = [
   // Car paint: a MeshPhysicalMaterial. "Pearl" and "flip-flop" are thin-film iridescence (the colour of the highlights moves with the angle
   // of view, as the film's thickness and index are set); "flakes" are a tiny random normal map (it needs the part's UVs: a part with none
   // shows no flakes and is not otherwise changed); the gloss is low roughness. There is no clear coat or sheen in these: with them on, the
-  // viewport draws the body of the part black (clearcoat / sheen in this build's physical shading: see tests/e2e-paint.mjs). All of it
+  // viewport draws the body of the part black (clearcoat / sheen in this build's physical shading). All of it
   // exports to GLB (iridescence, normal map).
   { section: 'Car paint' },
   { name: 'Metallic Silver',          physical: true, color: 0xc8ccd2, metalness: 0.75, roughness: 0.22,
@@ -41039,7 +42157,7 @@ const _MAT_PRESETS = [
   { name: 'Hazard Stripe',     color: 0xfbbf24, metalness: 0,    roughness: 0.55, emissive: 0xfbbf24, emissiveIntensity: 0.5 },
 ];
 
-window.__moMatPresets = _MAT_PRESETS;       // (tests/e2e-paint.mjs)
+window.__moMatPresets = _MAT_PRESETS;       // (read by the console, for looking at the presets)
 // The metallic flakes of a car paint: a small normal map in which most of the surface is smooth and a part of it (about a fifth) is a
 // flake, tilted some way and some distance, in blocks of 2 x 2 texels so a flake is more than a pixel, repeated across a part's UV space.
 // (An earlier one gave every texel a random tilt, mostly a large one: the paint looked like sandpaper, and in a highlight it was noise.
@@ -42220,7 +43338,7 @@ async function bboxifyParts_job(partIds, label = 'Smart-fit parts', mode = 'smar
   }
 }
 async function _bboxifyPartsCore(partIds, label, mode) {
-  if (!partIds.length) { toast('Nothing selected', '', 'warn'); return; }
+  if (!partIds.length) { toast('Nothing selected', 'Select one or more parts first', 'warn'); return; }
   // Detach the gizmo BEFORE we touch any mesh transforms. When the gizmo is
   // attached, every selected mesh is re-parented under `state.pivot` so the
   // gizmo can move them as a group. If we leave them there during box-ify,
@@ -42232,7 +43350,7 @@ async function _bboxifyPartsCore(partIds, label, mode) {
   // afterward (it isn't — pivot still references the now-moved meshes).
   // Net effect: gizmo state goes stale, future drags don't move anything,
   // and on multi-select the visible result looks "exploded".
-  // bakeTransforms and centerPivotsOnSelection already do this; box-ify
+  // bakeTransforms and the Pivot commands (axisSet) already do this; box-ify
   // didn't. Same pattern, same fix.
   _detachGizmo();
   // Reset any active explode BEFORE boxifying. Without this, every part's
@@ -42755,7 +43873,7 @@ function _onFitError(e) {
 // Run a fit on the current selection with an explicit mode. Used by the
 // main button (mode='smart'), the caret popover, and the right-click menu.
 function smartFitSelection(mode = 'smart') {
-  if (!state.selected.size) return toast('Nothing selected', '', 'warn');
+  if (_nothingSelected()) return;
   const labels = { smart: 'Smart-fit selected', aabb: 'Box-fit selected', obb: 'Turned-box-fit selected', cyl: 'Cylinder-fit selected', blocks: 'Blocks-fit selected', boxes: 'Boxes-fit selected' };
   bboxifyParts([...state.selected], labels[mode] || labels.smart, mode).catch(_onFitError);
 }
@@ -43840,6 +44958,7 @@ function _openCommandsMenu(anchor, at) {
       { icon: 'copy-check',     label: 'Select all instances',                off: needSel, fn: act('selInstances') },
       { icon: 'copy-check',     label: 'Select the original',                 off: needSel, fn: act('selOriginal') },
       { icon: 'unlink',         label: 'Make unique',                         off: needSel, fn: act('makeUnique') },
+      { icon: 'copy-check',     label: 'Instances…',                          fn: act('instances') },
       { icon: 'palette',        label: 'Quick colour wheel',   kbd: 'C',      off: needSel, fn: act('quickColour') },
     ] },
     { icon: 'pencil', label: 'Edit', sub: [
@@ -43892,6 +45011,101 @@ document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   try { _openCommandsMenu(t.closest('button') || t, { x: e.clientX, y: e.clientY }); } catch (err) { console.warn('[toolbar menu]', err); }
 });
+// A right-click on Animate, Library, Materials or "…" in the toolbar opens a short list of what is useful at that button (the other buttons
+// keep the list of every command). Each row takes its key from the command it runs; a row that cannot run now says why.
+(function _toolbarButtonMenus() {
+  const act = (id) => () => { try { _Actions.list.find(x => x.id === id)?.run(); } catch (e) { console.warn('[toolbar menu]', id, e); } };
+  const kb = (id) => _Actions.list.find(x => x.id === id)?.kbd;
+  const row = (icon, label, id, off) => ({ icon, label, kbd: kb(id), off: off || false, fn: act(id) });
+  const click = (id) => () => document.getElementById(id)?.click();
+  const picked = () => [...state.selected].filter(i => { const p = getPart(i); return p && !p.deleted && !p.isCloner; });
+  const shown = (id) => !!document.getElementById(id)?.classList.contains('show');
+  const MENUS = {
+    'tg-animate': () => {
+      const I = _Anim.ctl.info(), has = I.n > 0, ids = picked(), noSel = ids.length ? false : 'Select something first', none = has ? false : 'Nothing is animated yet';
+      const add = (type) => () => { try { _Anim.api.add({ ids, type }); } catch (e) { toast('Could not animate', String(e && e.message || e), 'warn'); } };
+      return [
+        { icon: 'tv-minimal-play', label: shown('vp-animate-pop') ? 'Close the timeline' : 'Open the timeline', kbd: 'Shift+A', fn: click('tg-animate') },
+        '---',
+        { icon: I.playing ? 'pause' : 'play', label: I.playing ? 'Pause' : 'Play', off: none, fn: () => _Anim.ctl.toggle() },
+        { icon: 'skip-back', label: 'Back to the start', off: none, fn: () => _Anim.ctl.rewind() },
+        { icon: 'gauge', label: 'Speed', off: none, sub: _Anim.ctl.rates.map(r => ({ label: r + '×' + (r === I.rate ? '   ✓' : ''), fn: () => _Anim.ctl.setRate(r) })) },
+        { icon: 'repeat', label: 'When it ends', off: none, sub: [['Loop', 'loop'], ['Ping-pong', 'pingpong'], ['Stop', 'once']].map(([l, m]) => ({ label: l + (I.mode === m ? '   ✓' : ''), fn: () => _Anim.ctl.setMode(m) })) },
+        '---',
+        { icon: 'plus', label: 'Add to the selection', off: noSel, sub: [['Spin', 'spin'], ['Swing', 'swing'], ['Noise', 'noise'], ['Oscillate', 'oscillate']].map(([l, t]) => ({ label: l, fn: add(t) })) },
+        row('sliders-horizontal', 'Animate the selection…', 'animate', noSel),
+        { icon: 'eraser', label: 'Remove from the selection', off: noSel || none, fn: () => { try { _Anim.api.remove({ ids }); } catch (_) {} } },
+        { icon: 'trash-2', label: 'Remove every animation', danger: true, off: none, fn: () => { try { _Anim.api.clear(); } catch (_) {} } },
+        '---',
+        row('film', 'Turntable video…', 'turntable', state.parts.some(p => !p.deleted) ? false : 'The scene is empty'),
+      ];
+    },
+    'tg-library': () => {
+      const P = _libPrefs(), part = (k) => ({ label: _primitiveDefaultName(k), fn: () => { try { _libAdd(k); } catch (e) { toast('Could not add that part', String(e && e.message || e), 'error'); } } });
+      return [
+        { icon: 'shapes', label: _libOpen() ? 'Close the library' : 'Open the library', kbd: 'Shift+L', fn: click('tg-library') },
+        '---',
+        { icon: 'history', label: 'Recently used', off: P.recent.length ? false : 'Nothing used yet', sub: P.recent.map(part) },
+        { icon: 'star', label: 'Favourites', off: P.fav.length ? false : 'Star a part in the library first', sub: P.fav.map(part) },
+        '---',
+        ..._LIB_SHELVES.map(([name, kinds]) => ({ icon: 'plus', label: 'Add: ' + name, sub: kinds.map(part) })),
+        '---',
+        { icon: 'layout-grid', label: P.view === 'small' ? 'Large tiles' : 'Small tiles', fn: () => { const q = _libPrefs(); q.view = q.view === 'small' ? 'grid' : 'small'; _libSave(q); try { _libRender(); } catch (_) {} } },
+        { icon: 'eraser', label: 'Clear recently used', off: P.recent.length ? false : 'Nothing used yet', fn: () => { const q = _libPrefs(); q.recent = []; _libSave(q); try { _libRender(); } catch (_) {} } },
+      ];
+    },
+    'tg-materials': () => {
+      const noSel = picked().length ? false : 'Select something first', empty = state.parts.some(p => !p.deleted) ? false : 'The scene is empty';
+      return [
+        { icon: 'swatch-book', label: shown('vp-materials-pop') ? 'Close materials' : 'Open materials', kbd: 'Shift+M', fn: click('tg-materials') },
+        '---',
+        row('plus', 'New material', 'matNew'),
+        row('sparkles', 'New material from a preset…', 'matPresets'),
+        '---',
+        row('palette', 'Quick colour wheel', 'quickColour', noSel),
+        row('pipette', 'Select by colour', 'selColour', noSel),
+        row('combine', 'Merge parts of the same colour', 'mergeColour', empty),
+        row('layers', 'Merge by material or group…', 'mergeBy', empty),
+      ];
+    },
+    'vp-cmdk': () => {
+      let recent = []; try { const v = JSON.parse(localStorage.getItem('stepopt-cmdk-recent') || '[]'); recent = (Array.isArray(v) ? v : []).map(id => _Actions.list.find(x => x.id === id)).filter(Boolean).slice(0, 6); } catch (_) {}
+      return [
+        { icon: 'search', label: _CmdK.isOpen() ? 'Close command search' : 'Open command search', kbd: kb('palette'), fn: () => { if (_CmdK.isOpen()) _CmdK.hide(); else _CmdK.show(); } },
+        { icon: 'history', label: 'Recent commands', off: recent.length ? false : 'Nothing used yet', sub: recent.map(x => ({ label: x.label, fn: () => { try { x.run(); } catch (e) { console.warn('[recent]', x.id, e); } } })) },
+        '---',
+        row('sliders-horizontal', 'Search options', 'searchSettings'),
+        row('keyboard', 'Keyboard shortcuts', 'shortcuts'),
+        row('circle-help', 'Help & docs', 'help'),
+      ];
+    },
+    'vp-more': () => [
+      row('search', 'Search commands…', 'palette'),
+      { icon: 'list', label: 'All commands', fn: () => { const b = document.getElementById('vp-more'); if (b) { _openCommandsMenu(b); b.classList.add('active'); } } },
+      '---',
+      row('monitor-cog', 'Viewport settings', 'viewportSettings'),
+      row('settings', 'Settings', 'settings'),
+      row('keyboard', 'Keyboard shortcuts', 'shortcuts'),
+      row('circle-help', 'Help & docs', 'help'),
+      row('terminal', 'Log console', 'console'),
+    ],
+  };
+  for (const [id, build] of Object.entries(MENUS)) {
+    const b = document.getElementById(id); if (!b) continue;
+    b.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try {
+        const m = $('ctx-menu'); if (!m) return;
+        _ctxBuild(build(), 0, 0);
+        m.classList.remove('is-commands');
+        const r = b.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+        m.style.maxHeight = Math.max(160, r.top - 66) + 'px';
+        m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+        m.style.top = Math.max(8, r.top - Math.min(h, r.top - 66) - 10) + 'px';
+      } catch (err) { console.warn('[toolbar menu]', id, err); }
+    });
+  }
+})();
 // Capture phase: tree-row click handlers (and others in the sidebar) call
 // stopPropagation() so the menu never closed when the user clicked a row
 // while it was open. Capture fires top-down BEFORE descendants can stop the
@@ -44574,6 +45788,7 @@ document.addEventListener('contextmenu', e => {
       { icon: 'crown',          label: 'Select the original',    fn: selectInstanceOriginal },
       { icon: 'palette',        label: 'Select same colour',      fn: selectByColor },
       { icon: 'unlink',         label: 'Make unique',            fn: () => makeUnique() },
+      { icon: 'copy-check',     label: 'Instances…',             fn: () => _CmdCards.open('instances') },
     ] },
     '---',
     { icon: 'folder-plus',    label: `Group selected${selSize > 1 ? ` (${selSize})` : ''}`, kbd: 'Ctrl+G', fn: _treeGroupSelected },
@@ -44608,7 +45823,7 @@ document.addEventListener('contextmenu', e => {
 
 // ─── Hide unselected
 function hideUnselected() {
-  if (state.selected.size === 0) return toast('Nothing selected', '', 'warn');
+  if (_nothingSelected()) return;
   // Snapshot per-part before+after for one consolidated 'vis' undo entry.
   const _items = [];
   const _prevIsolated = state._isolated || false;
@@ -44649,7 +45864,7 @@ const _Anim = installAnim({
   state, _MotionPerf, _UndoOps,
   get camera() { return camera; }, get renderer() { return renderer; }, get controls() { return controls; },
   get _Elements() { return _Elements; }, get _DraggablePopup() { return _DraggablePopup; },
-  _finalizeUndo: (...a) => _finalizeUndo(...a), _libShow: (...a) => _libShow(...a), _lucide: (...a) => _lucide(...a), _openTurntableDialog: (...a) => _openTurntableDialog(...a), _partWorldBoxOwn: (...a) => _partWorldBoxOwn(...a), _promoteInstanceToMesh: (...a) => _promoteInstanceToMesh(...a), _treeGroupDescendants: (...a) => _treeGroupDescendants(...a), applyExplode: (...a) => applyExplode(...a), applySelectionColors: (...a) => applySelectionColors(...a), getPart: (...a) => getPart(...a), onResize: (...a) => onResize(...a), pushUndo: (...a) => pushUndo(...a), rebuildTreeSelectionOnly: (...a) => rebuildTreeSelectionOnly(...a), refreshPropertiesPanel: (...a) => refreshPropertiesPanel(...a), requestRender: (...a) => requestRender(...a), revealSelectedInTree: (...a) => revealSelectedInTree(...a), selectPart: (...a) => selectPart(...a), toast: (...a) => toast(...a), updateGizmo: (...a) => updateGizmo(...a),
+  _finalizeUndo: (...a) => _finalizeUndo(...a), _libShow: (...a) => _libShow(...a), _lucide: (...a) => _lucide(...a), _ctxBuild: (...a) => _ctxBuild(...a), _openTurntableDialog: (...a) => _openTurntableDialog(...a), _partWorldBoxOwn: (...a) => _partWorldBoxOwn(...a), _promoteInstanceToMesh: (...a) => _promoteInstanceToMesh(...a), _treeGroupDescendants: (...a) => _treeGroupDescendants(...a), applyExplode: (...a) => applyExplode(...a), applySelectionColors: (...a) => applySelectionColors(...a), getPart: (...a) => getPart(...a), onResize: (...a) => onResize(...a), pushUndo: (...a) => pushUndo(...a), rebuildTreeSelectionOnly: (...a) => rebuildTreeSelectionOnly(...a), refreshPropertiesPanel: (...a) => refreshPropertiesPanel(...a), requestRender: (...a) => requestRender(...a), revealSelectedInTree: (...a) => revealSelectedInTree(...a), selectPart: (...a) => selectPart(...a), toast: (...a) => toast(...a), updateGizmo: (...a) => updateGizmo(...a),
 });
 
 // Section view: one plane through the whole scene (section-plane.js). The frame loop draws through it while it is on.
@@ -45795,10 +47010,10 @@ function _wireSimilar() {
       : `Triangle count within ${Math.round(t.tri * 100)}%, each side of the box within ${Math.round(t.dim * 100)}% of the longest.`;
   };
   initScrubber({
-    el: 'sim-strict-scrub', label: 'Strictness', maxSteps: 20,
+    el: 'sim-strict-scrub', label: 'Similarity', maxSteps: 20,
     stepToVal: (s) => s * 5, valToStep: (v) => Math.max(0, Math.min(20, Math.round(v / 5))),
     format: (v) => ({ value: Math.round(v).toString(), unit: '%' }), initialValue: _simStrict,
-    promptTitle: 'Strictness', promptUnit: '%',
+    promptTitle: 'Similarity', promptUnit: '%',
     onChange: (v) => { _simStrict = Math.max(0, Math.min(100, Math.round(v))); try { localStorage.setItem('stepopt-sim-strict', String(_simStrict)); } catch (_) {} help(); },
   });
   help();
@@ -45991,7 +47206,7 @@ function _focusImportedParts(before) {
 
 // Scroll the tree to the first selected part and pulse-highlight it.
 function revealSelectedInTree() {
-  if (state.selected.size === 0) { toast('Nothing selected', '', 'info'); return; }
+  if (_nothingSelected() || state._animMode) return;      // (not while the Animate window is open: the list on the left stays as it is)
   const firstId = state.selected.values().next().value;
   // Its row, if it is one that shows: not filtered out by a search, not inside a collapsed group.
   const find = () => { const r = _treeRowOf('part', firstId); return r && !r.classList.contains('is-hidden') && !r.classList.contains('is-gone') ? r : null; };
@@ -46257,6 +47472,7 @@ if (typeof document !== 'undefined') {
         items.push({ icon: 'palette',         label: 'Select same colour',  fn: selectByColor });
         items.push({ icon: 'crown',           label: 'Select the original',  fn: selectInstanceOriginal });
         items.push({ icon: 'unlink',          label: 'Make unique',          fn: () => makeUnique() });
+        items.push({ icon: 'copy-check',      label: 'Instances…',           fn: () => _CmdCards.open('instances') });
         items.push('---');
         items.push({ icon: 'play', label: 'Animate…', fn: () => _Anim.open() });
         items.push(_noteHere);
@@ -51449,6 +52665,7 @@ refreshPropertiesPanel = function() {
 // =================================================================
 function _scrollTreeToPart(partId) {
   if (partId == null || Number.isNaN(partId)) return;
+  if (state._animMode) return;      // (the list on the left stays as it is while the Animate window is open)
   const treeEl = document.getElementById('tree');
   if (!treeEl) return;
   let node = _treeRowOf('part', partId);
@@ -53437,7 +54654,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   }
 
   // ── Big offenders panel ──────────────────────────────────────────────────
-  const HEAVY_TRIS = 10000;          // a part with more triangles than this is heavy
+  const HEAVY_TRIS = _HEAVY_TRIS;          // a part with more triangles than this is heavy (the same limit as the heavy tag of the Properties card)
   const OFF_TOP_N = 500;             // the most rows drawn (the list scrolls, index.html)
   // The ticks of the list are its own: a row is ticked by clicking it here, never by selecting the part in the view. (Ticking a row
   // also selects the part, so it can be seen; the other way round does nothing here.)
@@ -53480,8 +54697,6 @@ setTimeout(() => _dndDecorateTree(), 0);
     // edit. They grow only when the list first appears.
     const prev = list._offRows || [], fresh = list.children.length === 0;
     if (fresh || prev.length !== rows.length || list.children.length !== rows.length) {
-      list.classList.toggle('off-fresh', fresh);
-      clearTimeout(list._offT); if (fresh) list._offT = setTimeout(() => list.classList.remove('off-fresh'), 900);      // (the bars have grown by then: a row drawn later does not grow again)
       list.innerHTML = rows.join('');
     } else {
       for (let i = 0; i < rows.length; i++) {
@@ -53561,6 +54776,78 @@ setTimeout(() => _dndDecorateTree(), 0);
     _syncOffendersSel();
     _offLastId = row.dataset.partId;     // (the camera stays where it is: ticking a row only selects)
   });
+  // Press on a row and drag over the others (the way a list of checkmarks is swept on a phone). The tick of the row pressed shows at once, when the
+  // mouse goes down: a row that was not ticked is ticked, one that was is taken off; and every row from it to the one the pointer is on gets the same.
+  // Going back over a row puts it back as it was. The click that ends it is not a click (it would do it again). A touch keeps scrolling the list.
+  // Shift held: the click's own range.
+  {
+    const setTick = (k, on) => { try { if (on) { _offTick.add(k); if (!state.selected.has(k)) selectPart(k, 'add'); } else { _offTick.delete(k); if (state.selected.has(k)) selectPart(k, 'toggle'); } } catch (_) {} };
+    let drag = null, swallow = false;
+    const rowAt = (x, y) => { const el = document.elementFromPoint(x, y); const r = el && el.closest && el.closest('.off-row'); return r && drag && r.parentElement === drag.list ? r : null; };
+    document.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.pointerType === 'touch' || e.shiftKey) return;
+      const row = e.target.closest && e.target.closest('.off-row'); if (!row) return;
+      const list = row.parentElement, at = [...list.children].indexOf(row), id = parseInt(row.dataset.partId, 10);
+      if (!Number.isFinite(id)) return;
+      const mode = !_offTick.has(id);
+      drag = { list, from: at, mode, orig: new Map([[id, _offTick.has(id)]]), moved: false, last: at, x: e.clientX, y: e.clientY, t: 0, acc: 0, raf: 0 };
+      drag.raf = requestAnimationFrame(frame);
+      if (_offTick.has(id) !== mode) setTick(id, mode);      // (at once: the tick is there while the button is still down)
+      _offClicked = true; _syncOffendersSel(); _offLastId = row.dataset.partId;
+      e.preventDefault();
+    }, true);
+    // Dragged to the edge of the list, it scrolls: in a frame loop (so it goes on while the pointer stands still). It starts when the pointer reaches the
+    // edge (6 px inside it, no earlier: the last rows are for ticking) and goes faster the further past the edge the pointer is (the speed rises with the
+    // square of it, to the top at 90 px past), by whole and fractional pixels as the time between frames says; the rows that come under the pointer are
+    // ticked as they pass.
+    const IN = 6, RANGE = 90, MAXV = 1.6;      // (px inside the edge where it starts; px past the edge of the top speed; the top speed, in px per ms)
+    const sweep = (x, y) => {
+      const lr = drag.list.getBoundingClientRect();
+      const row = rowAt(x, Math.min(Math.max(y, lr.top + 1), lr.bottom - 1));
+      if (!row) return;
+      const rows = [...drag.list.children], at = rows.indexOf(row);
+      if (!drag.moved && at === drag.from) return;
+      drag.moved = true; drag.last = at;
+      const lo = Math.min(drag.from, at), hi = Math.max(drag.from, at), inRange = new Set();
+      for (let i = lo; i <= hi; i++) {
+        const k = parseInt(rows[i].dataset.partId, 10); if (!Number.isFinite(k)) continue;
+        inRange.add(k);
+        if (!drag.orig.has(k)) drag.orig.set(k, _offTick.has(k));
+        if (_offTick.has(k) !== drag.mode) setTick(k, drag.mode);
+      }
+      for (const [k, was] of drag.orig) if (!inRange.has(k) && _offTick.has(k) !== was) setTick(k, was);      // (the pointer went back over it)
+      _syncOffendersSel();
+    };
+    const frame = (now) => {
+      if (!drag) return;
+      const lr = drag.list.getBoundingClientRect(), dt = Math.min(48, now - (drag.t || now)); drag.t = now;
+      const y = drag.y, past = y < lr.top + IN ? lr.top + IN - y : y > lr.bottom - IN ? y - (lr.bottom - IN) : 0, dir = y < lr.top + IN ? -1 : 1;
+      if (past > 0) {
+        const k = Math.min(1, past / (RANGE + IN)), v = MAXV * (0.1 + 0.9 * k * k);      // (a gentle start at the edge itself, the top speed 90 px past it)
+        const before = drag.list.scrollTop;
+        drag.acc = (drag.acc || 0) + dir * v * dt;
+        const step = Math.trunc(drag.acc); if (step) { drag.acc -= step; drag.list.scrollTo({ top: before + step, behavior: 'instant' }); }
+        if (drag.list.scrollTop !== before) sweep(drag.x, y);
+      }
+      drag.raf = requestAnimationFrame(frame);
+    };
+    document.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      if (!(e.buttons & 1)) { cancelAnimationFrame(drag.raf); drag = null; return; }
+      drag.x = e.clientX; drag.y = e.clientY;
+      sweep(e.clientX, e.clientY);
+    });
+    const end = () => {
+      if (!drag) return;
+      const d = drag; drag = null; cancelAnimationFrame(d.raf);
+      swallow = true; setTimeout(() => { swallow = false; }, 0);      // (the click that follows the press has been done already)
+      const row = d.list.children[d.last]; if (row) _offLastId = row.dataset.partId;
+    };
+    document.addEventListener('pointerup', end, true);
+    document.addEventListener('pointercancel', end, true);
+    document.addEventListener('click', (e) => { if (swallow && e.target.closest && e.target.closest('.off-row')) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
+    document.addEventListener('selectstart', (e) => { if (drag) e.preventDefault(); });
+  }
   // Right-click a row: the camera goes to that part (the ticks are left as they are).
   document.addEventListener('contextmenu', (e) => {
     const row = e.target.closest && e.target.closest('.off-row');
@@ -54049,6 +55336,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       p._fp = null; p._fpKey = null;
       try { _cadEdgesPartSwapped(p); } catch (_) {}
     }
+    for (const x of op.imSwaps || []) _applyImSwap(x, dir);      // (copies drawn from one instanced mesh that followed the edit)
     try { recomputeStats(); } catch (_) {}
     if (state.viewMode === 'heat') { _exitHeatmap(); _enterHeatmap(); }
   }
@@ -54126,9 +55414,7 @@ setTimeout(() => _dndDecorateTree(), 0);
 .qr.is-in{opacity:1;transform:none}
 .qr.is-out{opacity:0;transform:scale(.92);transition:opacity 90ms ease,transform 90ms ease}
 .qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;transition:transform 220ms cubic-bezier(.3,1.2,.5,1)}      /* (it slides to the level with a small spring, nothing more) */
-.qr-blob{position:absolute;inset:0;display:block;border-radius:6px;background:var(--gz-hot)}
-.qr-blob::before{content:'';position:absolute;left:7px;top:50%;width:2px;height:12px;margin-top:-6px;border-radius:1px;background:var(--gz-mark)}
-.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--gz-tx);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-blob{position:absolute;inset:0;display:block;border-radius:6px;background:var(--gz-hot)}.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--gz-tx);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr-i.is-near{color:var(--gz-tx-2)}
 .qr-i.is-hot{color:var(--gz-tx-hot);transform:scale(1.06)}
 .qr.is-first .qr-i.is-hot{color:var(--gz-tx-hot)}
@@ -54178,7 +55464,7 @@ setTimeout(() => _dndDecorateTree(), 0);
               const moved = attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer];
               if (sp.normals) moved.push(sp.normals.buffer);
               return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0, update: true, ...sp }, transfer: moved };
-            }, { owner: 'Quick remesh' });      // (its own: a Stop on another tool leaves its levels alone)
+            }, { owner: 'Quick decimate' });      // (its own: a Stop on another tool leaves its levels alone)
             if (S !== sess) return part.orig;              // (closed while it was being worked out: the result is not built)
             if (reply && reply.ok) { out = _creaseAfter(_geomFromIndexParts(geom, reply.parts, reply.upd), part.flat); err = reply.err || 0; }
           }
@@ -54342,7 +55628,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     function unhush(sess) { gizmoAway(false); for (const o of sess.hidden || []) { try { o.visible = true; } catch (_) {} } sess.hidden = []; state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} }
     function open() {
       if (S) return;
-      try { if (_Elements.isActive()) { toast('Quick remesh', 'Leave Edit mesh first (4)', 'info', 2400); return; } } catch (_) {}
+      try { if (_Elements.isActive()) { toast('Quick decimate', 'Leave Edit mesh first (4)', 'info', 2400); return; } } catch (_) {}
       const parts = [];
       for (const id of state.selected || []) {
         const p = getPart(id);
@@ -54354,11 +55640,11 @@ setTimeout(() => _dndDecorateTree(), 0);
         if (t < 12) continue;
         parts.push({ p, orig: g, tris0: t, snap: _decSnap(p), cache: new Map([[1, g]]), jobs: new Map() });
       }
-      if (!parts.length) { toast('Quick remesh', state.selected && state.selected.size ? 'Nothing in the selection can be made lighter' : 'Select a part first', 'info', 2400); return; }
+      if (!parts.length) { toast('Quick decimate', state.selected && state.selected.size ? 'Nothing in the selection can be made lighter' : 'Select a part first', 'info', 2400); return; }
       styleOnce();
       const el = document.createElement('div');
       el.className = 'qr is-first';
-      el.setAttribute('role', 'listbox'); el.setAttribute('aria-label', 'Quick remesh: the share of triangles to keep');
+      el.setAttribute('role', 'listbox'); el.setAttribute('aria-label', 'Quick decimate: the share of triangles to keep');
       el.innerHTML = '<div class="qr-thumb"><i class="qr-blob"></i></div>' + LEVELS.map((k, i) => '<div class="qr-i' + (i === 0 ? ' is-hot' : i === 1 ? ' is-near' : '') + '" role="option" aria-label="' + pctOf(k) + ' percent">' + pctOf(k) + '</div>').join('') + '<div class="qr-tip"><i></i><b></b><span></span></div>';
       document.body.appendChild(el);
       const H = PAD * 2 + ITEM * LEVELS.length;
@@ -54436,7 +55722,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       }
       shut(sess);
       dropUnused(sess, kept);
-      if (undoItems.length) pushUndo({ type: 'decimate', label: 'Quick remesh to ' + pctOf(keep) + '%', items: undoItems });
+      if (undoItems.length) pushUndo({ type: 'decimate', label: 'Quick decimate to ' + pctOf(keep) + '%', items: undoItems });
       unhush(sess);
       try { recomputeStats(); } catch (_) {}
       try { rebuildTree(); } catch (_) {}
@@ -54446,7 +55732,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (state.viewMode === 'heat') { try { _exitHeatmap(); _enterHeatmap(); } catch (_) {} }
       requestRender();
       if (n) toast('Remeshed', n + (n === 1 ? ' part' : ' parts') + ' · ' + fmtNum(before) + ' → ' + fmtNum(after) + ' triangles (−' + Math.round((1 - after / before) * 100) + '%)', 'success', 3200);
-      else toast('Quick remesh', 'The selection could not be made lighter', 'info', 2600);
+      else toast('Quick decimate', 'The selection could not be made lighter', 'info', 2600);
     }
 
     return {
@@ -54556,8 +55842,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     const OPS = {
       closeCracks: { title: 'Close cracks', done: 'Cracks closed', params: [{ key: 'tol', label: 'Gap up to', kind: 'size%', min: 0.001, max: 0.2, step: 0.001, def: 0.01, help: "How wide a crack may be (a share of the part's size) and still be closed." }], sum: (r) => r.joined + ' points joined, ' + r.split + ' edges split · open edges ' + r.openBefore + ' · ' + r.openAfter },
       removeSlivers: { title: 'Remove slivers', done: 'Slivers removed', params: [{ key: 'ratio', label: 'Needle under', kind: 'pct', min: 1, max: 20, step: 1, def: 4, help: "A triangle whose shortest edge is under this share of its longest is a needle." }], sum: (r) => r.collapsed + ' needles collapsed, ' + r.flipped + ' caps flipped' },
-      patchHoles: { title: 'Patch holes', done: 'Holes patched', params: [{ key: 'maxSize', label: 'Holes up to', kind: 'size%', min: 1, max: 60, step: 1, def: 10, help: "The biggest hole to close, across, as a share of the part's size." }], sum: (r) => r.patched + ' of ' + r.holes + ' holes patched' },
-      remeshEvenly: { title: 'Remesh evenly', done: 'Remeshed evenly', params: [{ key: 'length', label: 'Edge length', kind: 'size%', min: 0.1, max: 10, step: 0.1, def: 0, fromResult: 'length', help: "How long the edges are, as a share of the part's size. Shorter: more, finer triangles." }, { key: 'featureDeg', label: 'Keep edges sharper than', unit: '°', min: 5, max: 90, step: 1, def: 30, help: 'Faces meeting at more than this angle keep their edge.' }], sum: (r) => fmtNum(r.sharpEdges) + ' sharp edge pieces kept' + (r.fromCad ? ' (the CAD edges)' : '') + (r.capped ? ' · edge length raised to stay under ' + fmtNum(r.maxTriangles) + ' triangles' : '') },
+      patchHoles: { title: 'Fill mesh holes', done: 'Mesh holes filled', params: [{ key: 'maxSize', label: 'Holes up to', kind: 'size%', min: 1, max: 60, step: 1, def: 10, help: "The biggest hole to close, across, as a share of the part's size." }], sum: (r) => r.patched + ' of ' + r.holes + ' holes patched' },
+      remeshEvenly: { title: 'Isotropic remesh', done: 'Remeshed (isotropic)', params: [{ key: 'length', label: 'Edge length', kind: 'size%', min: 0.1, max: 10, step: 0.1, def: 0, fromResult: 'length', help: "How long the edges are, as a share of the part's size. Shorter: more, finer triangles." }, { key: 'featureDeg', label: 'Keep edges sharper than', unit: '°', min: 5, max: 90, step: 1, def: 30, help: 'Faces meeting at more than this angle keep their edge.' }], sum: (r) => fmtNum(r.sharpEdges) + ' sharp edge pieces kept' + (r.fromCad ? ' (the CAD edges)' : '') + (r.capped ? ' · edge length raised to stay under ' + fmtNum(r.maxTriangles) + ' triangles' : '') },
       smoothSurface: { title: 'Smooth surface', done: 'Smoothed', params: [{ key: 'strength', label: 'Strength', min: 1, max: 20, step: 1, def: 6, help: 'How many rounds of smoothing.' }, { key: 'edgeDeg', label: 'Keep edges sharper than', unit: '°', min: 5, max: 90, step: 1, def: 30, help: 'Faces meeting at more than this angle keep their edge sharp.' }], sum: (r) => 'points moved up to ' + (r.moved || 0).toFixed(3) + (r.fromCad ? ' · the CAD edges kept' : '') },
       convexHull: { title: 'Convex hull', done: 'Hull made', params: [{ key: 'maxPoints', label: 'Points at most', min: 8, max: 255, step: 1, def: 255, help: 'Game engines want 255 points or fewer.' }], sum: (r) => r.points + ' points' },
       convexPieces: { title: 'Convex pieces', done: 'Convex pieces made', params: [{ key: 'maxPieces', label: 'Pieces at most', min: 1, max: 32, step: 1, def: 8 }, { key: 'concavity', label: 'Cut while emptier than', kind: 'pct', min: 1, max: 50, step: 1, def: 10, help: "A piece is cut in two while more than this share of its hull is empty." }, { key: 'maxPoints', label: 'Points per piece', min: 8, max: 255, step: 1, def: 64 }], sum: (r) => r.pieces + ' pieces' },
@@ -54578,6 +55864,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     const $i = (id) => document.getElementById(id);
     const say = (t) => { const el = $i('mop-info'); if (el) el.textContent = cur && cur.name === 'removeBlends' ? '' : t; };      // (not for Remove fillets and chamfers: its two sliders need no line of numbers under them)
     const alive = () => cur && state.history[state.history.length - 1] === cur.op;
+    const okLbl = (id, t) => { const b = document.getElementById(id); const n = b && [...b.childNodes].reverse().find(x => x.nodeType === 3); if (n) n.textContent = t; };      // (the button's text, after its icon)
+    // The step was undone (Ctrl+Z): the card stays, its button reads Apply, and a slider or Apply builds the step again from the parts as they are now
+    async function applyAgain() {
+      const c = cur; if (!c || busy) return;
+      c.undone = false; okLbl('mop-ok', 'Done'); say('Working…');
+      await run(c.name, { ids: c.items.map(i => i.partId) });
+      if (cur === c && !alive()) { c.undone = true; okLbl('mop-ok', 'Apply'); say('Nothing was built. Move a slider or press Apply to try again.'); }
+    }
     const source = (geom) => { const pa = geom.attributes.position, P = new Float32Array(pa.count * 3); for (let v = 0; v < pa.count; v++) { P[3 * v] = pa.getX(v); P[3 * v + 1] = pa.getY(v); P[3 * v + 2] = pa.getZ(v); } const na = geom.attributes.normal; let N = null; if (na && na.count === pa.count) { N = new Float32Array(pa.count * 3); for (let v = 0; v < pa.count; v++) { N[3 * v] = na.getX(v); N[3 * v + 1] = na.getY(v); N[3 * v + 2] = na.getZ(v); } } return { P, N, UV: _uvSetsOf(geom), I: geom.index ? Uint32Array.from(geom.index.array) : Uint32Array.from({ length: pa.count }, (_, i) => i) }; };      // (N: the part's own normals, kept by a tool that only takes triangles away: keepNormals in meshops.js)
     const diag = (P) => { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], P[i + k]); hi[k] = Math.max(hi[k], P[i + k]); } return Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) || 1; };
     const prefKey = (name, key) => 'meshop.' + name + '.' + key;
@@ -54618,14 +55912,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     };
     const runOne = (name, it, opts) => { const o = { ...opts, ...(it.extra || {}), ...(it.cad ? { cad: it.cad } : {}), ...(it.src.UV ? { uv: it.src.UV } : {}), ...(it.src.N ? { normals: it.src.N } : {}) }; return compute({ op: 'meshop', name, positions: it.src.P.slice(), index: it.src.I.slice(), opts: o }, () => runMeshOp(name, it.src.P, it.src.I, o)); };
     function swap(p, r, mat) {
-      const out = _roundGeom(r, mat, p.mesh.geometry), old = p.mesh.geometry, oldHash = p.hash, hash = 'mo_' + (state._decSeq = (state._decSeq | 0) + 1);
-      try { _getEdgesGeom(out); } catch (_) {}
-      state.geomByHash.set(hash, out);
-      p.mesh.geometry = _stampGeometry(out); p.hash = hash;
-      p.triCount = r.index.length / 3; p.vertCount = r.positions.length / 3;
-      _refreshPartBBox(p); p._fp = null; p._fpKey = null;
-      if (r.cad && r.cad.faces) { try { _Brep.adopt(out, r.cad); } catch (_) {} }     // (a tool that kept the CAD faces hands them on)
-      try { _cadEdgesPartSwapped(p); } catch (_) {}
+      const out = _roundGeom(r, mat, p.mesh.geometry);
+      const { old, oldHash } = _swapPartGeometry(p, out, { prefix: 'mo', cad: r.cad });
       return { old, oldHash };
     }
     function settle() {
@@ -54639,7 +55927,12 @@ setTimeout(() => _dndDecorateTree(), 0);
       requestRender();
     }
     const matOf = (geom) => (geom.groups && geom.groups.length ? (geom.groups[0].materialIndex || 0) : -1);
+    // (the app's one-job lock: another tool cannot start while one of these works; one that was turned away answers as one that did nothing)
     async function run(name, o) {
+      const r = await _Job.run((OPS[name] && OPS[name].title) || BOOL_TITLE[name] || name, () => run_job(name, o), { task: false });
+      return r === undefined ? { parts: 0, results: [] } : r;
+    }
+    async function run_job(name, o) {
       if (BOOL_TITLE[name]) return booleanParts(name, o);
       const def = OPS[name]; if (!def) return { parts: 0, results: [] };
       const toastIf = (a, b, k, ms) => { if (!o.quiet) toast(a, b, k, ms); };
@@ -54733,7 +56026,7 @@ setTimeout(() => _dndDecorateTree(), 0);
           inside.name = target.name + ' inside'; if (inside.mesh) inside.mesh.name = inside.name;
           const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.partId === inside.partId); if (tn) tn.name = inside.name;
         }
-        pushUndo({ type: 'decimate', label: title, items });
+        pushUndo({ type: 'decimate', label: title, items, noFollow: true });      // (a boolean depends on the other part: its copies do not follow)
         if (made !== target) _applyVisibility([[target, false]]);
         if (o.cutters === 'hide') _applyVisibility(cutters.map(p => [p, false]));
         else if (o.cutters === 'delete') deleteParts(cutters.map(p => p.partId), 'Deleted B');
@@ -54758,6 +56051,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     async function redo() {
       if (!cur) return;
       if (busy) { again = true; return; }
+      if (cur.undone) { applyAgain(); return; }
       if (!alive()) { say('This step is no longer the last one (undo or redo moved past it), so the sliders do nothing now.'); return; }
       busy = true; again = false; say('Working…');
       const freed = []; let last = null;
@@ -54797,11 +56091,16 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (wired) return; wired = true;
       const sec = document.querySelector('.section-cmd[data-cmd="meshop"]');
       sec?.addEventListener('cmd-close', () => { try { _wireLimit(null); } catch (_) {} if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} } viewBefore = null; });
-      $i('mop-ok')?.addEventListener('click', () => _CmdCards.close('meshop'));
+      $i('mop-ok')?.addEventListener('click', () => { if (cur && cur.undone) applyAgain(); else _CmdCards.close('meshop'); });
+      document.addEventListener('mo-history', () => {
+        if (!cur) return;
+        if (!cur.undone && !alive() && state.redo && state.redo.includes(cur.op)) { clearTimeout(timer); cur.undone = true; okLbl('mop-ok', 'Apply'); say('Step undone. Move a slider or press Apply to build it again.'); }
+        else if (cur.undone && alive()) { cur.undone = false; okLbl('mop-ok', 'Done'); report(null); }
+      });
     }
     function offer(name, op, items, s) {
       wire();
-      cur = { name, op, items, s: { ...s } };
+      cur = { name, op, items, s: { ...s } }; okLbl('mop-ok', 'Done');
       const t = $i('mop-title'); if (t) t.textContent = OPS[name].title;
       const box = $i('mop-fields'); if (!box) return;
       box.textContent = ''; for (const k in sc) delete sc[k];
@@ -54839,7 +56138,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     let aId = null, busy = false, msg = '', wired = false;
     const sec = () => document.querySelector('.section-cmd[data-cmd="boolean"]');
     // the parts it can work on, in the order they were picked
-    const picked = () => [...state.selected].map(id => getPart(id)).filter(p => p && !p.deleted && !p.isCloner && !p.isSpline && p.mesh && p.mesh.geometry && p.mesh.geometry.attributes.position);
+    const picked = () => _selectedParts(p => !p.isCloner && !p.isSpline && p.mesh && p.mesh.geometry && p.mesh.geometry.attributes.position);
     function show() {
       const root = sec(); if (!root || root.hidden) return;
       const parts = picked();
@@ -54916,6 +56215,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     requestRender: (...a) => requestRender(...a),
     pushUndo: (...a) => pushUndo(...a),
     _roundGeom: (...a) => _roundGeom(...a),
+    _Job, _swapPartGeometry: (...a) => _swapPartGeometry(...a),
     _stampGeometry: (...a) => _stampGeometry(...a),
     _refreshPartBBox: (...a) => _refreshPartBBox(...a),
     _decSnap: (...a) => _decSnap(...a),
@@ -54937,6 +56237,80 @@ setTimeout(() => _dndDecorateTree(), 0);
       requestRender();
     },
   }));
+  // 'bake': one step that changes geometry (as 'decimate' does) and the materials of the same parts (as 'matBatch' does).
+  const _pushBakeUndo = (label, items, matBefore) => {
+    const after = _matStateSnap(), assigns = [];
+    for (const [id, b] of matBefore.assign) { const a = after.assign.get(id); if (a !== undefined && a !== b) assigns.push({ partId: id, before: b, after: a }); }
+    pushUndo({ type: 'bake', label, items, assigns, edits: [], userBefore: matBefore.user, userAfter: after.user, byColorBefore: matBefore.byColor, byColorAfter: after.byColor });
+  };
+  _UndoOps.register('bake', {
+    undo(op) { _applyDecimateOp(op, 'before'); _applyMatBatch(op, 'before'); state.redo.push(op); _finalizeUndo({ rebuildTree: true }); },
+    redo(op) { _applyDecimateOp(op, 'after'); _applyMatBatch(op, 'after'); state.history.push(op); _finalizeUndo({ rebuildTree: true }); },
+  });
+  // The Bake textures card (bake-card.js): reduce, lay out on one picture, bake the colour of the original into it.
+  // The UV layout as a view of its own, with the tools to edit the UVs (uv-split.js). A change of UVs is one undo step that swaps the
+  // UV arrays ('uvEdit'); Unwrap and Project (Cubic, Box) rebuild the parts and take the 'decimate' kind of step.
+  const _applyUvEdit = (op, dir) => { for (const it of op.items) { const a = it.geom && it.geom.attributes && it.geom.attributes.uv; if (!a || !a.array) continue; a.array.set(it[dir]); a.needsUpdate = true; } try { requestRender(); } catch (_) {} };
+  _UndoOps.register('uvEdit', {
+    undo(op) { _applyUvEdit(op, 'before'); state.redo.push(op); _finalizeUndo(); },
+    redo(op) { _applyUvEdit(op, 'after'); state.history.push(op); _finalizeUndo(); },
+  });
+  {
+    const uvs = installUvSplit({
+      state, _Prefs,
+      getPart: (...a) => getPart(...a), fmtNum: (...a) => fmtNum(...a), toast: (...a) => toast(...a), getCamera: () => camera,
+      _matOf: (...a) => _matOf(...a), _matHolder: (...a) => _matHolder(...a), _leftSidebarShow: (...a) => _leftSidebarShow(...a), onResize: (...a) => onResize(...a),
+      pushUndo: (...a) => pushUndo(...a), requestRender: (...a) => requestRender(...a), ctxMenu: (...a) => _ctxBuild(...a),
+      _decSnap: (...a) => _decSnap(...a), _stampGeometry: (...a) => _stampGeometry(...a), _refreshPartBBox: (...a) => _refreshPartBBox(...a), _cadEdgesPartSwapped: (...a) => _cadEdgesPartSwapped(...a),
+      settle: () => {
+        try { if (_cadEdgesActive) _cadEdgesSync(); } catch (_) {}
+        try { if (state.viewMode === 'wire') _wireSync(); } catch (_) {}
+        try { recomputeStats(); } catch (_) {}
+        try { rebuildTree(); } catch (_) {}
+        try { refreshPropertiesPanel(); } catch (_) {}
+        try { applySelectionColors(); } catch (_) {}
+        try { _buildBVHsForAllGeoms(); } catch (_) {}
+        requestRender();
+      },
+    });
+    window.__moUvSplit = uvs;
+    if (uvs) _selFollowers.push(uvs);
+  }
+  _selFollowers.push(installBakeCard({
+    state, _Prefs, _CmdCards, _Job, _Tasks,
+    initScrubber: (...a) => initScrubber(...a),
+    toast: (...a) => toast(...a),
+    getPart: (...a) => getPart(...a),
+    fmtNum: (...a) => fmtNum(...a),
+    _nextFrame: (...a) => _nextFrame(...a),
+    _decSnap: (...a) => _decSnap(...a),
+    _stampGeometry: (...a) => _stampGeometry(...a),
+    _refreshPartBBox: (...a) => _refreshPartBBox(...a),
+    _cadEdgesPartSwapped: (...a) => _cadEdgesPartSwapped(...a),
+    _loadMeshopt: (...a) => _loadMeshopt(...a),
+    _loadSimplifier: (...a) => _loadSimplifier(...a),
+    _simplifyKeepingAttributes: (...a) => _simplifyKeepingAttributes(...a),
+    _shapeOf: (...a) => _shapeOf(...a),
+    _keepsShape: (...a) => _keepsShape(...a),
+    _matStateSnap: (...a) => _matStateSnap(...a),
+    _matHolder: (...a) => _matHolder(...a),
+    _matOf: (...a) => _matOf(...a),
+    _matSet: (...a) => _matSet(...a),
+    _newMaterial: (...a) => _newMaterial(...a),
+    pushBakeUndo: (...a) => _pushBakeUndo(...a),
+    settle: () => {
+      try { if (_cadEdgesActive) _cadEdgesSync(); } catch (_) {}
+      try { if (state.viewMode === 'wire') _wireSync(); } catch (_) {}
+      try { recomputeStats(); } catch (_) {}
+      try { rebuildTree(); } catch (_) {}
+      try { refreshPropertiesPanel(); } catch (_) {}
+      try { applySelectionColors(); } catch (_) {}
+      try { _buildBVHsForAllGeoms(); } catch (_) {}
+      try { _populateMaterialsList(); } catch (_) {}
+      requestRender();
+    },
+  }));
+
   // The Round part card (round-card.js): the Profile card's twin for turned parts and belts, the same objects handed to it.
   // window.__moAgent.roundCard(o) opens it; window.__moAgent.fillGrooves stays the quiet way in for Claude and scripts.
   _selFollowers.push(installRoundCard({
@@ -54950,6 +56324,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     requestRender: (...a) => requestRender(...a),
     pushUndo: (...a) => pushUndo(...a),
     _roundGeom: (...a) => _roundGeom(...a),
+    _Job, _swapPartGeometry: (...a) => _swapPartGeometry(...a),
     _stampGeometry: (...a) => _stampGeometry(...a),
     _refreshPartBBox: (...a) => _refreshPartBBox(...a),
     _decSnap: (...a) => _decSnap(...a),
@@ -54980,13 +56355,14 @@ setTimeout(() => _dndDecorateTree(), 0);
   // settings are remembered (this browser).
   // o: { ids (default: the selection), cells, adaptivity, gap (share of the longest side) or width (world units), smoothDeg, quiet,
   // dryRun }.
-  window.__moAgent = Object.assign(window.__moAgent || {}, { voxelRemesh: (o) => _Voxel.run(o || {}), voxelSet: (k, v) => _Voxel.set(k, v), voxelBusy: () => _Voxel.busy });
+  window.__moAgent = Object.assign(window.__moAgent || {}, { voxelRemesh: (o) => { o = o || {}; return (o.wrap != null ? o.wrap : (!o.quiet && !!_Prefs.get('voxelWrap'))) ? _Voxel.wrap(o) : _Voxel.run(o); }, voxelSet: (k, v) => _Voxel.set(k, v), voxelBusy: () => _Voxel.busy });
   const _Voxel = (() => {
     let cur = null, wired = false, viewBefore = null, timer = 0, busy = false, again = false;
     const sc = {};                                                // the card's sliders
     const $i = (id) => document.getElementById(id);
     const say = (t) => { const el = $i('vox-info'); if (el) el.textContent = t; };
-    const alive = () => cur && state.history[state.history.length - 1] === cur.op;
+    const okLbl = (id, t) => { const b = document.getElementById(id); const n = b && [...b.childNodes].reverse().find(x => x.nodeType === 3); if (n) n.textContent = t; };      // (the button's text, after its icon)
+    const alive = () => { const last = state.history[state.history.length - 1]; return !!cur && !!last && (last === cur.op || (last.type === 'compound' && last.ops[last.ops.length - 1] === cur.op)); };      // (Wrap assembly makes its merge and its rebuild one step)
     const source = (geom) => {
       const pa = geom.attributes.position, P = new Float32Array(pa.count * 3);
       for (let v = 0; v < pa.count; v++) { P[3 * v] = pa.getX(v); P[3 * v + 1] = pa.getY(v); P[3 * v + 2] = pa.getZ(v); }
@@ -55063,16 +56439,65 @@ setTimeout(() => _dndDecorateTree(), 0);
         settle();
         const ok = results.filter(x => x.ok), tb = ok.reduce((s, x) => s + (x.triangles_before | 0), 0), ta = ok.reduce((s, x) => s + (x.triangles_after | 0), 0);
         toastIf('Remeshed', undoItems.length + (undoItems.length === 1 ? ' part' : ' parts') + ' · voxel ' + ok[0].voxel_mm + ' mm · ' + fmtNum(tb) + ' · ' + fmtNum(ta) + ' triangles', 'success', 6000);
-        if (!o.quiet) offer(op, items, set);
+        if (!o.quiet) { offer(op, items, set); if (cur) { cur.sel = o.sel || targets.map(p => p.partId); cur.wrapped = !!o.sel; } syncWrap(); }
       }
       const bad = results.filter(x => !x.ok);
       if (bad.length) toastIf('Voxel remesh', bad[0].name + ' was left as it was: ' + (bad[0].why || 'it could not be done'), 'warn', 6000);
       return { parts: undoItems.length, results };
     }
+    // Wrap assembly: the selected parts are made one part (Merge parts) and that part is rebuilt on one grid, so the whole assembly
+    // gets one closed skin: what is inside it, and every hollow shut inside, is gone, and gaps narrower than Close gaps (3 % of the
+    // length unless said otherwise) are bridged, so a housing with a small opening is wrapped over it. One undo step; the card is the
+    // same as Voxel remesh's, and its sliders rebuild the wrap. One part selected: that is plain Voxel remesh.
+    async function wrap(o) {
+      const ids = (o.ids && o.ids.length ? o.ids : [...state.selected]).filter(id => { const p = getPart(id); return p && !p.deleted && p.mesh && p.mesh.geometry && p.mesh.geometry.attributes.position; });
+      if (ids.length < 2) return run(o);
+      if (busy) { if (!o.quiet) toast('Wrap assembly', 'Still working on the last one', 'info', 2500); return { parts: 0, results: [] }; }
+      const h0 = state.history.length, keep = _undoKeepAll;
+      _undoKeepAll = true;
+      let r = { parts: 0, results: [] };
+      try {
+        state.selected.clear(); for (const id of ids) state.selected.add(id);
+        await _mergeSelectedCore('Wrap');
+        const merged = [...state.selected];
+        if (merged.length === 1 && state.history.length > h0) r = await run({ ...o, ids: merged, sel: ids, gap: (o.gap >= 0 || o.width > 0) ? o.gap : 0.03 });
+        if (!r.parts && state.history.length > h0) undoLast();      // (the rebuild failed: the parts are not left merged into a copy of nothing)
+      } finally {
+        _undoKeepAll = keep;
+        if (state.history.length - h0 > 1) { const ops = state.history.splice(h0); pushUndo({ type: 'compound', label: 'Wrap assembly', ops }); }
+      }
+      return { ...r, wrapped_parts: r.parts ? ids.length : 0 };
+    }
+    // The card's switch "Wrap parts into one" (shown when two or more parts were rebuilt): the step is undone and done again the other
+    // way, from the same parts, with the card's own settings. What the switch was left at is remembered.
+    function syncWrap() {
+      const row = $i('vox-wrap-row'), cb = $i('vox-wrap');
+      if (row) row.style.display = cur && cur.sel && cur.sel.length > 1 ? '' : 'none';
+      if (cb) cb.checked = !!(cur && cur.wrapped);
+    }
+    async function setWrap(v) {
+      if (!cur || busy) { syncWrap(); return; }
+      if (!alive()) { say('This step is no longer the last one (undo or redo moved past it), so the switch does nothing now.'); syncWrap(); return; }
+      const sel = cur.sel.slice(), s = { ...cur.set };
+      _Prefs.set('voxelWrap', v ? 1 : 0);
+      undoLast();
+      state.selected.clear(); for (const id of sel) state.selected.add(id);
+      await window.__moAgent.voxelRemesh({ ids: sel, wrap: v, cells: s.cells, adaptivity: s.adapt, smoothDeg: s.smooth, gap: v ? (s.gap > 0 ? s.gap : 0.03) : (_Prefs.get('voxelGap') || 0) });
+    }
     // the card: a change runs the job again, from each part as it was, when the slider rests; one undo step for all of it
+    // the step was undone (Ctrl+Z): the card stays, its button reads Apply, and a slider or Apply builds it again (wrapped or not, as it was)
+    async function applyAgain() {
+      const c = cur; if (!c || busy) return;
+      c.undone = false; okLbl('vox-ok', 'Done'); say('Working…');
+      const sel = (c.sel && c.sel.length ? c.sel : c.items.map(i => i.partId)).slice(), s = { ...c.set };
+      state.selected.clear(); for (const id of sel) state.selected.add(id);
+      await window.__moAgent.voxelRemesh({ ids: sel, wrap: !!c.wrapped, cells: s.cells, adaptivity: s.adapt, smoothDeg: s.smooth, gap: s.gap });
+      if (cur === c && !alive()) { c.undone = true; okLbl('vox-ok', 'Apply'); say('Nothing was built. Move a slider or press Apply to try again.'); }
+    }
     async function redo() {
       if (!cur) return;
       if (busy) { again = true; return; }
+      if (cur.undone) { applyAgain(); return; }
       if (!alive()) { say('This step is no longer the last one (undo or redo moved past it), so the sliders do nothing now.'); return; }
       busy = true; again = false; say('Working…');
       const freed = [];
@@ -55116,7 +56541,14 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (wired) return; wired = true;
       const sec = document.querySelector('.section-cmd[data-cmd="voxel"]');
       sec?.addEventListener('cmd-close', () => { try { _wireLimit(null); } catch (_) {} if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} } viewBefore = null; });
-      $i('vox-ok')?.addEventListener('click', () => _CmdCards.close('voxel'));
+      $i('vox-ok')?.addEventListener('click', () => { if (cur && cur.undone) applyAgain(); else _CmdCards.close('voxel'); });
+      document.addEventListener('mo-history', () => {
+        if (!cur) return;
+        const inRedo = state.redo && state.redo.some(o => o === cur.op || (o.type === 'compound' && o.ops[o.ops.length - 1] === cur.op));
+        if (!cur.undone && !alive() && inRedo) { clearTimeout(timer); cur.undone = true; okLbl('vox-ok', 'Apply'); say('Step undone. Move a slider or press Apply to build it again.'); }
+        else if (cur.undone && alive()) { cur.undone = false; okLbl('vox-ok', 'Done'); report(); }
+      });
+      $i('vox-wrap')?.addEventListener('change', (e) => setWrap(!!e.target.checked));
     }
     function slider(k, el, label, steps, toVal, toStep, fmt, init) {
       if (sc[k]) { sc[k].setValue(init); return; }
@@ -55124,7 +56556,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
     function offer(op, items, s0) {
       wire();
-      cur = { op, items, set: { ...s0 } };
+      cur = { op, items, set: { ...s0 } }; okLbl('vox-ok', 'Done');
       if (state.viewMode !== 'wire') { viewBefore = viewBefore || state.viewMode; try { setViewMode('wire'); requestRender(); } catch (_) {} }
       try { _wireLimit(items.map(it => it.partId || it.id)); } catch (_) {}
       slider('cells', 'vox-detail-scrub', 'Detail', 46, (st) => 32 + st * 8, (v) => Math.max(0, Math.min(46, Math.round((v - 32) / 8))), (v) => ({ value: String(Math.round(v)), unit: '' }), s0.cells);
@@ -55134,7 +56566,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       report();
       _CmdCards.open('voxel');
     }
-    return { run, set: (k, v) => set(k, v), get busy() { return busy; } };
+    return { run, wrap, setWrap, set: (k, v) => set(k, v), get busy() { return busy; } };
   })();
 
   // ── Untriangulate ────────────────────────────────────────────────────────
@@ -55218,10 +56650,17 @@ setTimeout(() => _dndDecorateTree(), 0);
           const uvA = src.attributes.uv;
           if (uvA && uvA.itemSize >= 2 && uvA.count === pos.count) { uvs = new Float32Array(uvA.count * 2); for (let i = 0; i < uvA.count; i++) { uvs[i * 2] = uvA.getX(i); uvs[i * 2 + 1] = uvA.getY(i); } }
         }
+        // the CAD face of every triangle, so the geometry that comes back can keep the faces (only where the CAD's plane faces fix the polygons: one pass)
+        let faceOf = null;
+        if (cadPlane && !quads && !even) {
+          const rec = _Brep.record(src);
+          if (rec && rec.faces && rec.faces.length && rec.tris === tris) { faceOf = new Int32Array(tris).fill(-1); rec.faces.forEach((fc, i) => { for (let t = fc[1]; t < fc[1] + fc[2] && t < tris; t++) faceOf[t] = i; }); }
+        }
         queued.set(id, _MeshWorkers.run(() => {
           const positions = _wireXYZ(src.attributes.position, true);
           const index = src.index ? Uint32Array.from(src.index.array) : Uint32Array.from({ length: src.attributes.position.count }, (_, i) => i);
           const cadPoly = cadPlane ? cadPlane.slice() : null;
+          const faceMsg = faceOf ? faceOf.slice() : null;
           const groups = (src.groups && src.groups.length > 1)
             ? src.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
             : [{ start: 0, count: index.length, materialIndex: src.groups && src.groups[0] ? src.groups[0].materialIndex | 0 : 0 }];
@@ -55231,9 +56670,9 @@ setTimeout(() => _dndDecorateTree(), 0);
             normals = new Float32Array(nrm.count * 3);
             for (let i = 0; i < nrm.count; i++) { normals[i * 3] = nrm.getX(i); normals[i * 3 + 1] = nrm.getY(i); normals[i * 3 + 2] = nrm.getZ(i); }
           }
-          const transfer = [positions.buffer, index.buffer]; if (normals) transfer.push(normals.buffer); if (cadPoly) transfer.push(cadPoly.buffer);
+          const transfer = [positions.buffer, index.buffer]; if (normals) transfer.push(normals.buffer); if (cadPoly) transfer.push(cadPoly.buffer); if (faceMsg) transfer.push(faceMsg.buffer);
           const qMsg = quads ? { quads: true, faceDeg, shapeDeg, uvs: uvs ? uvs.slice() : null, cadFace: cadFace ? cadFace.slice() : null } : {};
-          return { msg: { op: even ? 'even' : 'untriangulate', positions, index, groups, angle, normals, normalTol, flip, fixNormals, straight, limitDeg, tolerance: tolLocal, threeUrl, cadPoly, ...qMsg }, transfer };
+          return { msg: { op: even ? 'even' : 'untriangulate', positions, index, groups, angle, normals, normalTol, flip, fixNormals, straight, limitDeg, tolerance: tolLocal, threeUrl, cadPoly, faceOf: faceMsg, ...qMsg }, transfer };
         }).then(reply => (reply && reply.ok) ? { src, reply, geom } : null));
       }
       for (const id of ids) {
@@ -55276,6 +56715,23 @@ setTimeout(() => _dndDecorateTree(), 0);
         reduced.computeBoundingBox();
         reduced.computeBoundingSphere();
         if (!o.noPolys) _polyIds.set(reduced, polyAll);
+        // A part from a STEP keeps its CAD faces: the worker says which face each new triangle is on, and a face is one run of triangles still.
+        try {
+          const rec = _Brep.record(src);
+          if (rec && rec.faces && rec.faces.length && reply.parts.every(x => x.face)) {
+            const face = new Int32Array(newTri); let at = 0;
+            for (const x of reply.parts) { face.set(x.face, at); at += x.face.length; }
+            const faces = [], seen = new Set();
+            let t = 0, ok = at === newTri;
+            while (ok && t < newTri) {
+              const f = face[t];
+              if (f < 0 || f >= rec.faces.length || seen.has(f)) { ok = false; break; }
+              let u = t; while (u < newTri && face[u] === f) u++;
+              const r = rec.faces[f]; faces.push([r[0], t, u - t, r[3], ...r.slice(4)]); seen.add(f); t = u;
+            }
+            if (ok && faces.length) _Brep.adopt(reduced, { faces, rows: rec.rows, pts: rec.pts });
+          }
+        } catch (e) { console.warn('[untriangulate] CAD faces:', e); }
         const before = _decSnap(p);
         p.mesh.geometry = _stampGeometry(reduced);
         p.hash = 'unt_' + p.partId + '_' + (state._decSeq = (state._decSeq | 0) + 1);
@@ -57638,7 +59094,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const $id = (id) => document.getElementById(id);
     const sec = (n) => document.querySelector(`.section-cmd[data-cmd="${n}"]`);
     let _mr = null;
-    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=8'));
+    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=9'));
     const parseNum = (el, d) => { const v = parseFloat(String(el && el.value).replace(',', '.')); return isFinite(v) ? v : d; };
 
     // A row of choices (.cmd-seg) that sets one field of `o`.
@@ -57811,13 +59267,17 @@ setTimeout(() => _dndDecorateTree(), 0);
       const hl = $id('nm-hl');
       const paintScope = seg(root, 'nm-scope', o, 'scope', 'scope', false, () => { msg = ''; show(); });
       const isHl = () => _backFaceTint.value > 0.5;
-      const setHl = (on) => { _backFaceTint.value = (on === undefined ? !isHl() : !!on) ? 1 : 0; if (hl) hl.checked = isHl(); requestRender(); };
+      const hl2 = $id('ff-hl-back');      // (the same switch in Filters & flags: one state, shown in both)
+      const paint2 = () => { if (hl2) { hl2.classList.toggle('active', isHl()); hl2.setAttribute('aria-pressed', String(isHl())); } };
+      const setHl = (on) => { _backFaceTint.value = (on === undefined ? !isHl() : !!on) ? 1 : 0; if (hl) hl.checked = isHl(); paint2(); requestRender(); };
       hl?.addEventListener('change', () => setHl(hl.checked));
+      hl2?.addEventListener('click', () => setHl());
       $id('nm-out')?.addEventListener('change', (e) => { o.outward = e.target.checked; });
       let msg = '', busy = false;
       function show() {
         paintScope();
         if (hl) hl.checked = isHl();
+        paint2();
         if (!info) return;
         if (msg) { info.textContent = msg; info.classList.add('is-result'); return; }
         info.classList.remove('is-result');
@@ -58194,7 +59654,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         toast(t.parts ? 'Hidden faces removed' : 'Remove hidden faces', msg, t.parts ? 'success' : 'info', 8000);
         show();
       }
-      $id('hf-run')?.addEventListener('click', run);
+      $id('hf-run')?.addEventListener('click', () => _Job.run('Remove hidden faces', () => run(), { task: false }));
       root.addEventListener('cmd-open', () => { msg = ''; show(); });
       let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
       show();
@@ -58510,6 +59970,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       sn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toTop(); } });
   } }
 
+  $id('welcome-batch')?.addEventListener('click', () => _BatchFolder.pick());
   $id('welcome-import')?.addEventListener('click', () => {
     if (!state.parts.some(p => !p.deleted)) { run('open'); return; }   // nothing to import into yet
     run('import');
@@ -58825,9 +60286,23 @@ if (new URLSearchParams(location.search).has('selftest')) {
       e.stopImmediatePropagation(); e.preventDefault();
       leaving = true;
       const dx = innerWidth / 2 - (a.left + a.width / 2), dy = innerHeight - 24 - (a.top + a.height / 2);
-      dock.animate([{ transform: 'none', opacity: 1 }, { transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(.12)', opacity: 0 }],
-        { duration: 220, easing: 'cubic-bezier(.4,0,.8,.4)', fill: 'forwards' }).onfinish = () => {
+      const anim = dock.animate([{ transform: 'none', opacity: 1 }, { transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(.12)', opacity: 0 }],
+        { duration: 220, easing: 'cubic-bezier(.4,0,.8,.4)', fill: 'forwards' });
+      // The window may be closed by something else, or opened again, while it shrinks (the toolbar button, the Library, a click on the X in
+      // the middle of it). Then the shrink is dropped and no close is sent: it used to send it anyway, and the window that had just opened
+      // shrank away, or stayed drawn at its end state (open, but transparent and 12% size).
+      let closedMeanwhile = false;
+      const watch = new MutationObserver(() => {
+        if (!dock.classList.contains('show')) { closedMeanwhile = true; return; }
+        if (closedMeanwhile) { leaving = false; watch.disconnect(); clearTimeout(guard); try { anim.cancel(); } catch (_) {} }
+      });
+      watch.observe(dock, { attributes: true, attributeFilter: ['class'] });
+      const guard = setTimeout(() => { watch.disconnect(); leaving = false; if (dock.classList.contains('show')) { try { anim.cancel(); } catch (_) {} } }, 900);      // (nothing may hold the end state)
+      anim.oncancel = () => { leaving = false; watch.disconnect(); clearTimeout(guard); };
+      anim.onfinish = () => {
+        watch.disconnect(); clearTimeout(guard);
         leaving = false;
+        if (closedMeanwhile) { try { anim.cancel(); } catch (_) {} return; }      // (it is closed or open again by something else: only the animation goes)
         through = true; try { closeBtn.click(); } finally { through = false; }   // (now it goes through)
         // The dock's own hide is a transition (slide, visibility after .2s): keep the faded end state until it has
         // finished, or the window shows again for a moment. Opening it again lets go at once.
@@ -60467,7 +61942,7 @@ const _Elements = (() => {
     const whole = !jobs.length;
     if (whole) {
       const sv = new THREE.Vector3();
-      jobs = [...state.selected].map(id => getPart(id)).filter(p => p && !p.deleted && p.mesh && _Brep.record(p.mesh.geometry)).map(p => { p.mesh.updateWorldMatrix(true, false); sv.setFromMatrixScale(p.mesh.matrixWorld); return { p, faces: null, scale: Math.max(Math.abs(sv.x), Math.abs(sv.y), Math.abs(sv.z)) || 1 }; });
+      jobs = _selectedParts(p => p.mesh && _Brep.record(p.mesh.geometry)).map(p => { p.mesh.updateWorldMatrix(true, false); sv.setFromMatrixScale(p.mesh.matrixWorld); return { p, faces: null, scale: Math.max(Math.abs(sv.x), Math.abs(sv.y), Math.abs(sv.z)) || 1 }; });
     }
     if (!jobs.length) { toast(T, 'The selected parts have no CAD faces (open the STEP with them)', 'info', 4000); return null; }
     const extraFor = {};
@@ -61215,7 +62690,7 @@ const _Elements = (() => {
       // (always the Model icon: while Edit mesh is on, the three buttons under it show which piece mode it is)
       const ico = b.querySelector('.em-ico'); if (ico && ico.dataset.m !== 'model') { ico.innerHTML = ICON.model; ico.dataset.m = 'model'; }
       b.classList.toggle('active', false);
-      b.title = m === 'model' ? 'Model mode: a click picks a whole part. Click for ' + NAME[mode] + ', hold for all four modes' : 'Back to Model mode: a click picks a whole part (4)';
+      b.title = b.classList.contains('is-prim') ? 'Bake geo first: a library shape is edited with its settings. Press Bake geo under them to turn it into a mesh you can edit.' : m === 'model' ? 'Model mode: a click picks a whole part. Click for ' + NAME[mode] + ', hold for all four modes' : 'Back to Model mode: a click picks a whole part (4)';
       b.setAttribute('aria-label', 'Model mode');
     }
   }
@@ -61276,9 +62751,9 @@ const _Elements = (() => {
     if (state._animMode) return;      // (no Edit mesh while the Animate window is open)
     if (_Photo.on) { try { toast('Edit mesh', 'Leave Photo mode first.', 'info', 1800); } catch (_) {} return; }      // (nor in Photo mode: it is for looking, and its marks would be in the picture)
     if (!active && !(state.selected && state.selected.size)) { try { toast('Edit mesh', 'Select a part first.', 'info', 1800); } catch (_) {} return; }      // (nothing to edit: the button is grey and the keys 1 2 3 do nothing either)
+    // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first), so Edit mesh does not open on it
+    { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length && !active) { try { toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {} return; } }
     const was = mode; mode = m; save();
-    // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first)
-    try { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length) toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {}
     if (!active) { _CmdCards.open('elements'); return; }
     if (was !== m) { hover = null; for (const [, e] of live()) e.dirty = true; }
     changed();

@@ -1166,7 +1166,7 @@ async function _exportFbxBinary(root, opts) {
     } else {
       o.updateMatrix();
       o.matrix.decompose(tmpV3, tmpQ, tmpScale);
-      tmpEuler.setFromQuaternion(tmpQ, 'XYZ');
+      tmpEuler.setFromQuaternion(tmpQ, 'ZYX');      // (FBX turns about X, then Y, then Z)
       tx = tmpV3.x; ty = tmpV3.y; tz = tmpV3.z;
       rx = tmpEuler.x * RAD2DEG; ry = tmpEuler.y * RAD2DEG; rz = tmpEuler.z * RAD2DEG;
       sx = tmpScale.x; sy = tmpScale.y; sz = tmpScale.z;
@@ -1871,7 +1871,7 @@ GlobalSettings:  {
     } else {
       o.updateMatrix();
       o.matrix.decompose(tmpV, tmpQ, tmpScale);
-      tmpEuler.setFromQuaternion(tmpQ, 'XYZ');
+      tmpEuler.setFromQuaternion(tmpQ, 'ZYX');      // (FBX turns about X, then Y, then Z)
       tx = tmpV.x; ty = tmpV.y; tz = tmpV.z;
       rx = tmpEuler.x * RAD2DEG; ry = tmpEuler.y * RAD2DEG; rz = tmpEuler.z * RAD2DEG;
       sx = tmpScale.x; sy = tmpScale.y; sz = tmpScale.z;

@@ -62,6 +62,24 @@
 const MAX_TRIS = 12000000;
 
 export function fillFlatHoles(positions, index, opts = {}) {
+  // Flat faces first, exactly as they have always been handled. With opts.curved, a second look follows that is allowed to close
+  // only what the first did not touch and only where the surface is curved: so switching it on can add holes, never lose one.
+  const r1 = fillFlatHolesPass(positions, index, { ...opts, curved: false });
+  if (opts.curved !== true || r1.skipped.tooBig) return r1;
+  const r2 = fillFlatHolesPass(positions, index, { ...opts, curved: true, onlyCurved: true, avoid: r1.removed || null,
+    floating: false, rimVertices: false, cleanup: false, enclosed: false, seal: false, rings: false, debug: false });
+  if (!r2.holes) return r1;
+  const T = r2.removed.length, removed = new Uint8Array(T);
+  for (let t = 0; t < T; t++) removed[t] = (r1.removed && r1.removed[t]) || r2.removed[t] ? 1 : 0;
+  const cat = (a, b) => { const o = new Uint32Array((a ? a.length : 0) + b.length); if (a) o.set(a); o.set(b, a ? a.length : 0); return o; };
+  const res = { ...r1, removed, caps: cat(r1.caps, r2.caps), capOwner: cat(r1.capOwner, r2.capOwner) };
+  for (const k of ['holes', 'through', 'blind', 'open', 'flattened', 'loops', 'removedTris', 'addedTris']) res[k] = (r1[k] || 0) + (r2[k] || 0);
+  res.curvedHoles = r2.holes;
+  if (r2.newPositions) for (const k of ['newPositions', 'newSrc', 'newW', 'newNormals', 'fixIds', 'fixNormals']) res[k] = r2[k];
+  return res;
+}
+
+function fillFlatHolesPass(positions, index, opts = {}) {
   const P = positions;
   const vCount = (P.length / 3) | 0;
   let I = index;
@@ -75,6 +93,12 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const maxFaceRatio = opts.maxFaceRatio || 0.4;       // opening / outline of its face …
   const maxPartRatio = opts.maxPartRatio || 0.08;      // … and opening / size of the whole part
   const minSize = +opts.minSize > 0 ? +opts.minSize : 0;   // a feature narrower than this is left alone
+  // Curved surfaces (opts.curved): a smooth patch (a cylinder, a fillet, a dome) is one region too, its triangles joined where the
+  // normal turns by less than curvedAngle degrees from one to the next. Each opening in it is judged against the surface's own
+  // direction at that opening (a normal and a basis kept per loop), not against one plane.
+  const curvedOn = opts.curved === true;
+  const curvedCos = Math.cos((+opts.curvedAngle > 0 ? +opts.curvedAngle : 12) * Math.PI / 180);
+  const pseudoMax = curvedOn ? Math.min(T, 300000) + 1 : 0;
   const maxDepth = +opts.maxDepth > 0 ? +opts.maxDepth : 0; // a blind feature reaching deeper than this below its face is left alone (0: no limit)
   // which kinds to fill (all three unless switched off)
   const want = { through: opts.through !== false, blind: opts.blind !== false, open: opts.open !== false };
@@ -123,7 +147,9 @@ export function fillFlatHoles(positions, index, opts = {}) {
 
   // ── 2. triangles: welded corners, normal, validity ───────────────────────
   const tw = new Int32Array(T * 3);
-  const nx = new Float32Array(T), ny = new Float32Array(T), nz = new Float32Array(T);
+  // (slots from T on hold the local normals of the openings in curved regions: seedOf(loop) is an index into these arrays)
+  const nx = new Float32Array(T + pseudoMax), ny = new Float32Array(T + pseudoMax), nz = new Float32Array(T + pseudoMax);
+  let pseudoN = 0;
   const ok = new Uint8Array(T);
   const minArea2 = (diag * 1e-7) * (diag * 1e-7);
   for (let t = 0; t < T; t++) {
@@ -213,7 +239,15 @@ export function fillFlatHoles(positions, index, opts = {}) {
   // ── 4. planar regions ────────────────────────────────────────────────────
   const region = new Int32Array(T).fill(-1);
   const order = new Int32Array(T);                      // triangles grouped by region
-  const rStart = [], rEnd = [], rSeed = [];
+  const rStart = [], rEnd = [], rSeed = [], rCurved = [];
+  const seedOf = (lp) => lp.s !== undefined ? lp.s : rSeed[lp.r];
+  // a point on the surface at the opening, to measure from: on a curved patch no one rim vertex stands for the whole opening
+  const rimPt = (lp) => {
+    if (!lp.curved) { const v = I[lp.hes[0]]; return [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]]; }
+    let x = 0, y = 0, z = 0;
+    for (const h of lp.hes) { const w = I[h]; x += P[w * 3]; y += P[w * 3 + 1]; z += P[w * 3 + 2]; }
+    const n = lp.hes.length; return [x / n, y / n, z / n];
+  };
   let filled = 0;
   // The CAD plane faces first (opts.cadPoly: the face number per triangle, -1 where there is none): each is a region as it is. The
   // tessellation of a plane can carry normals a hair apart and vertices a hair off the plane; the face says it is flat, so it is.
@@ -224,7 +258,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
     for (const list of byFace.values()) {
       const r = rStart.length, from = filled;
       for (const t of list) { region[t] = r; order[filled++] = t; }
-      rStart.push(from); rEnd.push(filled); rSeed.push(list[0]);
+      rStart.push(from); rEnd.push(filled); rSeed.push(list[0]); rCurved.push(false);
     }
   }
   for (let s = 0; s < T; s++) {
@@ -235,6 +269,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
     const sd = snx * P[sv * 3] + sny * P[sv * 3 + 1] + snz * P[sv * 3 + 2];
     const from = filled;
     region[s] = r; order[filled++] = s;
+    let curvedR = false;
     for (let q = from; q < filled; q++) {
       const t = order[q];
       for (let e = 0; e < 3; e++) {
@@ -242,17 +277,20 @@ export function fillFlatHoles(positions, index, opts = {}) {
         if (o < 0) continue;
         const u = (o / 3) | 0;
         if (region[u] >= 0) continue;
-        if (nx[u] * snx + ny[u] * sny + nz[u] * snz < cosTol) continue;
-        let flat = true;
+        let flat = nx[u] * snx + ny[u] * sny + nz[u] * snz >= cosTol;
         for (let c = 0; c < 3 && flat; c++) {
           const v = I[u * 3 + c];
           if (Math.abs(snx * P[v * 3] + sny * P[v * 3 + 1] + snz * P[v * 3 + 2] - sd) > distTol) flat = false;
         }
-        if (!flat) continue;
+        if (!flat) {
+          // not in the seed's plane: it still belongs when the surface turns smoothly into it (curved surfaces)
+          if (!curvedOn || nx[u] * nx[t] + ny[u] * ny[t] + nz[u] * nz[t] < curvedCos) continue;
+          curvedR = true;
+        }
         region[u] = r; order[filled++] = u;
       }
     }
-    rStart.push(from); rEnd.push(filled); rSeed.push(s);
+    rStart.push(from); rEnd.push(filled); rSeed.push(s); rCurved.push(curvedR);
   }
   const R = rStart.length;
 
@@ -326,16 +364,35 @@ export function fillFlatHoles(positions, index, opts = {}) {
     if (Math.abs(n0) < 0.9) { ux = 0; uy = -n2; uz = n1; } else { ux = n2; uy = 0; uz = -n0; }
     const ul = Math.hypot(ux, uy, uz); ux /= ul; uy /= ul; uz /= ul;
     const vx = n1 * uz - n2 * uy, vy = n2 * ux - n0 * uz, vz = n0 * uy - n1 * ux;
-    const found = [];                                   // { hes, size, area2 }
+    const found = [];                                   // { hes, size, area2, basis, s }
+    const planeBasis = [ux, uy, uz, vx, vy, vz];
     for (const hes of cycles) {
       if (hes.length < 3) continue;                     // (there and back along one edge: a crack, not a loop)
+      let cb = planeBasis, fs = s, bent = false, minDot = 1;
+      if (rCurved[r]) {
+        // a curved region: the opening's own direction is the mean of the normals of the triangles it cuts into. One that is not
+        // nearly flat as a whole (the end of a tube, a loop right round a dome) has no such direction and is not an opening.
+        let mx = 0, my = 0, mz = 0;
+        for (const h of hes) { const t = (h / 3) | 0; mx += nx[t]; my += ny[t]; mz += nz[t]; }
+        const ml = Math.hypot(mx, my, mz);
+        if (!(ml >= hes.length * 0.8) || pseudoN >= pseudoMax) continue;
+        mx /= ml; my /= ml; mz /= ml;
+        // a stretch of the surface that is flat all the same (a flat face that runs on into a fillet) is judged as a flat one
+        for (const h of hes) { const t = (h / 3) | 0; const d = nx[t] * mx + ny[t] * my + nz[t] * mz; if (d < minDot) minDot = d; }
+        bent = minDot < cosTol;
+        let bu0, bu1, bu2;
+        if (Math.abs(mx) < 0.9) { bu0 = 0; bu1 = -mz; bu2 = my; } else { bu0 = mz; bu1 = 0; bu2 = -mx; }
+        const bl = Math.hypot(bu0, bu1, bu2); bu0 /= bl; bu1 /= bl; bu2 /= bl;
+        cb = [bu0, bu1, bu2, my * bu2 - mz * bu1, mz * bu0 - mx * bu2, mx * bu1 - my * bu0];
+        fs = T + pseudoN++; nx[fs] = mx; ny[fs] = my; nz[fs] = mz;
+      }
       // signed area about the face normal, and the widest point
       let area2 = 0;
       const xs = new Float64Array(hes.length), ys = new Float64Array(hes.length);
       for (let i = 0; i < hes.length; i++) {
         const v = I[hes[i]];
         const px = P[v * 3], py = P[v * 3 + 1], pz = P[v * 3 + 2];
-        xs[i] = px * ux + py * uy + pz * uz; ys[i] = px * vx + py * vy + pz * vz;
+        xs[i] = px * cb[0] + py * cb[1] + pz * cb[2]; ys[i] = px * cb[3] + py * cb[4] + pz * cb[5];
       }
       for (let i = 0, j = hes.length - 1; i < hes.length; j = i++) area2 += xs[j] * ys[i] - xs[i] * ys[j];
       let size2 = 0;
@@ -344,36 +401,46 @@ export function fillFlatHoles(positions, index, opts = {}) {
         const dx = xs[i] - xs[j], dy = ys[i] - ys[j]; const d2 = dx * dx + dy * dy;
         if (d2 > size2) size2 = d2;
       }
-      found.push({ hes, size: Math.sqrt(size2), area2 });
+      found.push({ hes, size: Math.sqrt(size2), area2, basis: cb, s: fs, curved: bent, bend: minDot });
     }
     // counter-clockwise about the normal: the face's own outline (the largest
     // one, should a face ever report two)
     let outline = 0, outlineF = null;
-    for (const f of found) if (f.area2 > 0 && f.size > outline) { outline = f.size; outlineF = f; }
-    if (!(outline > 0)) continue;
-    outlines.push({ r, f: outlineF, nBoundary });
+    if (rCurved[r]) {
+      // (no outline to measure on a curved patch: the size of the patch stands for it, and ring grooves are not looked for)
+      let lx = Infinity, ly = Infinity, lz = Infinity, hx = -Infinity, hy = -Infinity, hz = -Infinity;
+      for (let q = rStart[r]; q < rEnd[r]; q++) for (let c = 0; c < 3; c++) {
+        const v = I[order[q] * 3 + c], x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
+        if (x < lx) lx = x; if (x > hx) hx = x; if (y < ly) ly = y; if (y > hy) hy = y; if (z < lz) lz = z; if (z > hz) hz = z;
+      }
+      outline = Math.hypot(hx - lx, hy - ly, hz - lz);
+    } else {
+      for (const f of found) if (f.area2 > 0 && f.size > outline) { outline = f.size; outlineF = f; }
+      if (!(outline > 0)) continue;
+      outlines.push({ r, f: outlineF, nBoundary });
+    }
     for (const f of found) {
       if (!(f.area2 < 0)) continue;                     // clockwise loops are the openings
       const wide = f.size > outline * maxFaceRatio && f.size > diag * maxPartRatio;
       // (a hair of tolerance: a Ø10 hole measures 10.000000000000002 from its single-precision corners, and "holes up to 10" means it)
       if (f.size > maxSize * (1 + 1e-6)) {
         result.skipped.tooLarge++;
-        if (opts.floating === true) bigLoops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz] });
+        if (opts.floating === true) bigLoops.push({ r, hes: f.hes, size: f.size, basis: f.basis, s: f.s, curved: f.curved, bend: f.bend });
         // The far end of a countersink or a flared hole is wider than the limit, though the hole is not: such an opening is kept as a
         // boundary (and is closed with the hole when the hole is taken), never as the start of one.
         let bigId = -1;
         if (f.size <= maxSize * bigFactor && !wide) {
           const id = bigId = loops.length;
-          loops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz], state: 0, big: true });
+          loops.push({ r, hes: f.hes, size: f.size, basis: f.basis, s: f.s, curved: f.curved, bend: f.bend, state: 0, big: true });
           for (const hh of f.hes) loopOfHe[hh] = id;
         }
         // a ring groove round a flush island may still be a narrow feature: judged by its width after all the regions are known
-        if (!wide && opts.rings !== false) ringPending.push({ r, hes: f.hes, size: f.size, area2: f.area2, basis: [ux, uy, uz, vx, vy, vz], bigId });
+        if (!wide && opts.rings !== false && !rCurved[r]) ringPending.push({ r, hes: f.hes, size: f.size, area2: f.area2, basis: f.basis, s: f.s, curved: f.curved, bend: f.bend, bigId });
         continue;
       }
       if (wide) { result.skipped.partOfShape++; continue; }
       const id = loops.length;
-      loops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz], state: 0 });
+      loops.push({ r, hes: f.hes, size: f.size, basis: f.basis, s: f.s, curved: f.curved, bend: f.bend, state: 0 });
       for (const hh of f.hes) loopOfHe[hh] = id;
     }
   }
@@ -448,6 +515,10 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const holeOf = new Int32Array(T).fill(-1);            // triangle → the hole whose surface took it out
   const metBy = new Map();                              // loop → the loops left alone whose surface ran up to it (see "the same hole" below)
   const caps = [], capOwner = [];
+  // New vertices of curved caps (opts.newVertices): positions, the three rim vertices each takes its other attributes from (and their
+  // weights), its normal, and the rim vertices whose normal is turned to the surface's. Their numbers start after the mesh's own.
+  const newVerts = opts.newVertices === true && curvedOn;
+  const nvPos = [], nvSrc = [], nvW = [], nvNormal = [], fixIds = [], fixNormals = [];
   if (!loops.length && !(opts.floating === true && bigLoops.length)) {
     // nothing to close: with opts.cleanup, still take out what an earlier fill left behind
     if (opts.cleanup === true && opts.rimVertices === true) {
@@ -555,9 +626,10 @@ export function fillFlatHoles(positions, index, opts = {}) {
       if (wsum > 0) { cx /= wsum; cy /= wsum; cz /= wsum; }
       for (const id of capLoops) {
         const lp = loops[id];
-        const s = rSeed[lp.r];
+        const s = seedOf(lp);
         const v = I[lp.hes[0]];
-        const side = nx[s] * (cx - P[v * 3]) + ny[s] * (cy - P[v * 3 + 1]) + nz[s] * (cz - P[v * 3 + 2]);
+        const rp = rimPt(lp);
+        const side = nx[s] * (cx - rp[0]) + ny[s] * (cy - rp[1]) + nz[s] * (cz - rp[2]);
         if (!(side < -distTol * 4)) {
           // The middle of a shallow groove with flush parts in it (a fillet, a ring left standing at the face's level) lies on the
           // face's plane, so the middle says nothing. What decides then is the reach: nothing rises above the plane, and it sinks below.
@@ -576,7 +648,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
       // lies between the two parallel faces all the same, and that is a hole.
       if (reason === 'raised' && capLoops.length === 2) {
         const a0 = loops[capLoops[0]], a1 = loops[capLoops[1]];
-        const sa = rSeed[a0.r], sb = rSeed[a1.r];
+        const sa = seedOf(a0), sb = seedOf(a1);
         if (Math.abs(nx[sa] * nx[sb] + ny[sa] * ny[sb] + nz[sa] * nz[sb]) > 0.9995) {
           const va = I[a0.hes[0]], vb = I[a1.hes[0]];
           const da = nx[sa] * P[va * 3] + ny[sa] * P[va * 3 + 1] + nz[sa] * P[va * 3 + 2];
@@ -598,7 +670,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
       // nowhere below it, and no higher than the limit.
       if (reason === 'raised' && wantRaised && capLoops.length === 1) {
         const lp = loops[capLoops[0]];
-        const s = rSeed[lp.r], v0 = I[lp.hes[0]];
+        const s = seedOf(lp), v0 = I[lp.hes[0]];
         const fx = P[v0 * 3], fy = P[v0 * 3 + 1], fz = P[v0 * 3 + 2];
         let lo = 0, hi = 0;
         for (const t of S) {
@@ -661,10 +733,15 @@ export function fillFlatHoles(positions, index, opts = {}) {
     if (!reason) {
       const kind = !S.length ? 'open' : capLoops.length >= 2 ? 'through' : 'blind';
       if (loops[L].size < minSize) reason = 'tooSmall';
+      // On a curved surface only an opening that goes through (or has nothing behind it) is a hole: the pockets, ribs and lettering
+      // that stand in a smooth body are what it is, and a smooth shape has far too many of them to tell from a drilled blind hole
+      else if ((isRaised || kind === 'blind') && capLoops.some(id => loops[id].curved)) reason = 'kind';
+      else if (opts.onlyCurved === true && !capLoops.some(id => loops[id].curved)) reason = 'kind';
+      else if (opts.avoid && S.some(t => opts.avoid[t])) reason = 'kind';
       else if (!isRaised && !want[kind]) reason = 'kind';
       // a depth limit in the mesh's own units (opts.maxDepth): engraved lettering is a shallow pocket, a bore is not
       else if (!isRaised && kind === 'blind' && maxDepth > 0) {
-        const lp = loops[capLoops[0]], s = rSeed[lp.r], v0 = I[lp.hes[0]];
+        const lp = loops[capLoops[0]], s = seedOf(lp), v0 = I[lp.hes[0]];
         let deep = 0;
         for (const t of S) for (let c = 0; c < 3; c++) {
           const v = I[t * 3 + c], d = nx[s] * (P[v * 3] - P[v0 * 3]) + ny[s] * (P[v * 3 + 1] - P[v0 * 3 + 1]) + nz[s] * (P[v * 3 + 2] - P[v0 * 3 + 2]);
@@ -680,20 +757,21 @@ export function fillFlatHoles(positions, index, opts = {}) {
       // is a collar standing on one face (raised, seen from there) and a
       // plain hole on the other, and it must not be written off because the
       // collar's side happened to come first.
-      if ((reason === 'leaking' || reason === 'tooDeep') && opts.seal === true && !loops[L].big && loops[L].island === undefined && trySeal(L)) continue;
+      if ((reason === 'leaking' || reason === 'tooDeep') && opts.seal === true && !loops[L].big && loops[L].island === undefined && !loops[L].curved && trySeal(L)) continue;
       loops[L].state = 2;
       result.skipped[reason] = (result.skipped[reason] || 0) + 1;
       if (reason !== 'tooSmall' && reason !== 'kind') {
         loops[L].skip = reason; loops[L].absorbed = absorbed;
         for (const id of bounding) if (id !== L) { const l = metBy.get(id); if (l) l.push(L); else metBy.set(id, [L]); }
       }
-      if (opts.debug) (result.skippedList = result.skippedList || []).push({ reason, size: loops[L].size, tris: S.length, caps: capLoops.length, ext: [bx1 - bx0, by1 - by0, bz1 - bz0] });
+      if (opts.debug) (result.skippedList = result.skippedList || []).push({ reason, size: loops[L].size, tris: S.length, caps: capLoops.length, bend: Math.min(...capLoops.map(id => loops[id].bend === undefined ? 1 : loops[id].bend)), ext: [bx1 - bx0, by1 - by0, bz1 - bz0] });
       continue;
     }
     // Accepted — provided every opening can be closed completely. A cap of
     // an n-point outline has n − 2 triangles; one that comes back short would
     // leave a crack, so then nothing is removed and the hole stays as it is.
     const capMark = caps.length, ownerMark = capOwner.length, addedMark = result.addedTris;
+    const nvMark = nvSrc.length / 3, fixMark = fixIds.length;
     let nCaps = 0, whole = true;
     for (const id of capLoops) {
       if (capLoop(loops[id]) !== loops[id].hes.length - 2) { whole = false; break; }
@@ -701,6 +779,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
     }
     if (!whole) {
       caps.length = capMark; capOwner.length = ownerMark; result.addedTris = addedMark;
+      nvPos.length = nvSrc.length = nvW.length = nvNormal.length = nvMark * 3; fixIds.length = fixMark; fixNormals.length = fixMark * 3;
       loops[L].state = 2;
       result.skipped.uncappable++;
       continue;
@@ -716,6 +795,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
         result.skipped[lk.skip]--; lk.skip = null; lk.state = 1;
       }
     }
+    if (opts.debug) (result.acceptedList = result.acceptedList || []).push({ size: loops[L].size, tris: S.length, caps: capLoops.length, curved: capLoops.some(id => loops[id].curved), raised: isRaised, bend: Math.min(...capLoops.map(id => loops[id].bend === undefined ? 1 : loops[id].bend)) });
     result.holes++;
     result.loops += nCaps;
     result.removedTris += S.length;
@@ -731,7 +811,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
   // along the face normal (S with its cap is a closed surface, so a point is inside it when a ray out of it leaves S an odd number
   // of times). Loops on the triangles taken out are settled, so nothing starts from them later. Returns how many were taken out.
   function removeInsideRaised(S, capId, box) {
-    const lp = loops[capId], s0 = rSeed[lp.r];
+    const lp = loops[capId], s0 = seedOf(lp);
     const fx = nx[s0], fy = ny[s0], fz = nz[s0];
     const v0 = I[lp.hes[0]], d0 = fx * P[v0 * 3] + fy * P[v0 * 3 + 1] + fz * P[v0 * 3 + 2];
     let hi = 0;
@@ -780,7 +860,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
   // face. What lies behind stays as it was, out of sight.
   function trySeal(L) {
     const lp = loops[L];
-    const s0 = rSeed[lp.r], fx = nx[s0], fy = ny[s0], fz = nz[s0];
+    const s0 = seedOf(lp), fx = nx[s0], fy = ny[s0], fz = nz[s0];
     const v0 = I[lp.hes[0]], pd = fx * P[v0 * 3] + fy * P[v0 * 3 + 1] + fz * P[v0 * 3 + 2];
     const [ux, uy, uz, vx, vy, vz] = lp.basis;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -839,8 +919,152 @@ export function fillFlatHoles(positions, index, opts = {}) {
     return true;
   }
 
+  // A cap over an opening in a curved surface. A flat cap runs straight across and leaves a dent; this one follows the surface. The
+  // rim is triangulated as it is (ear clipping: no rim edge moves, so the cap meets the face edge to edge), and then the triangles
+  // that are too big are cut: the longest inside edge of a triangle is split at its middle, and edges are flipped to keep the
+  // triangles well shaped. Each new point is put on the surface through the rim: a thin plate spline through the rim and the
+  // vertices just outside it (it carries the slope in from the sides, so a top that turns into a rounded edge goes on turning), or
+  // a quadric through the rim where that does not do. Returns what capLoop returns (the rim's size less two: "done"), or 0 when it
+  // cannot be done well (the flat cap is made instead).
+  function capCurvedLoop(lp) {
+    const n = lp.hes.length;
+    if (n < 6 || n > 2000) return 0;
+    const [ux, uy, uz, vx, vy, vz] = lp.basis, s = seedOf(lp), fx = nx[s], fy = ny[s], fz = nz[s];
+    const vid = new Int32Array(n), xs = new Float64Array(n), ys = new Float64Array(n), zs = new Float64Array(n);
+    let ox = 0, oy = 0, oz = 0;
+    for (let i = 0; i < n; i++) { const v = I[lp.hes[n - 1 - i]]; vid[i] = v; ox += P[v * 3]; oy += P[v * 3 + 1]; oz += P[v * 3 + 2]; }
+    ox /= n; oy /= n; oz /= n;
+    for (let i = 0; i < n; i++) {
+      const v = vid[i], dx = P[v * 3] - ox, dy = P[v * 3 + 1] - oy, dz = P[v * 3 + 2] - oz;
+      xs[i] = dx * ux + dy * uy + dz * uz; ys[i] = dx * vx + dy * vy + dz * vz; zs[i] = dx * fx + dy * fy + dz * fz;
+    }
+    let area2 = 0, per = 0;
+    for (let i = 0, j = n - 1; i < n; j = i++) { area2 += xs[j] * ys[i] - xs[i] * ys[j]; per += Math.hypot(xs[i] - xs[j], ys[i] - ys[j]); }
+    if (!(area2 > 0)) return 0;
+    const rimSet = new Set(vid);
+    const dxs = Array.from(xs), dys = Array.from(ys), dzs = Array.from(zs), near = new Set();
+    for (const h of lp.hes) {
+      const t = (h / 3) | 0, w = I[t * 3 + (h % 3 + 2) % 3];
+      if (rimSet.has(w) || near.has(w)) continue;
+      const ex = P[w * 3] - ox, ey = P[w * 3 + 1] - oy, ez = P[w * 3 + 2] - oz;
+      const x = ex * ux + ey * uy + ez * uz, y = ex * vx + ey * vy + ez * vz;
+      if (Math.hypot(x, y) > lp.size * 1.5) continue;           // (a long strip's far end says nothing about the opening)
+      near.add(w); dxs.push(x); dys.push(y); dzs.push(ex * fx + ey * fy + ez * fz);
+    }
+    let q = dxs.length <= 600 && opts.fit !== 'quadric' ? fitSpline(dxs, dys, dzs) : null, spline = !!q;
+    const quadric = () => {
+      const f = fitQuadric(xs, ys, zs);
+      if (!f) return null;
+      let worst = 0;
+      for (let i = 0; i < n; i++) worst = Math.max(worst, Math.abs(zs[i] - f.h(xs[i], ys[i])));
+      return worst > Math.max(distTol * 20, lp.size * 0.02) ? null : f;
+    };
+    if (!q) { q = quadric(); if (!q) return 0; }
+
+    // the rim's own triangulation, then cut down to the size of the rim's edges
+    const base0 = earClip(xs, ys);
+    if (base0.length / 3 !== n - 2) return 0;
+    const px = Array.from(xs), py = Array.from(ys);
+    const ta = [], tb = [], tc = [], alive = [], emap = new Map();
+    const K = 1 << 16, key = (a, b) => a * K + b;
+    const addTri = (a, b, c) => { const t = ta.length; ta.push(a); tb.push(b); tc.push(c); alive.push(1); emap.set(key(a, b), t); emap.set(key(b, c), t); emap.set(key(c, a), t); };
+    const killTri = (t) => { alive[t] = 0; emap.delete(key(ta[t], tb[t])); emap.delete(key(tb[t], tc[t])); emap.delete(key(tc[t], ta[t])); };
+    const third = (t, a, b) => (ta[t] !== a && ta[t] !== b) ? ta[t] : (tb[t] !== a && tb[t] !== b) ? tb[t] : tc[t];
+    const cross = (a, b, c) => (px[b] - px[a]) * (py[c] - py[a]) - (py[b] - py[a]) * (px[c] - px[a]);
+    for (let i = 0; i < base0.length; i += 3) {
+      let a = base0[i], b = base0[i + 1], c = base0[i + 2];
+      if (cross(a, b, c) < 0) { const t = b; b = c; c = t; }
+      addTri(a, b, c);
+    }
+    const inCircle = (a, b, c, d) => {                          // > 0: d is inside the circle through a, b, c (counter-clockwise)
+      const adx = px[a] - px[d], ady = py[a] - py[d], bdx = px[b] - px[d], bdy = py[b] - py[d], cdx = px[c] - px[d], cdy = py[c] - py[d];
+      return (adx * adx + ady * ady) * (bdx * cdy - cdx * bdy) - (bdx * bdx + bdy * bdy) * (adx * cdy - cdx * ady) + (cdx * cdx + cdy * cdy) * (adx * bdy - bdx * ady);
+    };
+    const legalize = (stack) => {
+      for (let guard = 0; stack.length && guard < 200000; guard++) {
+        const e = stack.pop(), a = e[0], b = e[1];
+        const t = emap.get(key(a, b)), u = emap.get(key(b, a));
+        if (t === undefined || u === undefined) continue;       // a rim edge has one side only: it stays
+        const c = third(t, a, b), d = third(u, b, a);
+        if (!(inCircle(a, b, c, d) > 1e-12 * (1 + Math.abs(px[a]) + Math.abs(py[a])))) continue;
+        if (!(cross(a, d, c) > 0 && cross(d, b, c) > 0)) continue;
+        killTri(t); killTri(u); addTri(a, d, c); addTri(d, b, c);
+        stack.push([a, d], [d, b], [b, c], [c, a]);
+      }
+    };
+    { const all = []; for (const k of emap.keys()) all.push([Math.floor(k / K), k % K]); legalize(all); }
+    // (a triangle on a rim edge has a side of at least half its length, so asking for less than that would never end)
+    let longest = 0;
+    for (let i = 0, j = n - 1; i < n; j = i++) longest = Math.max(longest, Math.hypot(xs[i] - xs[j], ys[i] - ys[j]));
+    // How fine the patch is cut follows how much the surface bends: points far enough apart that the chord between two of them sinks
+    // no more than the surface may move (opts.surfaceTol; Remove holes' "Surface may move"), and never finer than needed.
+    const qc = fitQuadric(xs, ys, zs), kappa = qc ? qc.curv : 0;
+    const tol = +opts.surfaceTol > 0 ? +opts.surfaceTol : lp.size * 0.005;
+    const byCurve = kappa > 1e-12 ? Math.sqrt(8 * tol / kappa) : Infinity;
+    const target = Math.max(Math.min(byCurve, lp.size / 3), longest * 0.75);
+    for (let added = 0; added < 1500; added++) {
+      let best = -1, ba = 0, bb = 0, bl = target;
+      for (let t = 0; t < ta.length; t++) {
+        if (!alive[t]) continue;
+        for (let e = 0; e < 3; e++) {
+          const a = e === 0 ? ta[t] : e === 1 ? tb[t] : tc[t], b = e === 0 ? tb[t] : e === 1 ? tc[t] : ta[t];
+          if (!emap.has(key(b, a))) continue;                   // (a rim edge cannot be split)
+          const l = Math.hypot(px[a] - px[b], py[a] - py[b]);
+          if (l > bl) { bl = l; best = t; ba = a; bb = b; }
+        }
+      }
+      if (best < 0) break;
+      const t = best, u = emap.get(key(bb, ba)), c = third(t, ba, bb), d = third(u, bb, ba), p = px.length;
+      px.push((px[ba] + px[bb]) / 2); py.push((py[ba] + py[bb]) / 2);
+      killTri(t); killTri(u);
+      addTri(ba, p, c); addTri(p, bb, c); addTri(bb, p, d); addTri(p, ba, d);
+      legalize([[ba, c], [c, bb], [bb, d], [d, ba]]);
+    }
+    const N = px.length, m = N - n;
+    if (spline && m > 0) {
+      // a spline can swing out between its points: the patch must stay within a little of the heights round it
+      let zlo = Infinity, zhi = -Infinity;
+      for (let i = 0; i < dzs.length; i++) { if (dzs[i] < zlo) zlo = dzs[i]; if (dzs[i] > zhi) zhi = dzs[i]; }
+      const slack = lp.size * 0.1;
+      let swing = false;
+      for (let i = n; i < N && !swing; i++) { const z = q.h(px[i], py[i]); if (!(z >= zlo - slack && z <= zhi + slack)) swing = true; }
+      if (swing) { q = quadric(); if (!q) return 0; }
+    }
+    const live = [];
+    for (let t = 0; t < ta.length; t++) if (alive[t]) live.push(t);
+    if (live.length !== n + 2 * m - 2) return 0;
+    const normalAt = (x, y) => {
+      const gx = q.hx(x, y), gy = q.hy(x, y);
+      const a = -gx, b = -gy, l = Math.hypot(a, b, 1);
+      return [(a * ux + b * vx + fx) / l, (a * uy + b * vy + fy) / l, (a * uz + b * vz + fz) / l];
+    };
+    const base = vCount + nvPos.length / 3;
+    for (let k = 0; k < m; k++) {
+      const x = px[n + k], y = py[n + k], z = q.h(x, y);
+      nvPos.push(ox + x * ux + y * vx + z * fx, oy + x * uy + y * vy + z * fy, oz + x * uz + y * vz + z * fz);
+      nvNormal.push(...normalAt(x, y));
+      let i0 = -1, i1 = -1, i2 = -1, d0 = Infinity, d1 = Infinity, d2 = Infinity;
+      for (let i = 0; i < n; i++) {
+        const d = (xs[i] - x) * (xs[i] - x) + (ys[i] - y) * (ys[i] - y);
+        if (d < d0) { d2 = d1; i2 = i1; d1 = d0; i1 = i0; d0 = d; i0 = i; }
+        else if (d < d1) { d2 = d1; i2 = i1; d1 = d; i1 = i; }
+        else if (d < d2) { d2 = d; i2 = i; }
+      }
+      const w0 = 1 / (d0 + 1e-12), w1 = 1 / (d1 + 1e-12), w2 = i2 >= 0 ? 1 / (d2 + 1e-12) : 0, ws = w0 + w1 + w2;
+      nvSrc.push(vid[i0], vid[i1], vid[i2 >= 0 ? i2 : i1]);
+      nvW.push(w0 / ws, w1 / ws, w2 / ws);
+    }
+    for (let i = 0; i < n; i++) { fixIds.push(vid[i]); fixNormals.push(...normalAt(xs[i], ys[i])); }
+    const idOf = (i) => i < n ? vid[i] : base + (i - n);
+    const ownerTri = (lp.hes[0] / 3) | 0;
+    for (const t of live) { caps.push(idOf(ta[t]), idOf(tb[t]), idOf(tc[t])); capOwner.push(ownerTri); }
+    result.addedTris += live.length;
+    return n - 2;
+  }
+
   // Triangulate one loop flush with its face, using the face's own vertices.
   function capLoop(lp) {
+    if (newVerts && lp.curved) { const done = capCurvedLoop(lp); if (done) return done; }
     const n = lp.hes.length;
     const [ux, uy, uz, vx, vy, vz] = lp.basis;
     const vid = new Int32Array(n), xs = new Float64Array(n), ys = new Float64Array(n);
@@ -879,7 +1103,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
         live.add(ekey(a, b)); live.add(ekey(b, c)); live.add(ekey(c, a));
       }
       for (let i = 0; i < caps.length; i += 3) {
-        const a = wid[caps[i]], b = wid[caps[i + 1]], c = wid[caps[i + 2]];
+        const a = wid[caps[i]] ?? -1, b = wid[caps[i + 1]] ?? -1, c = wid[caps[i + 2]] ?? -1;
         live.add(ekey(a, b)); live.add(ekey(b, c)); live.add(ekey(c, a));
       }
       for (let t = 0; t < T; t++) {
@@ -1105,7 +1329,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
       // the same hole): the opening is closed and the wall goes
       for (const lp of bigLoops) {
         if ((lp.state && lp.state !== 3) || lp.size > Math.min(tb.size * 4, maxSize * 8)) continue;
-        const s0 = rSeed[lp.r], fnx = nx[s0], fny = ny[s0], fnz = nz[s0];
+        const s0 = seedOf(lp), fnx = nx[s0], fny = ny[s0], fnz = nz[s0];
         if (Math.abs(fnx * ax + fny * ay + fnz * az) < 0.995) continue;
         const v0 = I[lp.hes[0]], pd = fnx * P[v0 * 3] + fny * P[v0 * 3 + 1] + fnz * P[v0 * 3 + 2];
         const td = fnx * tb.cx + fny * tb.cy + fnz * tb.cz, half = Math.abs(tb.d1 - tb.d0) / 2 + distTol * 4 + 1e-12;
@@ -1277,8 +1501,99 @@ export function fillFlatHoles(positions, index, opts = {}) {
   result.removed = removed;
   result.caps = Uint32Array.from(caps);
   result.capOwner = Uint32Array.from(capOwner);
+  if (nvSrc.length) {
+    result.newPositions = Float32Array.from(nvPos); result.newSrc = Uint32Array.from(nvSrc); result.newW = Float32Array.from(nvW);
+    result.newNormals = Float32Array.from(nvNormal); result.fixIds = Uint32Array.from(fixIds); result.fixNormals = Float32Array.from(fixNormals);
+  }
   return result;
 }
+
+// z = h(x, y) as a thin plate spline through the points (it passes through each), with its slopes; null when the system is singular.
+function fitSpline(xs, ys, zs) {
+  const n = xs.length;
+  if (n < 4) return null;
+  let L = 0;
+  for (let i = 0; i < n; i++) L = Math.max(L, Math.abs(xs[i]), Math.abs(ys[i]));
+  if (!(L > 0)) return null;
+  const px = new Float64Array(n), py = new Float64Array(n), pz = new Float64Array(n);
+  for (let i = 0; i < n; i++) { px[i] = xs[i] / L; py[i] = ys[i] / L; pz[i] = zs[i] / L; }
+  const phi = (r2) => r2 > 1e-300 ? 0.5 * r2 * Math.log(r2) : 0;       // r^2 ln r
+  const M = n + 3, A = new Float64Array(M * (M + 1));
+  const W = M + 1;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) { const dx = px[i] - px[j], dy = py[i] - py[j]; A[i * W + j] = phi(dx * dx + dy * dy); }
+    A[i * W + i] += 1e-10;
+    A[i * W + n] = 1; A[i * W + n + 1] = px[i]; A[i * W + n + 2] = py[i];
+    A[n * W + i] = 1; A[(n + 1) * W + i] = px[i]; A[(n + 2) * W + i] = py[i];
+    A[i * W + M] = pz[i];
+  }
+  for (let col = 0; col < M; col++) {
+    let p = col;
+    for (let r = col + 1; r < M; r++) if (Math.abs(A[r * W + col]) > Math.abs(A[p * W + col])) p = r;
+    if (!(Math.abs(A[p * W + col]) > 1e-12)) return null;
+    if (p !== col) for (let c = 0; c < W; c++) { const t = A[col * W + c]; A[col * W + c] = A[p * W + c]; A[p * W + c] = t; }
+    const d = A[col * W + col];
+    for (let c = col; c < W; c++) A[col * W + c] /= d;
+    for (let r = 0; r < M; r++) {
+      if (r === col) continue;
+      const k = A[r * W + col];
+      if (k) for (let c = col; c < W; c++) A[r * W + c] -= k * A[col * W + c];
+    }
+  }
+  const wgt = new Float64Array(M);
+  for (let i = 0; i < M; i++) { wgt[i] = A[i * W + M]; if (!Number.isFinite(wgt[i])) return null; }
+  return {
+    h: (x, y) => {
+      const X = x / L, Y = y / L;
+      let s = wgt[n] + wgt[n + 1] * X + wgt[n + 2] * Y;
+      for (let i = 0; i < n; i++) { const dx = X - px[i], dy = Y - py[i]; s += wgt[i] * phi(dx * dx + dy * dy); }
+      return s * L;
+    },
+    hx: (x, y) => {
+      const X = x / L, Y = y / L;
+      let s = wgt[n + 1];
+      for (let i = 0; i < n; i++) { const dx = X - px[i], dy = Y - py[i], r2 = dx * dx + dy * dy; if (r2 > 1e-300) s += wgt[i] * dx * (Math.log(r2) + 1); }
+      return s;
+    },
+    hy: (x, y) => {
+      const X = x / L, Y = y / L;
+      let s = wgt[n + 2];
+      for (let i = 0; i < n; i++) { const dx = X - px[i], dy = Y - py[i], r2 = dx * dx + dy * dy; if (r2 > 1e-300) s += wgt[i] * dy * (Math.log(r2) + 1); }
+      return s;
+    },
+  };
+}
+
+// z = h(x, y) as a quadric through the points (least squares), with its slopes; null when the points do not pin one down.
+function fitQuadric(xs, ys, zs) {
+  const n = xs.length;
+  let L = 0;
+  for (let i = 0; i < n; i++) L = Math.max(L, Math.abs(xs[i]), Math.abs(ys[i]));
+  if (!(L > 0)) return null;
+  const A = []; for (let r = 0; r < 6; r++) A.push(new Float64Array(7));
+  for (let i = 0; i < n; i++) {
+    const x = xs[i] / L, y = ys[i] / L, z = zs[i] / L, f = [x * x, x * y, y * y, x, y, 1];
+    for (let r = 0; r < 6; r++) { for (let c = 0; c < 6; c++) A[r][c] += f[r] * f[c]; A[r][6] += f[r] * z; }
+  }
+  for (let col = 0; col < 6; col++) {
+    let p = col;
+    for (let r = col + 1; r < 6; r++) if (Math.abs(A[r][col]) > Math.abs(A[p][col])) p = r;
+    if (!(Math.abs(A[p][col]) > 1e-9)) return null;
+    const t = A[col]; A[col] = A[p]; A[p] = t;
+    const d = A[col][col];
+    for (let c = col; c < 7; c++) A[col][c] /= d;
+    for (let r = 0; r < 6; r++) if (r !== col) { const k = A[r][col]; if (k) for (let c = col; c < 7; c++) A[r][c] -= k * A[col][c]; }
+  }
+  const k = A.map(r => r[6]);
+  if (k.some(v => !Number.isFinite(v))) return null;
+  return {
+    h: (x, y) => { const X = x / L, Y = y / L; return (k[0] * X * X + k[1] * X * Y + k[2] * Y * Y + k[3] * X + k[4] * Y + k[5]) * L; },
+    curv: 2 * Math.max(Math.abs(k[0]), Math.abs(k[1]), Math.abs(k[2])) / L,       // the largest second slope
+    hx: (x, y) => 2 * k[0] * (x / L) + k[1] * (y / L) + k[3],
+    hy: (x, y) => k[1] * (x / L) + 2 * k[2] * (y / L) + k[4],
+  };
+}
+
 
 // Triangulate a simple polygon given counter-clockwise; returns index triples.
 //

@@ -14,6 +14,14 @@
 //   mixedPieces          closed pieces whose faces disagree with each other
 //   volume               the volume of the closed pieces that point outward
 //
+// With opts.detail the result also carries `detail`: where each fault is, for drawing it (plain arrays; triangle numbers are those of the
+// index as it was given, edges are pairs of corners as x y z x y z in the mesh's own coordinates):
+//   degenerate, sliver, duplicate   triangle numbers
+//   openEdges, nonManifoldEdges, inconsistentEdges   edges (6 numbers each)
+//   inconsistentTris                the triangles on either side of an inconsistent edge
+//   pinched                         the corners (3 numbers each)
+//   insideOutTris                   every triangle of the pieces that are turned inside out
+//
 // How it knows (the parts that make it dependable on CAD output):
 //  - Corners are joined by distance, not by index. A CAD mesh is cut along every face, so one corner of a part is several vertices;
 //    they are welded when they are within 2e-6 of the part's size of each other (or a few float steps, if the part is far from the origin). The search looks into the neighbouring cells of a
@@ -85,8 +93,10 @@ export function checkMesh(positions, index, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
   const vc = Math.floor(positions.length / 3);
   const T0 = index ? Math.floor(index.length / 3) : Math.floor(vc / 3);
+  const L = opts.detail ? { degenerate: [], sliver: [], duplicate: [], openEdges: [], nonManifoldEdges: [], inconsistentEdges: [], inconsistentTris: [], pinched: [], insideOutTris: [] } : null;
   const out = { tris: T0, vertices: vc, welded: 0, degenerate: 0, slivers: 0, duplicate: 0, openEdges: 0, holes: 0, nonManifoldEdges: 0,
     nonManifoldVertices: 0, inconsistent: 0, pieces: 0, closedPieces: 0, insideOut: 0, cavities: 0, mixedPieces: 0, volume: 0, diag: 0 };
+  if (L) out.detail = L;
   if (!T0 || !vc) return out;
 
   // ── 1. the size of the part, and the vertices that are one ─────────────────────────────────────────────────────────────
@@ -101,7 +111,7 @@ export function checkMesh(positions, index, opts = {}) {
   const E3 = T0 * 3;
   const ec = new Uint8Array(E3), et1 = new Int32Array(E3), et2 = new Int32Array(E3), ed1 = new Uint8Array(E3), ed2 = new Uint8Array(E3), ea = new Int32Array(E3), eb = new Int32Array(E3);
   let E = 0;
-  const tv = new Int32Array(T0 * 3);
+  const tv = new Int32Array(T0 * 3), torig = L ? new Int32Array(T0) : null;
   let T = 0;
   const dHead = new Map(), dNext = new Int32Array(T0), sl = new Int32Array(T0), sm = new Int32Array(T0), sh = new Int32Array(T0);
   const sizeBase = N + 1;
@@ -119,19 +129,20 @@ export function checkMesh(positions, index, opts = {}) {
   for (let t0 = 0; t0 < T0; t0++) {
     const i0 = index ? index[t0 * 3] : t0 * 3, i1 = index ? index[t0 * 3 + 1] : t0 * 3 + 1, i2 = index ? index[t0 * 3 + 2] : t0 * 3 + 2;
     const a = ids[i0], b = ids[i1], c = ids[i2];
-    if (a === b || b === c || a === c) { out.degenerate++; continue; }
+    if (a === b || b === c || a === c) { out.degenerate++; if (L) L.degenerate.push(t0); continue; }
     const ux = positions[i1 * 3] - positions[i0 * 3], uy = positions[i1 * 3 + 1] - positions[i0 * 3 + 1], uz = positions[i1 * 3 + 2] - positions[i0 * 3 + 2];
     const vx = positions[i2 * 3] - positions[i0 * 3], vy = positions[i2 * 3 + 1] - positions[i0 * 3 + 1], vz = positions[i2 * 3 + 2] - positions[i0 * 3 + 2];
     const sh2 = flatness(ux, uy, uz, vx, vy, vz);
-    if (sh2 <= o.flat) { out.degenerate++; continue; }
-    if (sh2 < o.sliver) out.slivers++;
+    if (sh2 <= o.flat) { out.degenerate++; if (L) L.degenerate.push(t0); continue; }
+    if (sh2 < o.sliver) { out.slivers++; if (L) L.sliver.push(t0); }
     // the same triangle again (either way round)?
     const lo = Math.min(a, b, c), hi = Math.max(a, b, c), mid = a + b + c - lo - hi;
     const dh = Math.imul(lo, 73856093) ^ Math.imul(mid, 19349663) ^ Math.imul(hi, 83492791);
     let dup = false, q = dHead.get(dh);
     while (q !== undefined && q !== -1) { if (sl[q] === lo && sm[q] === mid && sh[q] === hi) { dup = true; break; } q = dNext[q]; }
-    if (dup) { out.duplicate++; continue; }
+    if (dup) { out.duplicate++; if (L) L.duplicate.push(t0); continue; }
     const t = T++;
+    if (torig) torig[t] = t0;
     tv[t * 3] = a; tv[t * 3 + 1] = b; tv[t * 3 + 2] = c;
     sl[t] = lo; sm[t] = mid; sh[t] = hi; const hd = dHead.get(dh); dNext[t] = hd === undefined ? -1 : hd; dHead.set(dh, t);
     edge(a, b, t); edge(b, c, t); edge(c, a, t);
@@ -149,6 +160,7 @@ export function checkMesh(positions, index, opts = {}) {
   const incEdge = new Uint8Array(E), nonEdge = new Uint8Array(E), openEdge = new Uint8Array(E);
   for (let e = 0; e < E; e++) {
     const c = ec[e];
+    if (L) { const sink = c === 1 ? L.openEdges : c > 2 ? L.nonManifoldEdges : ed1[e] === ed2[e] ? L.inconsistentEdges : null; if (sink) { const pa = P(ea[e]), pb = P(eb[e]); sink.push(positions[pa], positions[pa + 1], positions[pa + 2], positions[pb], positions[pb + 1], positions[pb + 2]); if (c === 2 && sink === L.inconsistentEdges) L.inconsistentTris.push(torig[et1[e]], torig[et2[e]]); } }
     if (c === 1) { out.openEdges++; openEdge[e] = 1; const ra = bfind(ea[e]), rb = bfind(eb[e]); if (ra !== rb) bp[ra] = rb; bUsed[ea[e]] = bUsed[eb[e]] = 1; }
     else if (c > 2) { out.nonManifoldEdges++; nonEdge[e] = 1; }
     else {
@@ -164,7 +176,7 @@ export function checkMesh(positions, index, opts = {}) {
       const v = tv[t * 3 + k], r = cfind(t * 3 + k);
       if (first[v] === -1) first[v] = r; else if (first[v] !== r) bad[v] = 1;
     }
-    let n = 0; for (let v = 0; v < N; v++) n += bad[v]; out.nonManifoldVertices = n;
+    let n = 0; for (let v = 0; v < N; v++) { n += bad[v]; if (L && bad[v]) { const p = P(v); L.pinched.push(positions[p], positions[p + 1], positions[p + 2]); } } out.nonManifoldVertices = n;
   }
 
   // ── 4. the pieces: how many, which are closed, which point inward ──────────────────────────────────────────────────────────
@@ -189,7 +201,7 @@ export function checkMesh(positions, index, opts = {}) {
   for (let v = 0; v < N; v++) if (cTris[v] > 0) roots.push(v);
   out.pieces = roots.length;
   const volEps = diag * diag * diag * 1e-12;
-  const negative = [], outward = new Set();
+  const negative = [], outward = new Set(), insideRoots = new Set();
   for (const r of roots) {
     const closed = cOpen[r] === 0 && cNon[r] === 0;
     if (!closed) continue;
@@ -220,8 +232,9 @@ export function checkMesh(positions, index, opts = {}) {
         const w = f * (dirx * qx + diry * qy + dirz * qz); if (w < 0 || u + w > 1) continue;
         if (f * (e2x * qx + e2y * qy + e2z * qz) > diag * 1e-9) hits++;
       }
-      if (hits & 1) out.cavities++; else out.insideOut++;
+      if (hits & 1) out.cavities++; else { out.insideOut++; if (L) insideRoots.add(r); }
     }
   }
+  if (L && insideRoots.size) for (let t = 0; t < T; t++) if (insideRoots.has(vfind(tv[t * 3]))) L.insideOutTris.push(torig[t]);
   return out;
 }
