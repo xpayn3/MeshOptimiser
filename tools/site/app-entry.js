@@ -440,6 +440,10 @@ window.labApps = [
           ['Delete small parts', 'Screws and clips too small to see, gone. A slider and a preview show what goes.', 'delete-small-parts'],
           ['Repair mesh', 'Doubled points, empty triangles and flipped faces, fixed.', 'cleanup'],
           ['Stacked copies', 'Parts drawn twice in the same place, found and removed.', 'stacked-copies'],
+          ['Remove fillets', 'Small rounds and chamfers taken off a STEP part. The faces on either side are extended until they meet, and the sharp edge is back.', 'remove-fillets'],
+          ['Remove thickness', 'A thin wall becomes the one surface it stands for: a pipe keeps its outside, a bent sheet keeps one face.', 'remove-thickness'],
+          ['Remove lettering and logos', 'Raised or engraved text and logos, however the CAD program made them, gone. The surface underneath stays as it was.', 'lettering'],
+          ['Fill solid round', 'A gear, a fan with fins or a clutch with cooling ribs, made one solid round shape that fills its whole outline. A good stand-in seen from a distance.', 'round-parts'],
         ],
       },
       // the search on the page (see searchDemo in tools/site/build-app-site.js): [name, shortcut / note, detail]

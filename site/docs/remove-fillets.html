@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preload" href="../fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="../fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="../site.css?v=524" />
+  <link rel="stylesheet" href="../site.css?v=533" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -164,6 +164,7 @@
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#look">Look and arrange</a></p>
         <h1>Remove fillets and chamfers</h1>
         <p class="lead">Take the small rounds and chamfers off a part that came from a STEP, and get its sharp edges back. The faces on either side are extended until they meet.</p>
+        <figure class="star kb-anim"><svg role="img" aria-label="MeshOptimiser: Remove fillets" style="--tile-c:#fbbf24" class="tile-art clip-art art-fillets" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M86.5 70 L159.2 28 L273.5 94 L214.6 128 M187.1 128.1 L86.5 70 M273.5 94 L273.5 130 M86.5 70 L86.5 106 M86.5 106 L187.1 164.1 M214.6 164 L273.5 130"/><path class="art-old" d="M214.6 128 L211.6 129.4 L208.3 130.5 L204.6 131.1 L200.8 131.3 L197 131.1 L193.4 130.5 L190 129.5 L187.1 128.1 M214.6 164 L211.6 165.4 L208.3 166.5 L204.6 167.1 L200.8 167.3 L197 167.1 L193.4 166.5 L190 165.5 L187.1 164.1 M214.6 128 L214.6 164 M187.1 128.1 L187.1 164.1"/><path class="art-m-draw art-hot" pathLength="1" d="M214.6 128 L200.8 136 L187.1 128.1 M200.8 136 L200.8 172 M214.6 164 L200.8 172 L187.1 164.1"/></svg></figure>
         <div class="kb-body">
           <p>A CAD model softens its edges: a fillet is a narrow rounded face between two others, a chamfer a narrow flat one. For a picture on the web they cost a lot of triangles and show little. This tool takes them off and makes the edge sharp again: the two faces the blend ran between are extended until they meet, and the blend is gone. Where three fillets meet at a corner, the patch between them goes too and the corner is the point where the three faces meet.</p>
           <p>It needs the CAD faces, so it works on a part from a STEP file opened with them (see <a href="../docs/cad-edges.html">CAD faces and edges</a>), or from a scene saved from one. The CAD faces say what each face is and which faces meet tangent, which is how a fillet is told from a small cylinder that is part of the shape. A part without them says so.</p>
