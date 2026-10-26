@@ -4,6 +4,16 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.37.2
+
+Released 26 Oct 2026.
+
+v0.37.1 added a History card, fault overlays on the model and a rework of Animate and Settings. v0.37.2 is a review of that code: it fixes eight faults found by reading it, among them a texture-size export that could leave a shrunken picture on the graphics card, a Model mode that opened on a library shape, and WebP that made normal maps lossy.
+
+**Fixes**
+
+- ![fix][fix] **Review of v0.37.1: eight faults found by reading the code.** (1) *Texture size* in the export window swapped the images of the live textures while the file was written, so a texture uploaded to the graphics card in that moment kept the small copy; the textures are now uploaded again from their own pictures afterwards. (2) The History card tagged "Opened" as *Saved* on a new, blank scene; a new scene has no tag now (a file just opened still has it: it is as saved). (3) The fault overlays of the Model inspector built one set of buffers for every copy of a mesh; the copies share one set. (4) The overlay of a part shown as a copy stayed where it was drawn first; it follows its copy at every frame now. (5) Edit mesh could still be used on a library shape when it was already open; it closes (with the "Bake geo first" note) when one is picked. (6) *Pictures as WebP* made the normal, roughness and other data maps lossy too; only the colour pictures are written as WebP now. (7) Animate noted where it had put each part with a second world-matrix update; it reuses the one it has just made. (8) The shadows' start-up reset also ran when the page finished loading and could switch off a choice made before that; it runs once. Not changed: a part moved in the very frame the explode amount changes is still not adopted (one pointer cannot do both). Not checked: the overlay of a part shown as a copy moving with its copy, by eye.
+
 ## v0.37.1
 
 Released 25 Oct 2026.

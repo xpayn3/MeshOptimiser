@@ -309,6 +309,8 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.37.2** — A review of v0.37.1's code: eight faults fixed, among them a texture-size export that could leave a shrunken picture on the graphics card, a Model mode that opened on a library shape, and WebP that made normal maps lossy.
+
 **v0.37.1** — A History card that goes back to any step, a Model inspector that draws the faults of a mesh on the model, an Animate window that keeps what you move and copies its clips, Settings built as cards with a say in what a scene file keeps, right-click menus on the toolbar, and 58 fixes.
 
 - ![new][new] **History card:** every step Ctrl+Z goes back to, newest first; a click puts the model at any of them; Clear history asks with a slider.
