@@ -6,6 +6,7 @@
 // there, so a texture painted on later is judged again.
 
 const JPEG = 'image/jpeg', PNG = 'image/png';
+const COLOUR_KEYS = new Set(['map', 'emissiveMap', 'sheenColorMap', 'specularColorMap']);      // the material slots that hold colours; the others hold numbers
 
 // The format a file name or URL says, or '' when it says none (blob: URLs carry no extension; the name is asked first).
 export function mimeFromName(s) {
@@ -42,12 +43,13 @@ export function imageHasAlpha(img) {
 // force ('image/webp', say) is written even where a picture already says its format; undo() puts the old one back.
 export function setExportTextureFormats(root, { hasAlpha = imageHasAlpha, force = '' } = {}) {
   const uses = new Map();                                     // texture -> is it a colour map somewhere
-  const add = (t, colour) => { if (t && t.isTexture && t.image) uses.set(t, uses.get(t) || colour); };
+  const dataUse = new Set();                                  // textures that carry numbers somewhere (normals, roughness, occlusion, ...): never lossy
+  const add = (t, colour, key) => { if (t && t.isTexture && t.image) { uses.set(t, uses.get(t) || colour); if (!COLOUR_KEYS.has(key)) dataUse.add(t); } };
   root.traverse((o) => {
     if (!o.material) return;
     for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
       if (!m) continue;
-      for (const k of Object.keys(m)) add(m[k], k === 'map');
+      for (const k of Object.keys(m)) add(m[k], k === 'map', k);
     }
   });
   const colourImage = new Set();
@@ -55,7 +57,8 @@ export function setExportTextureFormats(root, { hasAlpha = imageHasAlpha, force 
   const byImage = new Map(), changed = [];
   for (const [t] of uses) {
     const u = t.userData || (t.userData = {});
-    if (force) { changed.push([t, u.mimeType]); u.mimeType = force; continue; }
+    if (force && !dataUse.has(t)) { changed.push([t, u.mimeType]); u.mimeType = force; continue; }      // (a forced format is for the colour pictures only)
+    if (force && u.mimeType) continue;
     if (u.mimeType) continue;                                 // (GLTFLoader's: the format the glTF held it in)
     let mime = byImage.get(t.image);
     if (!mime) {
@@ -106,5 +109,6 @@ export function shrinkExportTextures(root, max, { makeCanvas = null, stats = nul
       }
     }
   });
-  return () => { for (const [t, im] of undo) t.image = im; };
+  // (the pictures are the viewer's own textures: one that was uploaded to the graphics card while it held the small copy would keep it, so each is uploaded again from its own picture)
+  return () => { for (const [t, im] of undo) { t.image = im; t.needsUpdate = true; } };
 }

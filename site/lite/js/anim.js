@@ -389,13 +389,13 @@ return (() => {
   const PLACED = new Map(), MOVED = new Map();
   let placedEx = '';
   const sameM = (x, y, eps) => { const p = x.elements, q = y.elements; for (let i = 0; i < 16; i++) if (Math.abs(p[i] - q[i]) > eps * (1 + Math.abs(q[i]))) return false; return true; };
-  const rootPoseOf = (mesh, id, out) => {
-    mesh.updateWorldMatrix(true, false);
+  const rootPoseOf = (mesh, id, out, fresh) => {
+    if (!fresh) mesh.updateWorldMatrix(true, false);      // (fresh: its world matrix was just made, by place())
     out.multiplyMatrices(FR.Ri, mesh.matrixWorld);
     if (id != null && FR.exploded) { exOff(id, OFF); out.premultiply(M1.makeTranslation(-OFF.x, -OFF.y, -OFF.z)); }
     return out;
   };
-  const notePlaced = (id, mesh) => { PLACED.set(id, rootPoseOf(mesh, id, PLACED.get(id) || new THREE.Matrix4())); placedEx = FR.exSig; };
+  const notePlaced = (id, mesh) => { PLACED.set(id, rootPoseOf(mesh, id, PLACED.get(id) || new THREE.Matrix4(), true)); placedEx = FR.exSig; };
   const forgetPlaced = (rec) => { for (const id of rec.rests.keys()) PLACED.delete(id); rec.lastG = rec.lastPW = null; };
   const idsOf = (rec) => rec.kind === 'part' ? [rec.partId] : rec.members;
   function detectMoved(recs) {

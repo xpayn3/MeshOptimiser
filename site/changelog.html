@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.37.1." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.37.2." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.37.1." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.37.2." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -54,9 +54,22 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.37.2">
+          <div class="log-head">
+            <strong>v0.37.2</strong><em>Latest</em><span>26 Oct 2026</span><span>8 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>A review of v0.37.1’s code: eight faults found by reading it, fixed.</p>
+            <ul>
+              <li><b class="is-fix">Fix</b><span>Texture size in the export window no longer leaves a shrunken picture on the graphics card, and Pictures as WebP keeps normal and other data maps lossless.</span></li>
+              <li><b class="is-fix">Fix</b><span>Edit mesh closes when a library shape is picked (Bake geo first), and a new blank scene is no longer tagged as saved in the History card.</span></li>
+              <li><b class="is-fix">Fix</b><span>The fault overlays of the Model inspector share their buffers between copies of a mesh and follow their copy; Animate does less work per frame.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.37.1">
           <div class="log-head">
-            <strong>v0.37.1</strong><em>Latest</em><span>25 Oct 2026</span><span>58 fixes</span>
+            <strong>v0.37.1</strong><span>25 Oct 2026</span><span>58 fixes</span>
           </div>
           <div class="log-body">
             <p>A History card that goes back to any step, a Model inspector that draws the faults of a mesh on the model, an Animate window that keeps what you move and copies its clips, and Settings built as cards.</p>
@@ -946,7 +959,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.37.1</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.37.2</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

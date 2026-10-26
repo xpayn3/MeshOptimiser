@@ -72,6 +72,14 @@ export function build(THREE, geometry, detail, kind, color) {
   return mark(group, '__geo_' + kind);
 }
 
+// A copy of a built overlay for one more part: the buffers and materials are shared with it, only the nodes are new. (Object3D.clone does not
+// carry the no-pick override, so it is put back.)
+export function instance(tpl) {
+  const c = tpl.clone();
+  c.traverse((o) => { o.raycast = () => {}; o.frustumCulled = false; o.userData.noPick = true; o.userData.noExport = true; });
+  return c;
+}
+
 // Frees what an overlay made (its own buffers and materials; the position attribute of a filled one belongs to the mesh).
 export function dispose(obj) {
   obj.traverse((o) => {

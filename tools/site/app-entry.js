@@ -735,7 +735,7 @@ window.labApps = [
       ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
       ['Stacked copies', 1, [], ['stacked-copies']],
     ],
-    stats: [['Version', '0.37.1'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
+    stats: [['Version', '0.37.2'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',
       '400 identical bolts, 80 duplicate brackets, half a million broken triangles. MeshOptimiser keeps each repeat once, rebuilds the bad geometry and drops what you can’t see.',
@@ -1055,7 +1055,14 @@ window.labApps = [
     changelog: {
       link: 'https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md',
       versions: [
-        { version: '0.37.1', fixes: 58, date: '25 Oct 2026 · 14:40', latest: true,
+        { version: '0.37.2', fixes: 8, date: '26 Oct 2026 · 09:03', latest: true,
+          summary: 'A review of v0.37.1’s code: eight faults found by reading it, fixed.',
+          items: [
+            ['Fix', 'Texture size in the export window no longer leaves a shrunken picture on the graphics card, and Pictures as WebP keeps normal and other data maps lossless.'],
+            ['Fix', 'Edit mesh closes when a library shape is picked (Bake geo first), and a new blank scene is no longer tagged as saved in the History card.'],
+            ['Fix', 'The fault overlays of the Model inspector share their buffers between copies of a mesh and follow their copy; Animate does less work per frame.'],
+          ] },
+        { version: '0.37.1', fixes: 58, date: '25 Oct 2026 · 14:40',
           summary: 'A History card that goes back to any step, a Model inspector that draws the faults of a mesh on the model, an Animate window that keeps what you move and copies its clips, and Settings built as cards.',
           items: [
             ['New', 'History card: every step Ctrl+Z goes back to, newest first; a click puts the model at any of them, and Clear history asks with a slider.'],

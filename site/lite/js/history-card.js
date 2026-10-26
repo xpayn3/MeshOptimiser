@@ -82,7 +82,7 @@ export function installHistoryCard(app) {
     }
     const base = !H;
     html += `<button type="button" class="hist-row hist-base${base ? ' is-now' : ''}" role="option" aria-selected="${base}" data-n="0" title="How the scene was when it was opened">` +
-      `<i data-lucide="flag"></i><span class="hist-name">Opened</span>${saved === null ? '<span class="hist-tag" title="The scene was saved here">Saved</span>' : ''}<span class="hist-meta"></span><span class="hist-time">${base ? 'now' : ''}</span></button>`;
+      `<i data-lucide="flag"></i><span class="hist-name">Opened</span>${saved === null && app.wasSaved && app.wasSaved() ? '<span class="hist-tag" title="The scene was saved here">Saved</span>' : ''}<span class="hist-meta"></span><span class="hist-time">${base ? 'now' : ''}</span></button>`;
     return { html, all, H };
   }
 

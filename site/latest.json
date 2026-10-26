@@ -1,31 +1,30 @@
 {
  "schema": 1,
  "stable": {
-  "version": "0.37.1",
-  "date": "2026-10-25",
-  "headline": "A History card that goes back to any step, a Model inspector that draws faults on the model, an Animate window that keeps what you move and copies clips, Settings as cards, and 58 fixes.",
+  "version": "0.37.2",
+  "date": "2026-10-26",
+  "headline": "A review of v0.37.1's code: eight faults fixed, among them a texture-size export, a Model mode on library shapes and lossy normal maps.",
   "notes": [
-   "History card: every step Ctrl+Z goes back to, and a click goes to any of them",
-   "Model inspector redrawn; Show in the view draws open edges, wrong-way faces, empty and doubled triangles on the model",
-   "Animate: positions in mm, copy and paste of clips, a part you move keeps its place, Space plays anywhere",
-   "Settings as cards, and Saved in a scene file says what a file keeps (shadows start off every time)",
-   "Right-click menus on the Animate, Library, Materials, search and \"...\" buttons; texture size and WebP when exporting",
-   "58 fixes: Select similar, the floating Materials window, a black view while resizing, Camera settings padding"
+   "Texture size in the export window no longer leaves a shrunken picture on the graphics card",
+   "Pictures as WebP keeps normal and other data maps lossless",
+   "Edit mesh closes when a library shape is picked: Bake geo first",
+   "Fault overlays share their buffers between copies of a mesh and follow their copy",
+   "8 fixes in all, found by reading the code of v0.37.1"
   ],
   "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
   "archive": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.1/meshoptimiser-app-0.37.1.zip",
-   "sha256": "f13e39b582420b601890af85cda55675b651969c181045bf4f2a7ad7a4646d39",
-   "size": 12986916
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.2/meshoptimiser-app-0.37.2.zip",
+   "sha256": "72a1370edb1adf1bea2699e6f0719466be002acd7bf9ac948c2157cee96ca816",
+   "size": 12987723
   },
   "requirements_sha256": "e3af5e22260095931b56d0d0d5c9215cd98b7540739be7eda417276748a7a322",
   "requirements_changed": false,
   "launcher": 4,
   "min_from": "",
   "installer": {
-   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.1/MeshOptimiser-v0.37.1.zip",
-   "sha256": "8e5915d934d826714c8bb733e5e8b0abdc6d46d9ca224965bfb2b3617995cc82",
-   "size": 13030100
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.2/MeshOptimiser-v0.37.2.zip",
+   "sha256": "8df71d3cd975dfc9c7fbe1b98c8f5536f665ca28769184105ce78eb63f6129bb",
+   "size": 13030988
   }
  }
 }
