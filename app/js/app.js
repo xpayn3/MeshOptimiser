@@ -10,7 +10,7 @@ import { installRoundCard } from './round-card.js?v=22';
 import { installBakeCard } from './bake-card.js?v=5';
 import { installUvSplit } from './uv-split.js?v=28';
 import { installDecimateCard } from './decimate-card.js?v=3';
-import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
+import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=9';
 import { findFloating } from './floating.js?v=1';
 import { fillRoundGrooves, outlineRevolve, sweepBelt } from './revolve.js?v=8';
 import { voxelRemesh } from './voxel.js?v=4';
@@ -197,6 +197,7 @@ if (typeof window !== 'undefined') {
     get _groupPivotAct() { return _groupPivotAct; },
     get _groupOrigins() { return _groupOrigins; },
     get _groupRotations() { return _groupRotations; },
+    get _transformPanelRefresh() { return _transformPanelRefresh; },
     get buildExportRoot() { return buildExportRoot; },
     get _saveSceneImpl() { return _saveSceneImpl; },
     get _exportFbxBinary() { return _exportFbxBinary; },
@@ -1192,6 +1193,7 @@ const _MeshMark = (() => {
 // shared tab list, so every tab's status bar (the Tasks chip, see _Tabs) can show the tasks of all the tabs and cancel one.
 const _Tasks = (() => {
   const m = new Map();
+  const longMs = () => (+_Prefs.get('notifyAfterSec') || 10) * 1000;      // a job this long is worth a notification when it ends in the background (Settings › General › Notifications)
   let sig = '';
   const publish = () => {
     const list = [...m.values()].map(t => ({ id: t.id, label: t.label, detail: t.detail, pct: t.pct, t0: t.t0, cancel: !!t.cancel, passive: !!t.passive }));
@@ -1201,12 +1203,29 @@ const _Tasks = (() => {
     try { _Tabs.report({ tasks: list }); } catch (_) {}
   };
   return {
-    set(id, patch) { const t = m.get(id) || { id, t0: Date.now(), label: '', detail: '', pct: null, cancel: null }; Object.assign(t, patch); m.set(id, t); publish(); },
-    end(id) { if (m.delete(id)) publish(); },
+    set(id, patch) {
+      const t = m.get(id) || { id, t0: Date.now(), label: '', detail: '', pct: null, cancel: null }; Object.assign(t, patch); m.set(id, t); publish();
+      // A job that has run a while while the window is in front: ask once to be allowed to tell the user when one ends in the background.
+      try { if (!t.passive && !t.asked && _Prefs.get('notifyJobs') !== false && Date.now() - t.t0 > longMs() && typeof Notification !== 'undefined' && Notification.permission === 'default' && !document.hidden) { t.asked = true; Notification.requestPermission(); } } catch (_) {}
+    },
+    end(id) {
+      const t = m.get(id);
+      if (m.delete(id)) {
+        publish();
+        // A long job that ends while the window is hidden or not in front: a system notification, so the user need not watch it.
+        try {
+          if (t && !t.passive && !t.cancelled && _Prefs.get('notifyJobs') !== false && Date.now() - t.t0 > longMs() && typeof Notification !== 'undefined' && Notification.permission === 'granted' && (document.hidden || !document.hasFocus())) {
+            const secs = Math.round((Date.now() - t.t0) / 1000), took = secs >= 90 ? Math.round(secs / 60) + ' min' : secs + ' s';
+            const n = new Notification('MeshOptimiser', { body: (t.label || 'A job') + ' ended after ' + took + '.', tag: 'mo-task-' + id, silent: false });
+            n.onclick = () => { try { window.focus(); window.top && window.top.focus(); } catch (_) {} n.close(); };
+          }
+        } catch (_) {}
+      }
+    },
     // (a passive task only shows progress: nothing is being made that an undo could cross, so it does not hold undo and redo back)
     busy() { for (const t of m.values()) if (!t.passive) return true; return false; },
     list() { return [...m.values()].map(t => ({ id: t.id, label: t.label, passive: !!t.passive })); },
-    cancel(id) { const t = m.get(id); if (t && t.cancel) { try { t.cancel(); } catch (e) { console.warn('[tasks] cancel:', e); } } },
+    cancel(id) { const t = m.get(id); if (t && t.cancel) { t.cancelled = true; try { t.cancel(); } catch (e) { console.warn('[tasks] cancel:', e); } } },
   };
 })();
 window.__moCancelTask = (id) => _Tasks.cancel(id);
@@ -1754,7 +1773,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=87', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=89', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -3643,6 +3662,9 @@ const _Prefs = (() => {
     dynPlaceHead: false,             // Dynamic place: a bolt goes in by its shank and shows only its head
     shareDockHeight: true,           // Materials, Library and Animate keep one height (off: each has its own)
     warnUnsaved: true,               // ask before the window closes while a model is open or changes are not saved
+    notifyJobs: true,                // a long job that ends while the window is in the background raises a system notification
+    notifyAfterSec: 10,              // how long a job has to run to count as long (seconds)
+    notifyTitle: true,               // the window's title starts with the percent of the job that is running
     undoMax: 200,                    // how many steps Undo goes back
     autoRestoreSession: true,
     autoFitOnLoad: true,
@@ -4458,6 +4480,11 @@ const _Settings = (() => {
       _toggleRow('set-warn-unsaved', 'Warn before closing with a model open', p.warnUnsaved !== false, 'Closing the tab (Ctrl+W) or reloading asks first while a model is open or a scene has changes that are not saved. The question is the browser\'s own: a page cannot cancel Ctrl+W itself.') +
       `<div class="set-row set-stack"><span>Undo history<span class="set-help">How many steps Ctrl+Z can go back. A longer history uses more memory.</span></span>${_chipsPref('undoMax', [['Short', 50], ['Normal', 200], ['Long', 500]], p.undoMax || 200)}</div>` +
       _toggleRow('set-auto-empty', 'Delete groups when they become empty', p.autoDeleteEmptyGroups === true, 'Off: a group you empty stays in the hierarchy, marked “empty”, until you delete it.') +
+      _group('Notifications') +
+      _toggleRow('set-notify-jobs', 'Tell me when a long job ends', p.notifyJobs !== false, 'When Reduce, Remove lettering, Voxel remesh, a load or another long job ends while this window is hidden or not in front, a notification says so. Click it to come back. Nothing is shown while you are looking at the window.') +
+      `<div class="set-row set-stack"><span>A job is long after<span class="set-help">Shorter jobs end without a notification.</span></span>${_chipsPref('notifyAfterSec', [['5 s', 5], ['10 s', 10], ['30 s', 30], ['1 min', 60]], p.notifyAfterSec || 10)}</div>` +
+      _toggleRow('set-notify-title', 'Show progress in the window title', p.notifyTitle !== false, 'While a job with a known progress runs, the title starts with its percent (42% Engine). It shows in the title bar and in the tooltip of the taskbar button, so you can follow a job from another window.') +
+      (() => { const st = (typeof Notification === 'undefined') ? 'none' : Notification.permission; return `<div class="set-row set-action"><span>Browser permission<span class="set-help" id="set-notify-help">${st === 'granted' ? 'Notifications are allowed.' : st === 'denied' ? 'The browser has blocked notifications for this app. Allow them in the browser\'s site settings (the lock or app icon in the title bar), then reload.' : st === 'none' ? 'This browser cannot show notifications.' : 'The browser asks the first time a long job runs. You can allow it here instead.'}</span></span>${st === 'denied' || st === 'none' ? '' : `<button class="btn" id="set-notify-btn">${st === 'granted' ? 'Send a test' : 'Allow'}</button>`}</div>`; })() +
       _group('Recovery') +
       `<div class="set-row set-stack"><span>Keep a recovery copy<span class="set-help">While a scene has changes that are not saved, a copy of it is kept inside this browser, only when something changed and never while you are dragging. If the app crashes, it offers the scene back the next time it starts. Closing or reloading on purpose does not bring it back, and saving clears the copy. Your files are never touched. A big scene takes a moment to copy, so it is copied less often.</span></span>${_chipsPref('autosaveMin', [['Off', 0], ['Every minute', 1], ['2 minutes', 2], ['5 minutes', 5]], p.autosaveMin ?? 2)}</div>` +
       _group('New scenes') +
@@ -4556,7 +4583,7 @@ const _Settings = (() => {
     [
       ['set-sv-camera', 'saveCamera'], ['set-sv-display', 'saveDisplay'], ['set-sv-lights', 'saveLights'], ['set-sv-shadows', 'saveShadows'], ['set-sv-units', 'saveUnits'], ['set-sv-parts', 'saveParts'], ['set-sv-explode', 'saveExplode'], ['set-sv-anim', 'saveAnim'], ['set-sv-notes', 'saveNotes'],
       ['set-splash', 'splashOnStart'], ['set-sounds', 'uiSounds'], ['set-welcome', 'welcomeOnBoot'], ['set-restore', 'autoRestoreSession'], ['set-autofit', 'autoFitOnLoad'],
-      ['set-confirm', 'confirmDestructive'], ['set-share-dock-h', 'shareDockHeight'], ['set-warn-unsaved', 'warnUnsaved'], ['set-auto-empty', 'autoDeleteEmptyGroups'], ['set-zoom-cursor', 'zoomToCursor'], ['set-hover-link', 'hoverLink'], ['set-orbit-invert', 'orbitInvert'], ['set-orbit-limit', 'orbitLimit'], ['set-offscreen', 'offscreenArrow'],
+      ['set-confirm', 'confirmDestructive'], ['set-share-dock-h', 'shareDockHeight'], ['set-warn-unsaved', 'warnUnsaved'], ['set-notify-jobs', 'notifyJobs'], ['set-notify-title', 'notifyTitle'], ['set-auto-empty', 'autoDeleteEmptyGroups'], ['set-zoom-cursor', 'zoomToCursor'], ['set-hover-link', 'hoverLink'], ['set-orbit-invert', 'orbitInvert'], ['set-orbit-limit', 'orbitLimit'], ['set-offscreen', 'offscreenArrow'],
     ].forEach(([id, key]) => {
       $s(id)?.addEventListener('change', e => {
         _Prefs.set(key, e.target.checked);
@@ -4566,6 +4593,16 @@ const _Settings = (() => {
         if (key === 'orbitInvert' || key === 'orbitLimit') { try { _applyCameraFeel(); if (key === 'orbitLimit' && controls) controls.update(); requestRender(); } catch (_) {} }
         if (key === 'hoverLink' && !e.target.checked) { try { window.__moHoverLink && window.__moHoverLink.off(); } catch (_) {} }
       });
+    });
+    $s('set-notify-btn')?.addEventListener('click', async (e) => {
+      const b = e.currentTarget, help = $s('set-notify-help');
+      try {
+        if (Notification.permission === 'default') await Notification.requestPermission();
+        if (Notification.permission === 'granted') {
+          new Notification('MeshOptimiser', { body: 'This is how a finished job will look.' });
+          b.textContent = 'Send a test'; if (help) help.textContent = 'Notifications are allowed.';
+        } else if (Notification.permission === 'denied') { b.remove(); if (help) help.textContent = 'The browser has blocked notifications for this app. Allow them in the site settings of the browser (the lock or app icon in the title bar), then reload.'; }
+      } catch (_) {}
     });
     $s('set-state')?.addEventListener('click', () => { try { _Settings.hide(); } catch (_) {} _Diag.open(); });
     $s('set-unstick')?.addEventListener('click', () => _unstick());
@@ -5411,7 +5448,8 @@ const _Actions = (() => {
     { id:'newscene',     group:'File',       label:'New scene',                  kbd:'Alt+N', alt:'Ctrl+N', run: () => { try { newScene(); } catch (_) {} } },
     { id:'open',         group:'File',       label:'Open file…',                 kbd:'Ctrl+O', run: () => _openWithPicker() },
     { id:'import',       group:'File',       label:'Import…',                    kbd:'Ctrl+Shift+O', run: () => _importWithPicker() },
-    { id:'savescene',    group:'File',       label:'Save scene…',                kbd:'Ctrl+S', run: _click('btn-save-scene') },
+    { id:'savescene',    group:'File',       label:'Save scene',                 kbd:'Ctrl+S', words:'save over the file write', run: _click('btn-save-scene') },
+    { id:'savesceneas',  group:'File',       label:'Save scene as…',             kbd:'Ctrl+Shift+S', words:'save as new name copy another file', run: () => { if (state._sceneActive) saveScene(true); } },
     { id:'dupscene',     group:'File',       label:'Duplicate scene',            run: () => _Tabs.duplicate() },
     { id:'newwindow',    group:'File',       label:'New window',                 run: () => _openNewWindow() },
     { id:'closeall',     group:'File',       label:'Close all scenes',           kbd:'Ctrl+Shift+F4', run: () => _Tabs.closeAll() },
@@ -5844,7 +5882,7 @@ const _CmdK = (() => {
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
   const NEED_SEL = new Set(['lettering', 'fillGrooves', 'fillGroovesOutline', 'beltRibs', 'cleanProfile', 'voxelRemesh', 'closeCracks', 'removeSlivers', 'patchHoles', 'remeshEvenly', 'smoothSurface', 'convexHull', 'convexPieces', 'mergeBodies', 'booleanCard', 'unionParts', 'subtractParts', 'intersectParts', 'quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'axisCard', 'axisToBottom', 'axisToTop', 'axisToOrigin', 'axisToSel', 'objToOrigin', 'axisWorld', 'axisParent', 'axisResetScale', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
-  const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
+  const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'savesceneas', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
     'flagSliver', 'isolateSmall', 'deleteSmall', 'smallParts', 'splitAll', 'split', 'fillHoles', 'removeBlends', 'roundFaces', 'removeThickness', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
   function _cmdOff(a) {
@@ -6983,6 +7021,9 @@ window.addEventListener('keydown', e => {
     }
     if (e.shiftKey && (e.key === 'o' || e.key === 'O')) {
       e.preventDefault(); try { _importWithPicker(); } catch (_) {} return;
+    }
+    if (e.shiftKey && (e.key === 's' || e.key === 'S')) {
+      if (state._sceneActive) { e.preventDefault(); saveScene(true); return; }
     }
     if (!e.shiftKey && (e.key === 's' || e.key === 'S')) {
       // Only intercept Ctrl+S when there's a scene to save — otherwise let
@@ -8236,6 +8277,9 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
     center = new THREE.Vector3();
     parts[0].mesh.getWorldPosition(center);
   }
+  // A single part that came with a pivot of its own (a file from Cinema 4D, Blender, Maya: the object's axis, set by hand) keeps the
+  // gizmo on that axis instead of the middle of its box. Parts without one (STEP, the rest) keep the middle.
+  if (!centerOverride && parts.length === 1 && parts[0]._filePivot) parts[0].mesh.getWorldPosition(center);
   // For tree group selections, caller passes the DIRECT-parts centroid so the
   // gizmo anchor stays stable when child sub-groups are moved.
   if (centerOverride) center = centerOverride;
@@ -10453,11 +10497,16 @@ function _joinGeometries(geoms) {
   out.name = g0.name || '';
   return out;
 }
-function getOrCreateMaterial(color) {
-  if (!state.shareMaterials) return new THREE.MeshStandardMaterial({ color: color.clone(), metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide });
-  const key = color.getHex();
+// The shared material for a colour. A material the file named (a name given in Cinema 4D, Blender, Maya ...) keeps its name, and is shared
+// only with the parts that have the same colour AND the same name: before, every file material that was not textured was replaced by the
+// nameless one of its colour, and the names were lost.
+function getOrCreateMaterial(color, name) {
+  const nm = (name || '').trim();
+  const make = () => { const m = new THREE.MeshStandardMaterial({ color: color.clone(), metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide }); if (nm) m.name = nm; return m; };
+  if (!state.shareMaterials) return make();
+  const key = nm ? color.getHex() + '|' + nm : color.getHex();
   let m = state.materialByColor.get(key);
-  if (!m) { m = new THREE.MeshStandardMaterial({ color: color.clone(), metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide }); state.materialByColor.set(key, m); }
+  if (!m) { m = make(); state.materialByColor.set(key, m); }
   return m;
 }
 
@@ -15771,12 +15820,32 @@ function _tformPartOrigin(p) {      // the origin of the group the part is in (w
 // The frame a part's rotation and scale are read in: its parent, or the scene's root while the gizmo's pivot holds it (that is where
 // it goes back to when the gizmo lets go).
 function _tformPartFrame(p) { const par = p.mesh.parent; return (!par || par === state.pivot) ? (state.partsRoot || par) : par; }
+// The turn of the group a part is in (the group's own, as the group's fields show it), or null when the group is not turned. A part's
+// rotation fields count from it: a part that has not been turned inside its group reads 0, 0, 0 however the group is turned.
+// While the gizmo holds a part, its pivot turns with the part (the gizmo's own axes) or stays in the scene's (World axes).
+function _tformPivotIsPart(obj) {
+  try { return state.pivot.quaternion.angleTo(obj.getWorldQuaternion(new THREE.Quaternion())) < 1e-4; } catch (_) { return false; }
+}
+// The group's turn as it acts in a parent frame P: the part's own number (its quaternion in P) turns with the group by P^-1 * Q * P.
+function _tformGroupInFrame(gq, P) { return P.clone().invert().multiply(gq).multiply(P); }
+const _tfGq = new THREE.Quaternion();
+function _tformGroupQuat(p) {
+  try {
+    const n = (state.treeNodes || []).find(x => x.kind === 'part' && x.partId === p.partId);
+    const q = n && n.parentId != null ? _groupRotations.get(n.parentId) : null;
+    if (!q || Math.abs(q.w) > 1 - 1e-9) return null;
+    return _tfGq.copy(q);
+  } catch (_) { return null; }
+}
+const _tfmFq = new THREE.Quaternion(), _tfmGi = new THREE.Quaternion();
 const _tfmM = new THREE.Matrix4(), _tfmInv = new THREE.Matrix4(), _tfmP = new THREE.Vector3(), _tfmQ = new THREE.Quaternion(), _tfmS = new THREE.Vector3(), _tfmE = new THREE.Euler(), _tfmW = new THREE.Vector3(), _tfmSize = new THREE.Vector3();
 function _tformPartRead(p, asScale, out) {      // out: nine numbers (position, rotation in degrees, scale or size), in the scene's units
   const obj = p.mesh, frame = _tformPartFrame(p);
   obj.updateWorldMatrix(true, false);
   if (frame) { frame.updateWorldMatrix(true, false); _tfmM.multiplyMatrices(_tfmInv.copy(frame.matrixWorld).invert(), obj.matrixWorld); } else _tfmM.copy(obj.matrixWorld);
   _tfmM.decompose(_tfmP, _tfmQ, _tfmS);
+  const _gq = _tformGroupQuat(p);
+  if (_gq && frame) { frame.getWorldQuaternion(_tfmFq); _tfmQ.premultiply(_tformGroupInFrame(_gq, _tfmFq).invert()); }      // (the part's turn on top of its group's)
   _tfmE.setFromQuaternion(_tfmQ, obj.rotation.order);
   obj.getWorldPosition(_tfmW);
   const o = _tformPartOrigin(p);
@@ -15848,7 +15917,15 @@ function _tformMultiApply(parts, axis, text) {
       } else {
         if (frame) M.multiplyMatrices(inv.copy(frame.matrixWorld).invert(), obj.matrixWorld); else M.copy(obj.matrixWorld);
         M.decompose(P, Q, S);
-        if (kind === 'r') { E.setFromQuaternion(Q, obj.rotation.order); E[k] = v * Math.PI / 180; Q.setFromEuler(E); }
+        if (kind === 'r') {
+          const gq = _tformGroupQuat(p);
+          if (gq && frame) {
+            const fq = frame.getWorldQuaternion(new THREE.Quaternion()), gf = _tformGroupInFrame(gq, fq);
+            Q.premultiply(gf.clone().invert());                 // the part's own turn, without its group's, where the number is read
+            E.setFromQuaternion(Q, obj.rotation.order); E[k] = v * Math.PI / 180; Q.setFromEuler(E);
+            Q.premultiply(gf);                                  // and the group's put back
+          } else { E.setFromQuaternion(Q, obj.rotation.order); E[k] = v * Math.PI / 180; Q.setFromEuler(E); }
+        }
         else if (asScale) S[k] = Math.abs(v);
         else {
           _readStableSize(obj, size);
@@ -16115,6 +16192,17 @@ function _transformPanelRefresh() {
         if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
         if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
       }
+    } else if (target.kind === 'part' && target.part && _tformGroupQuat(target.part) && (!(usingWorld && state.pivot) || _tformPivotIsPart(obj))) {
+      // A part in a turned group: its rotation counts from the group's axes (0, 0, 0 until the part itself is turned).
+      const gq = _tformGroupQuat(target.part).clone();
+      obj.updateWorldMatrix(true, false);
+      let loc;
+      if (usingWorld && state.pivot) loc = gq.invert().multiply(obj.getWorldQuaternion(new THREE.Quaternion()));      // (the gizmo reads in the scene's axes)
+      else loc = _tformGroupInFrame(gq, obj.parent ? obj.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion()).invert().multiply(obj.quaternion);
+      _tfTmpEuler.setFromQuaternion(loc, 'XYZ');
+      if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
+      if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
+      if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
     } else {
       const rotSource = (usingWorld && state.pivot) ? state.pivot.rotation : obj.rotation;
       if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(rotSource.x), 2);
@@ -16463,6 +16551,22 @@ function _wireTransformPanel() {
         }
       } else if (axis === 'rx' || axis === 'ry' || axis === 'rz') {
         const rad = v * Math.PI / 180;
+        const _gqW = target.kind === 'part' && target.part ? _tformGroupQuat(target.part) : null;
+        if (_gqW && (!usePivot || _tformPivotIsPart(obj))) {
+          // A part in a turned group: the number counts from the group's axes (see the read above).
+          const g = _gqW.clone();
+          obj.updateWorldMatrix(true, false);
+          if (usePivot) {
+            const e = new THREE.Euler().setFromQuaternion(g.clone().invert().multiply(obj.getWorldQuaternion(new THREE.Quaternion())), 'XYZ');
+            e[axis[1]] = rad;
+            state.pivot.quaternion.copy(g.multiply(new THREE.Quaternion().setFromEuler(e))); state.pivot.updateMatrixWorld(true);
+          } else {
+            const gf = _tformGroupInFrame(g, obj.parent ? obj.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion());
+            const e = new THREE.Euler().setFromQuaternion(gf.clone().invert().multiply(obj.quaternion), 'XYZ');
+            e[axis[1]] = rad;
+            obj.quaternion.copy(gf.multiply(new THREE.Quaternion().setFromEuler(e)));
+          }
+        } else
         // Rotation lives on the pivot so gizmo handles rotate with the object.
         if (usePivot) {
           if (axis === 'rx') state.pivot.rotation.x = rad;
@@ -22051,16 +22155,30 @@ function refreshPropertiesPanel() {
          ${_wasHtml}${_barHtml(sharePct > 0 ? Math.max(sharePct, 1.5).toFixed(2) : 0, fillCls)}
          <div class="prop-hero-cap"><span>${heroSub}</span><span>${heroRight}</span></div>
        </div>`;
+  // A click on the card folds the rows under the count away (vertices, mesh data, size) and a second click brings them back; kept between
+  // sessions, since it is how the person likes the card
+  let _cardShut = false; try { _cardShut = localStorage.getItem('mo-prop-card-shut') === '1'; } catch (_) {}
   const statsHtml = gridRows.map(([lb, val], i) => `<div class="prop-stat${i === 2 ? ' wide' : ''}"><span class="prop-label">${lb}</span><strong class="prop-value" data-readout="${lb}" title="${val}">${val}</strong></div>`).join('');
 
   el.innerHTML = `
     <div class="prop-head">${nameHtml}</div>
     <div class="prop-sub" title="${escapeHtml(subHtml)}">${escapeHtml(subHtml) || '&nbsp;'}</div>
-    <div class="prop-card">${heroHtml}<div class="prop-grid">${statsHtml}</div></div>
+    <div class="prop-card${_cardShut ? ' is-shut' : ''}" tabindex="0" role="button" aria-expanded="${!_cardShut}" title="Click to ${_cardShut ? 'show' : 'hide'} vertices, mesh data and size">${heroHtml}<div class="prop-more"><div class="prop-more-in"><div class="prop-grid">${statsHtml}</div></div></div></div>
     <div class="prop-tags">${tagsHtml || '<span class="prop-tags-empty">Nothing flagged</span>'}</div>
     ${_splOn ? '' : `<div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>`}
     <div class="field prop-shade is-off" id="prop-shade"><div id="prop-shade-scrub"></div></div>`;
   try { _wireTagSlider(el.querySelector('.prop-tags')); } catch (_) {}
+  {
+    const card = el.querySelector('.prop-card');
+    const flip = () => {
+      const shut = card.classList.toggle('is-shut');
+      card.setAttribute('aria-expanded', String(!shut));
+      card.title = 'Click to ' + (shut ? 'show' : 'hide') + ' vertices, mesh data and size';
+      try { localStorage.setItem('mo-prop-card-shut', shut ? '1' : '0'); } catch (_) {}
+    };
+    card?.addEventListener('click', (e) => { if (!(window.getSelection && String(window.getSelection()).length)) flip(); });
+    card?.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === card) { e.preventDefault(); flip(); } });
+  }
   // A line: the Shape (rectangle, circle, polygon) and Spline cards, C4D style
   if (_splOn) {
     const html = _renderSplineSections(_splSel);
@@ -22763,7 +22881,16 @@ const _Tabs = (() => {
   const listed = () => REG.tabs.filter(t => !t.closed);
   const find = (id) => REG.tabs.find(t => t.id === id);
   const frameOf = (id) => TOP.document.querySelector('iframe.mo-tab-frame[data-tab="' + id + '"]');
-  const renderAll = () => { for (const id of Object.keys(REG.wins)) { try { REG.wins[id].__moRenderTabs?.(); } catch (_) {} } };
+  const renderAll = () => {
+    for (const id of Object.keys(REG.wins)) { try { REG.wins[id].__moRenderTabs?.(); } catch (_) {} }
+    // the window's title (the title bar of the app window and the taskbar) is the name of the scene on show, with a dot when it is not saved
+    // (a web page cannot draw progress on the taskbar button; its title shows in the button's tooltip and the window's title bar: "42% " in front while a job runs)
+    try {
+      const w = REG.wins[REG.active], t = w && w.__moDocTitle && w.__moDocTitle();
+      const run = (listed().find(x => x.id === REG.active) || {}).tasks || [], job = _Prefs.get('notifyTitle') === false ? null : run.find(k => !k.passive && k.pct != null);
+      if (t) TOP.document.title = (job ? Math.round(job.pct) + '% ' : '') + t;
+    } catch (_) {}
+  };
 
   // Every tab is a page of its own, with sidebars of its own. The tab being
   // switched to takes the widths (and the folded left sidebar) of the one
@@ -23069,8 +23196,9 @@ const _Tabs = (() => {
     document.removeEventListener('pointerdown', onPopOutside, true);
     document.removeEventListener('keydown', onPopKey, true);
     document.getElementById('sb-bg')?.classList.remove('is-open');
+    document.getElementById('sb-bg-tab')?.classList.remove('is-open');
   }
-  function onPopOutside(e) { if (pop && !pop.contains(e.target) && !e.target.closest('#sb-bg')) closePop(); }
+  function onPopOutside(e) { if (pop && !pop.contains(e.target) && !e.target.closest('#sb-bg, #sb-bg-tab')) closePop(); }
   function onPopKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePop(); } }
   function renderPop() {
     if (!pop) return;
@@ -23129,10 +23257,11 @@ const _Tabs = (() => {
     pop.setAttribute('role', 'dialog');
     pop.setAttribute('aria-label', 'Tasks');
     document.body.appendChild(pop);
-    const r = chip.getBoundingClientRect();
+    const tabEl = document.getElementById('sb-bg-tab');
+    const r = (tabEl && !tabEl.hidden ? tabEl : chip).getBoundingClientRect();      // (a running task has its tab on the bar: the list opens above it)
     pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 380)) + 'px';
     pop.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + 'px';
-    chip.classList.add('is-open');
+    chip.classList.add('is-open'); tabEl?.classList.add('is-open');
     renderPop();
     popTimer = setInterval(() => { if (!document.hidden) renderPop(); }, 1000);
     document.addEventListener('pointerdown', onPopOutside, true);
@@ -23161,7 +23290,29 @@ const _Tabs = (() => {
     if (!list.length) { txt.textContent = ''; chip.title = 'Tasks: nothing is running'; }
     else if (list.length === 1) { const k = list[0]; txt.textContent = k.label + (k.pct == null ? '' : ' · ' + Math.round(k.pct) + '%'); chip.title = 'Tasks: ' + k.label + ' in "' + k.tabTitle + '" — click for the list'; }
     else { const k = list[list.length - 1]; txt.textContent = k.label + ' +' + (list.length - 1) + (allKnown ? ' · ' + Math.round(avg) + '%' : ''); chip.title = list.length + ' tasks are running (' + list.map(x => x.label).join(', ') + ') — click for the list'; }
+    // The running task also stands up from the status bar as a small tab (see #sb-bg-tab): the name and how far it is. The ring stays in the bar.
+    let tab = document.getElementById('sb-bg-tab');
+    if (!tab) {
+      tab = document.createElement('button');
+      tab.type = 'button'; tab.id = 'sb-bg-tab'; tab.hidden = true;
+      tab.innerHTML = '<span class="sb-tab-txt"></span>';
+      document.body.appendChild(tab);
+      tab.addEventListener('click', () => openPop(chip));
+      window.addEventListener('resize', () => { if (!tab.hidden) placeTab(tab, chip, sb); });
+    }
+    chip.classList.toggle('has-tab', list.length > 0);
+    if (list.length) {
+      tab.querySelector('.sb-tab-txt').textContent = txt.textContent;
+      tab.title = chip.title;
+      placeTab(tab, chip, sb);
+      if (tab.hidden) { tab.hidden = false; tab.classList.remove('is-in'); void tab.offsetWidth; tab.classList.add('is-in'); }
+    } else { tab.hidden = true; tab.classList.remove('is-in'); }
     if (pop) renderPop();
+  }
+  function placeTab(tab, chip, sb) {
+    const cr = chip.getBoundingClientRect(), sr = sb.getBoundingClientRect();
+    tab.style.left = Math.round(cr.left) + 'px';
+    tab.style.bottom = Math.round(window.innerHeight - sr.top) + 'px';
   }
   function render() {
     try { renderBg(); } catch (_) {}
@@ -23383,6 +23534,12 @@ const _Dirty = (() => {
   function mark(o) { savedTop = top(); if (!(o && o.blank)) savedOnce = true; sync(); try { if (o && o.keepCopy) _Autosave.hold(); else _Autosave.forget(); } catch (_) {} }
   // a scene that was brought back from a recovery copy: it is not as saved, whatever its history says
   function force() { savedTop = {}; sync(); }
+  window.__moDocTitle = () => {
+    if (!state.parts.some(p => !p.deleted)) return 'MeshOptimiser';
+    let n = '';
+    try { n = (state.sceneName || state._lastSavedSceneName || (state._loadedFilename || '').replace(/\.[^.]+$/, '') || _Tabs.blankName() || '').trim(); } catch (_) {}
+    return (dirty() ? '🔸 ' : '') + (n || 'Untitled scene') + ' — MeshOptimiser';
+  };
   // The history keeps up to 200 entries (30 of the geometry-carrying kind); `op` is one that has just fallen off its
   // far end. If the save was made before it (at an empty history), undoing
   // everything that is left no longer gets back to what was saved: without
@@ -27084,13 +27241,15 @@ function _openSaveSceneDialog(suggested) {
   });
 }
 
-async function saveScene() {
-  return _Anim.run(() => _withSolidView(_saveSceneImpl));      // (an animation is put back first, and goes on after)
+// Save (Ctrl+S) writes over the file this scene was opened from or last saved to, without a dialog; the first save of a scene, and
+// Save as (Ctrl+Shift+S, asNew), ask for the name and the place.
+async function saveScene(asNew) {
+  return _Anim.run(() => _withSolidView(() => _saveSceneImpl(false, false, asNew === true)));      // (an animation is put back first, and goes on after)
 }
 // With toBlob the file is not written: the scene comes back as a GLB blob,
 // whole, with no dialog (Duplicate scene opens it in a new tab).
 // quiet: for the recovery copy, which must not show a loader or a message
-async function _saveSceneImpl(toBlob = false, quiet = false) {
+async function _saveSceneImpl(toBlob = false, quiet = false, asNew = false) {
   const failed = toBlob ? 'Duplicate failed' : 'Save failed';
   if (!state.parts.length) { if (!quiet) toast('Nothing to save', 'Load a model or add a primitive first', 'warn'); return false; }
   // Suggest the last name the user typed (sticky across saves in the same
@@ -27098,7 +27257,11 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   // asked to keep it stable so they can overwrite the same file.
   const baseName = (state._loadedFilename || 'scene').replace(/\.[^.]+$/, '');
   const suggested = state._lastSavedSceneName || baseName;
-  const ask = toBlob ? { name: suggested, all: true, hidden: true, view: true, copy: true } : await _openSaveSceneDialog(suggested);
+  const known = state._lastSaveSceneHandle;
+  const quick = !toBlob && !asNew && !!known && typeof window.showSaveFilePicker === 'function' && /\.glb$/i.test(known.name || '');
+  const ask = toBlob ? { name: suggested, all: true, hidden: true, view: true, copy: true }
+    : quick ? { name: known.name.replace(/\.glb$/i, ''), all: true, hidden: _saveSceneOpts.hidden, view: _saveSceneOpts.view, notes: _saveSceneOpts.notes !== false, copy: false }
+    : await _openSaveSceneDialog(suggested);
   if (ask === null) return false;
   let chosenName = (ask.name || '').trim() || suggested;
   chosenName = chosenName.replace(/\.glb$/i, '').replace(/[\\/:*?"<>|]/g, '_');
@@ -36100,6 +36263,29 @@ function _seedGroupPivotsFromFile(fileRoot) {
     _groupRotations.set(n.id, q.clone());
   }
 }
+// An object with objects under it (Cinema 4D, Blender and Maya let any object be the parent of another; the scene's tree has only groups
+// for that). The object becomes a group at its own place and turn, holding its shape as a part of the same name and, beside it, the
+// objects that were under it. Nothing moves: the children keep their place relative to it, and the group's pivot is the object's pivot.
+function _wrapMeshParents(root) {
+  const meshBelow = (o) => { let hit = false; o.traverse(x => { if (x.isMesh) hit = true; }); return hit; };
+  const parents = [];
+  root.traverse(o => { if (o !== root && o.isMesh && !o.isSkinnedMesh && o.parent && o.children.some(meshBelow)) parents.push(o); });
+  for (const m of parents) {
+    const host = m.parent, at = host.children.indexOf(m);
+    const g = new THREE.Group();
+    g.name = m.name;
+    g.position.copy(m.position); g.quaternion.copy(m.quaternion); g.scale.copy(m.scale);
+    const kids = m.children.slice();
+    host.remove(m);
+    host.add(g);
+    host.children.splice(host.children.indexOf(g), 1); host.children.splice(at, 0, g);      // (in the object's place in the order)
+    m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1);
+    g.add(m);
+    for (const c of kids) g.add(c);
+  }
+  if (parents.length) root.updateMatrixWorld(true);
+  return parents.length;
+}
 function _toSceneConvention(root, conv) {
   if (!conv) return false;
   const k = conv.mmPerUnit > 0 ? conv.mmPerUnit : 1, turn = !!conv.yUp;
@@ -36153,6 +36339,7 @@ function _exportConvention(format) {
   return { axis: yUp ? 'y-up' : 'z-up', scale: metres ? 0.001 : 1 };
 }
 
+const _IDENTITY_M4 = new THREE.Matrix4();
 async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   const formatLabel = format.toUpperCase();
   // Capture & clear the import flag up-front so format-specific failures
@@ -36190,6 +36377,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   });
   try { _registerSplines(sceneRoot, importMode); } catch (e) { console.warn('[spline] could not read the lines of this file:', e); }
   try { _joinPrimitives(sceneRoot); } catch (e) { console.warn('[load] could not join the primitives of a mesh:', e); }      // (a GLB read through Assimp; loadGlbFile has joined its own already)
+  try { const w = _wrapMeshParents(sceneRoot); if (w) Log.info(`${w} object${w === 1 ? '' : 's'} with objects under ${w === 1 ? 'it' : 'them'} became a group holding the object and its children`, { tag: 'import' }); } catch (e) { console.warn('[import] objects under objects:', e); }
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
   try { _sharpenTextures(meshList); } catch (_) {}      // (textures stay sharp at a slant: see _sharpTex)
   // Texture coordinates run one way in the scene: V from the top, as glTF has them, which is what three's GLB and USDZ writers expect
@@ -36291,7 +36479,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
       // mesh joined by _joinPrimitives) is one part with a colour a material, each on its own faces, as Cinema 4D has it. Each material is
       // treated as a single one would be (the app's look, the file's own where it has a texture or the scene was saved here), the same
       // material twice is one, and the groups become runs over every triangle (facemat.js). Before, an untextured list became one colour.
-      const one = (x) => (savedHere && _loadedMaterial(x)) || (!savedHere && x && _fileMaterial(x)) || _vertexColourMaterial(x, geom) || getOrCreateMaterial(x && x.color ? x.color : new THREE.Color(0xaaaaaa));
+      const one = (x) => (savedHere && _loadedMaterial(x)) || (!savedHere && x && _fileMaterial(x)) || _vertexColourMaterial(x, geom) || getOrCreateMaterial(x && x.color ? x.color : new THREE.Color(0xaaaaaa), x && x.name);
       const t = FM.tidy(FM.triMaterials(geom.groups, triCount), _origMat.map(one));
       geom.clearGroups();
       if (t.mats.length > 1) { for (const r of FM.runs(t.triMat)) geom.addGroup(r.start, r.count, r.materialIndex); m.material = t.mats; }
@@ -36299,7 +36487,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
       const main = t.mats[0];
       if (main && main.color) { color.copy(main.color); partInfo.originalColor.copy(main.color); }
     } else
-    m.material = (savedHere && _loadedMaterial(_origMat)) || (!savedHere && _fileMaterial(_origMat)) || _vertexColourMaterial(_origMat, geom) || getOrCreateMaterial(color);
+    m.material = (savedHere && _loadedMaterial(_origMat)) || (!savedHere && _fileMaterial(_origMat)) || _vertexColourMaterial(_origMat, geom) || getOrCreateMaterial(color, _origMat && _origMat.name);
     // (the attributes to keep are read from the file's own material as well as the new one: a map in the file needs its UVs)
     const _keepFor = [].concat(m.material, _origMat).filter(Boolean);
     if (_origMat && _origMat !== m.material) {
@@ -36349,6 +36537,15 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (p.mesh) {
       p.mesh.updateWorldMatrix(true, false);
       p._exactWorld = p.mesh.matrixWorld.clone();
+      // A file names each object's pivot as its node's place (FBX, glTF, USD, Collada, 3MF, a scene saved here). When that is not the
+      // scene's origin and not the middle of the shape, the part keeps it as its pivot. A file with the points already out at their
+      // place (STEP, STL, OBJ) has none to give: the part's origin is at 0, 0, 0 and the gizmo stays at the middle.
+      if (p.partId >= partIdBase && !p._exactWorld.equals(_IDENTITY_M4)) {
+        try {
+          const b = _partWorldBoxOwn(p.mesh), o = p.mesh.getWorldPosition(new THREE.Vector3());
+          if (!b.isEmpty() && o.distanceTo(b.getCenter(new THREE.Vector3())) > 1e-4 * (1 + b.getSize(new THREE.Vector3()).length())) p._filePivot = true;
+        } catch (_) {}
+      }
       // (measured before the file was attached; right unless partsRoot is turned, scaled or moved)
       if (rootMoved && p.mesh.geometry && p.mesh.geometry.attributes) { try { _refreshPartBBox(p); } catch (_) {} }
     }
@@ -53041,6 +53238,11 @@ function _dndUpdate(e) {
     if (rel < 0.30) intent = 'before';
     else if (rel > 0.70) intent = 'after';
     else intent = 'into';
+  } else if (_dndDrag.ctx === 'hier' && _dndPartCanParent(row)) {
+    // An object can hold objects (Cinema 4D's way): the middle of a part's row takes the dropped rows in, as a group at that part.
+    if (rel < 0.30) intent = 'before';
+    else if (rel > 0.70) intent = 'after';
+    else intent = 'into';
   } else {
     intent = (rel < 0.5) ? 'before' : 'after';
   }
@@ -53213,6 +53415,12 @@ function _hierSubtreeRange(groupId) {
   return { start, end };
 }
 
+// A part row that rows can be dropped into: a plain mesh (not a cloner, not an instanced copy, not locked).
+function _dndPartCanParent(row) {
+  if (!row || !row.dataset || !row.dataset.partId) return false;
+  const p = getPart(parseInt(row.dataset.partId, 10));
+  return !!(p && !p.deleted && p.mesh && !p.isCloner && !p.locked);
+}
 function _dndContext() {
   if (state.treeNodes && state.treeNodes.length) return 'hier';
   if (state.userGroups && state.userGroups.length) return 'ug';
@@ -53243,7 +53451,7 @@ function _dndCommit(e) {
   }
 }
 
-function _dndDoNewGroupFromRows(rows, ctx, explicitName) {
+function _dndDoNewGroupFromRows(rows, ctx, explicitName, pivotObj) {
   // Hierarchical mode: create a new group NODE inside state.treeNodes (with a
   // backing THREE.Group on partsRoot) and move the dragged subtrees under it.
   // Going through addUserGroup() here would push state.userGroups.length > 0,
@@ -53354,6 +53562,17 @@ function _dndDoNewGroupFromRows(rows, ctx, explicitName) {
     const _prevTreeNodes = _snapshotTreeNodes(state.treeNodes);
 
     host.add(grp);
+    // The group stands on the pivot of the object it was made for (members keep their world place when they are attached below).
+    if (pivotObj) {
+      try {
+        pivotObj.updateWorldMatrix(true, false); host.updateWorldMatrix(true, false);
+        const wp = new THREE.Vector3(), wq = new THREE.Quaternion(), hq = new THREE.Quaternion();
+        pivotObj.getWorldPosition(wp); pivotObj.getWorldQuaternion(wq); host.getWorldQuaternion(hq);
+        grp.position.copy(host.worldToLocal(wp.clone())); grp.quaternion.copy(hq.invert().multiply(wq));
+        grp.updateMatrixWorld(true);
+        _groupOrigins.set(newId, wp.clone()); _groupRotations.set(newId, wq.clone());
+      } catch (_) {}
+    }
 
     // Splice the new group node in at the anchor's position. _dndMoveHier
     // uses id-based lookups (not cached indices) so the splice doesn't
@@ -53438,6 +53657,13 @@ function _dndCommitHier(rows, t) {
     const targIdx = _hierNodeIndex(targRow);
     if (targIdx < 0) return;
     const targNode = all[targIdx];
+    if (t.intent === 'into' && targNode.kind === 'part') {
+      // Dropped on an object: the object and the dropped rows become one group, pivoted at the object.
+      const tp = getPart(targNode.partId);
+      if (!tp || !tp.mesh) return;
+      _dndDoNewGroupFromRows([t.row, ...rows.filter(r => r !== t.row)], 'hier', targNode.name, tp.mesh);
+      return;
+    }
     if (t.intent === 'into') {
       newParentId = targNode.id;
       beforeNodeId = null;
@@ -54881,18 +55107,14 @@ setTimeout(() => _dndDecorateTree(), 0);
   const _heatOriginalInstColor = new WeakMap();
   let _heatActive = false;
 
-  // Additive-blend x-ray for heatmap. Order-independent (no transparent sort
-  // means no whole-mesh-disappearing under orbit) and lets dense interior
-  // parts contribute brightness through the outer shell. Opacity ramps with
-  // the bucket index — high-density (red, bad) buckets get more opacity so
-  // the offending parts pop out clearly; low-density (green, fine) buckets
-  // stay dim so they don't drown the high signal.
+  // Additive-blend x-ray for heatmap. Order-independent (no transparent sort means no whole-mesh-disappearing under orbit) and lets
+  // dense interior parts contribute brightness through the outer shell. Opacity ramps with the bucket index: dense (red) buckets are
+  // stronger so the offending parts pop out; sparse (green) ones stay dim. The ramp is low (0.05 to 0.22) because with hundreds of
+  // overlapping parts the additive sums ran to white and the whole model glowed.
   function _applyXrayFlags(m, bucket = 0) {
     const rank = bucket / (_HEAT_BUCKETS - 1);          // 0..1, low=cold, high=hot
-    // Linear ramp: 0.18 (cold) → 0.85 (hot). Tunable knobs.
-    const opacity = 0.18 + rank * 0.67;
     m.transparent     = true;
-    m.opacity         = opacity;
+    m.opacity         = 0.05 + rank * 0.17;
     m.depthWrite      = false;
     m.depthTest       = false;
     m.alphaToCoverage = false;
@@ -54959,7 +55181,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         clone.vertexColors = true;
         clone.userData = clone.userData || {};
         clone.userData._heatClone = true;
-        _applyXrayFlags(clone);
+        _applyXrayFlags(clone, 8);
         inst.material = clone;
       }
     }

@@ -18,6 +18,7 @@ PORT = 4242
 # CAD formats step2glb.py reads (its SUPPORTED_EXTS), and the name each is
 # called in messages. /api/convert, --open and the inbox sweep all use this.
 CAD_EXTS = (".step", ".stp", ".iges", ".igs", ".brep", ".brp")
+MESH_EXTS = (".obj", ".fbx", ".stl", ".3mf", ".usd", ".usda", ".usdc", ".usdz", ".dae")      # (read by the page, not converted by the server)
 _CAD_NAMES = {".step": "STEP", ".stp": "STEP", ".iges": "IGES", ".igs": "IGES",
               ".brep": "BREP", ".brp": "BREP"}
 ROOT = Path(__file__).parent.resolve()
@@ -2346,7 +2347,15 @@ def main() -> int:
         if not src.exists():
             print(f"  ERROR: file not found: {src}"); return 1
         ext = src.suffix.lower()
-        if ext in CAD_EXTS:
+        # Opened with no console to answer in ("Open with" in Explorer, the shortcut): the page's own import window asks, as it does
+        # for a dropped file, so the file is only handed over (copied into inbox/) and not converted here.
+        windowed = bool(os.environ.get("MESHOPTIMISER_HIDDEN")) or not (sys.stdin and sys.stdin.isatty())
+        if ext in CAD_EXTS and windowed:
+            dst = INBOX / src.name
+            if not (dst.exists() and os.path.samefile(src, dst)):
+                shutil.copy2(src, dst)
+            auto_load = "inbox/" + dst.name
+        elif ext in CAD_EXTS:
             # Always interactive: ask about the cached result and the quality
             dst = interactive_convert(src)
             if dst is None: return 1
@@ -2364,6 +2373,12 @@ def main() -> int:
             dst = INBOX / src.name
             # Already in inbox/ (`--open inbox/x.glb`): nothing to copy, and
             # copying a file onto itself is an error.
+            if not (dst.exists() and os.path.samefile(src, dst)):
+                shutil.copy2(src, dst)
+            auto_load = "inbox/" + dst.name
+        elif ext in MESH_EXTS:
+            # The page reads these itself (OBJ, FBX, STL, 3MF, USD, Collada): the file is handed over through inbox/ like a GLB.
+            dst = INBOX / src.name
             if not (dst.exists() and os.path.samefile(src, dst)):
                 shutil.copy2(src, dst)
             auto_load = "inbox/" + dst.name

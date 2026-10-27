@@ -4,6 +4,36 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.37.3
+
+Released 27 Oct 2026.
+
+v0.37.2 was a review of v0.37.1. v0.37.3 makes the program behave more like an app on the desk: Save writes over the file, the window's title follows the scene, a model can be opened with MeshOptimiser from Explorer, and a long job tells you when it has ended. It also keeps the names of the materials of an FBX, reads the rotation of a part inside a turned group from the group's axes, and finds lettering on large parts again.
+
+**New**
+
+- ![new][new] **Save writes over the file without asking.** Once a scene has a file (opened from a scene file, or saved before), Ctrl+S saves straight into it; the first save still asks for a name and a place. **Save scene as…** (Ctrl+Shift+S) always asks, for a new name or a copy.
+- ![new][new] **The window's title is the scene's name,** with a small orange diamond in front while there are changes that are not saved (`🔸 Engine — MeshOptimiser`). While a job with a known progress runs, the title starts with its percent, which shows in the title bar and in the taskbar button's tooltip.
+- ![new][new] **MeshOptimiser in Explorer's Open with list.** The installer adds it for glb, gltf, obj, fbx, stl, 3mf, usd, usda, usdc, usdz, dae, step, stp, iges, igs, brep and brp, for the current user only; it is a choice and never takes over a file type. STEP and the other CAD types open the page's own import window, and OBJ, FBX, STL, 3MF, USD and Collada load directly (before, only GLB, glTF and CAD files could be handed to the program). A copy that is installed already can add it with `app\file-types.ps1 -Register -Launcher <install folder>\app\start_hidden.vbs`; `-Unregister` takes it out.
+- ![new][new] **Settings › General › Notifications.** *Tell me when a long job ends* (a job that runs longer than 5 s, 10 s, 30 s or 1 min and ends while the window is hidden or not in front raises a system notification; a click brings the window back), and *Show progress in the window title*. A row shows whether the browser allows notifications, with Allow or Send a test. A web page cannot draw progress on the taskbar button itself, so there is none.
+- ![new][new] **A running task shows as a small tab standing on the status bar,** with its name and how far it is, in the bar's colour with a concave round where it meets the bar. A click opens the list of tasks above it.
+- ![new][new] **A click on the Properties card folds away the rows under the triangle count** (vertices, mesh data, size), with a slide; a second click opens them. The card remembers which it was.
+
+**Fixes**
+
+- ![fix][fix] **Material names from an FBX (and other files) were lost.** An FBX named in Cinema 4D came in with every material unnamed (406 parts, though the file held 43 names such as `M_glass`). The names now come in and show in the Materials list. Two materials of one colour with different names stay two, as in the file; before they were merged into one nameless material.
+- ![fix][fix] **An object with objects under it (Cinema 4D) came in wrong, and an object could not be put under another.** Such an object now opens as a group at its own place and pivot, holding its shape as a part of the same name and the objects under it; nothing moves. In the tree, dropping rows on the middle of an object's row does the same (one undo step).
+- ![fix][fix] **The pivots set in Cinema 4D were not on the parts of an FBX; every gizmo sat in the middle of the part.** A single part opened from a file that gives it a pivot (FBX, GLB, glTF, USD, Collada, 3MF, a scene saved here), whose axis is not at the middle of its shape, now has the gizmo on that axis. Files with the points already out at their place (STEP, STL, OBJ) keep the middle.
+- ![fix][fix] **A part inside a turned group showed the group's rotation as its own.** A part's rotation now counts from the axes of its group: a part that was only turned along with its group reads 0, 0, 0, and a typed rotation is written relative to the group.
+- ![fix][fix] **The Heatmap view just glowed.** Parts added up to a white haze on a model with many parts. The view is the same x-ray, but each part adds much less, so the colours stay readable and the dense parts still stand out.
+- ![fix][fix] **Remove lettering found nothing when "Largest mark" was set far above the part,** and **sat on one part of an engine for minutes.** The largest mark that counts is never more than a quarter of the part's longest side, and the search for a body inside a part now takes 0.35 s instead of 26 s on the engine it was found on.
+- ![fix][fix] **The "closed unexpectedly" card squeezed its text into a column one word wide.** The text has the card's width and the buttons sit in a row under it.
+- ![fix][fix] **The number of a slider in the right sidebar sat inside the bar.** It is in its own box beside the bar again, and the bar and its box are round on every corner.
+
+**Website**
+
+- The cards on the home and features pages are links as a whole, the twelve drawings are drawn with one 1 px line, four more clean-up tools (Remove fillets, Remove thickness, Remove lettering and logos, Fill solid round) have a card with a drawing, and the Remove lettering drawing shows a raised M in the site's serif.
+
 ## v0.37.2
 
 Released 26 Oct 2026.

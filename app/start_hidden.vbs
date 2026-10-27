@@ -9,21 +9,24 @@
 '    start.bat then skips every "press a key" stop instead of waiting there
 '    for good, and a failure is reported here, from its exit code.
 Option Explicit
-Dim WshShell, fso, scriptDir, batPath, rc
+Dim WshShell, fso, scriptDir, batPath, rc, fileArg
 Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 batPath = scriptDir & "\start.bat"
+' A file handed over by "Open with" in Explorer goes on to start.bat, which opens it.
+fileArg = ""
+If WScript.Arguments.Count > 0 Then fileArg = " """ & WScript.Arguments(0) & """"
 WshShell.CurrentDirectory = scriptDir
 ' Settings > General > "Show a terminal window" leaves a marker file here: then the window is shown, set up or not.
 If Not (fso.FileExists(scriptDir & "\.venv\Scripts\python.exe") Or fso.FileExists(scriptDir & "\runtime\python.exe")) Or fso.FileExists(scriptDir & "\.show-console") Then
   ' Args: command, windowStyle (1 = normal window), waitForReturn (False = fire-and-forget)
-  WshShell.Run """" & batPath & """", 1, False
+  WshShell.Run """" & batPath & """" & fileArg, 1, False
 Else
   WshShell.Environment("Process")("MESHOPTIMISER_HIDDEN") = "1"
   ' windowStyle 0 = hidden. Waiting for it to end is what gives the exit code;
   ' it ends when the app is closed.
-  rc = WshShell.Run("""" & batPath & """", 0, True)
+  rc = WshShell.Run("""" & batPath & """" & fileArg, 0, True)
   If rc <> 0 Then
     MsgBox "MeshOptimiser stopped with an error (code " & rc & ")." & vbCrLf & vbCrLf & _
            "Double-click start.bat to see what went wrong.", vbExclamation, "MeshOptimiser"

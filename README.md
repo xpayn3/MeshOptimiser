@@ -309,6 +309,8 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.37.3** — Save writes over the file, the window's title follows the scene and shows a job's progress, MeshOptimiser appears in Explorer's Open with list, long jobs notify you in the background, and an FBX keeps the names of its materials.
+
 **v0.37.2** — A review of v0.37.1's code: eight faults fixed, among them a texture-size export that could leave a shrunken picture on the graphics card, a Model mode that opened on a library shape, and WebP that made normal maps lossy.
 
 **v0.37.1** — A History card that goes back to any step, a Model inspector that draws the faults of a mesh on the model, an Animate window that keeps what you move and copies its clips, Settings built as cards with a say in what a scene file keeps, right-click menus on the toolbar, and 58 fixes.

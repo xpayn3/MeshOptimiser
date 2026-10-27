@@ -271,6 +271,11 @@ try {
       $lnk.Save()
       Good $pair[0]
     }
+    # "Open with" in Explorer: MeshOptimiser is added to the list for the model files it reads (a choice, never the default program)
+    try {
+      $ft = Join-Path $InstallDir 'app\file-types.ps1'
+      if (Test-Path $ft) { [void](& $ft -Register -Launcher (Join-Path $InstallDir 'app\start_hidden.vbs')); Good 'Open with (model files)' }
+    } catch { Note 'Could not add it to Explorer''s Open with list.' }
   } else { Note 'Skipped.' }
 
   Line ''
