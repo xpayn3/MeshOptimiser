@@ -739,7 +739,7 @@ window.labApps = [
       ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
       ['Stacked copies', 1, [], ['stacked-copies']],
     ],
-    stats: [['Version', '0.37.2'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
+    stats: [['Version', '0.37.3'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',
       '400 identical bolts, 80 duplicate brackets, half a million broken triangles. MeshOptimiser keeps each repeat once, rebuilds the bad geometry and drops what you can’t see.',
@@ -911,10 +911,10 @@ window.labApps = [
         ['Photo mode, a camera', 'A toolbar of its own, three lens rings under V for focus, aperture and zoom, and softboxes in the reflections.'],
         ['Section view', 'Cut the whole scene with one plane to look inside. The cut is drawn flat, Explode still works, and nothing can be picked while it is on.'],
         ['Textures in OBJ and FBX', 'An OBJ is written with its pictures beside it and an FBX carries the colour and normal map inside, so a model leaves as it looks.'],
-        ['History card', 'Every step Ctrl+Z goes back to, newest first. A click puts the model at any of them, and Clear history asks with a slider.', 'new'],
-        ['Faults on the model', 'The Model inspector draws open edges, wrong-way faces, empty and doubled triangles and pinched corners on the model, one colour each.', 'new'],
-        ['Animate, kept and copied', 'Positions in mm, copy and paste of clips and their properties, a part you move keeps its place, and Space plays anywhere.', 'new'],
-        ['Settings as cards', 'A live summary on each card, tiles for long runs of switches, and a choice of what a scene file keeps.', 'new'],
+        ['History card', 'Every step Ctrl+Z goes back to, newest first. A click puts the model at any of them, and Clear history asks with a slider.'],
+        ['Faults on the model', 'The Model inspector draws open edges, wrong-way faces, empty and doubled triangles and pinched corners on the model, one colour each.'],
+        ['Animate, kept and copied', 'Positions in mm, copy and paste of clips and their properties, a part you move keeps its place, and Space plays anywhere.'],
+        ['Settings as cards', 'A live summary on each card, tiles for long runs of switches, and a choice of what a scene file keeps.'],
         ['One Boolean card', 'Union, Subtract, Intersect, Without and Split, with their options, as Cinema 4D’s Boole has them. One undo step.'],
         ['The lens in millimetres', 'Set the lens as on a camera: 35 mm wide, 85 mm close. Right-click the camera pill for the lens and navigation.'],
         ['Textures where you pick them', 'Material balls and texture slots show the picture, a picture dropped on a slot goes on, and FBX and OBJ files find their maps by name.'],
@@ -927,6 +927,9 @@ window.labApps = [
         ['Find your selection', 'Out of view? A faint arrow at the edge points to it. Click to frame it.'],
         ['Orbit your way', 'Around the selection, the scene or the point under the pointer.'],
       ], more: [
+        ['Save over the file', 'Ctrl+S writes over the file the scene came from, without asking. The window’s title is the scene’s name, with a diamond while it is not saved.', 'new'],
+        ['Open with from Explorer', 'Right-click a model file, Open with, MeshOptimiser: glb, gltf, obj, fbx, stl, 3mf, usd, dae and the CAD types.', 'new'],
+        ['Told when a job ends', 'A long job that ends while you are in another window raises a notification, and its percent is in the window’s title.', 'new'],
         ['Start screen', 'Drop a file anywhere, open a recent one, or begin from a shape.'],
         ['Help inside the app (F1)', 'The whole knowledge base, searchable, offline.'],
         ['One Settings window', 'Every setting in one window, with one search.'],
@@ -1059,7 +1062,16 @@ window.labApps = [
     changelog: {
       link: 'https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md',
       versions: [
-        { version: '0.37.2', fixes: 8, date: '26 Oct 2026 · 09:03', latest: true,
+        { version: '0.37.3', fixes: 9, date: '27 Oct 2026 · 03:30', latest: true,
+          summary: 'Save writes over the file, the window’s title follows the scene, MeshOptimiser can be chosen in Explorer’s Open with list, and a long job tells you when it ends. An FBX keeps the names of its materials.',
+          items: [
+            ['New', 'Save (Ctrl+S) writes over the file without asking; Save scene as is Ctrl+Shift+S. The window’s title is the scene’s name, with a diamond while changes are not saved.'],
+            ['New', 'MeshOptimiser can be chosen in Explorer’s Open with list for the model files it reads (the installer adds it); OBJ, FBX, STL, 3MF, USD and Collada can be handed to the program too.'],
+            ['New', 'Settings › General › Notifications: a notification when a long job ends in the background, and the percent of a running job in the window’s title.'],
+            ['Fix', 'Material names of an FBX (and other files) were lost; they now come in. Objects with objects under them (Cinema 4D) open as groups, and the pivots set in the file are on the parts.'],
+            ['Fix', 'A part in a turned group reads its rotation from the group’s axes; the Heatmap no longer glows; Remove lettering finds marks on large parts.'],
+          ] },
+        { version: '0.37.2', fixes: 8, date: '26 Oct 2026 · 09:03',
           summary: 'A review of v0.37.1’s code: eight faults found by reading it, fixed.',
           items: [
             ['Fix', 'Texture size in the export window no longer leaves a shrunken picture on the graphics card, and Pictures as WebP keeps normal and other data maps lossless.'],

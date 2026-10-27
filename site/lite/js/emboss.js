@@ -117,18 +117,36 @@ function inside(H, x, y, z) {
   return hits % 2 === 1;
 }
 
-// distance from a point to the nearest point of the host's surface, looking no further than `limit` (Infinity past it)
+// distance from a point to the nearest point of the host's surface, looking no further than `limit` (Infinity past it). The cells
+// are visited in rings round the point's own cell, nearest first, and the search stops as soon as the best distance is closer than
+// the next ring can be; the rings stop at the edge of the grid (a rise of 20 with a limit of 100 used to scan a cube of cells with
+// 100 / cell on a side, for every vertex: minutes on one engine part).
+const GRID = 32;
 function distanceTo(H, x, y, z, limit) {
   const { P, I } = H;
   const r = Math.ceil(limit / H.d3) + 1;
   const cx = H.kx(x), cy = H.ky(y), cz = H.kz(z);
+  const reach = Math.max(Math.abs(cx), Math.abs(cx - GRID), Math.abs(cy), Math.abs(cy - GRID), Math.abs(cz), Math.abs(cz - GRID));
+  const last = Math.min(r, reach);
   let best = Infinity;
-  for (let i = cx - r; i <= cx + r; i++) for (let j = cy - r; j <= cy + r; j++) for (let k = cz - r; k <= cz + r; k++) {
-    const l = H.xyz.get(i + ',' + j + ',' + k); if (!l) continue;
+  const cell = (i, j, k) => {
+    const l = H.xyz.get(i + ',' + j + ',' + k); if (!l) return;
     for (const t of l) {
       const d = pointTriangle(x, y, z, P, I[t * 3] * 3, I[t * 3 + 1] * 3, I[t * 3 + 2] * 3);
       if (d < best) best = d;
     }
+  };
+  for (let q = 0; q <= last; q++) {
+    // the cells whose largest step from the point's cell is q (the grid holds 0 .. GRID)
+    const i0 = Math.max(cx - q, 0), i1 = Math.min(cx + q, GRID), j0 = Math.max(cy - q, 0), j1 = Math.min(cy + q, GRID), k0 = Math.max(cz - q, 0), k1 = Math.min(cz + q, GRID);
+    for (let i = i0; i <= i1; i++) {
+      const edgeI = Math.abs(i - cx) === q;
+      for (let j = j0; j <= j1; j++) {
+        if (edgeI || Math.abs(j - cy) === q) { for (let k = k0; k <= k1; k++) cell(i, j, k); }
+        else { if (cz - q >= 0 && cz - q <= GRID) cell(i, j, cz - q); if (q > 0 && cz + q >= 0 && cz + q <= GRID) cell(i, j, cz + q); }
+      }
+    }
+    if (best <= q * H.d3) break;       // (every cell of a later ring is at least q cells away)
   }
   return best;
 }
@@ -209,11 +227,14 @@ function judge(a, H, rise, sink, samples) {
 // an edge) or has no relief at all is not a mark. Pure function, no dependencies.
 
 export function findSurfaceMarks(positions, index, opts = {}) {
-  const maxSize = +opts.maxSize > 0 ? +opts.maxSize : 40;
+  let maxSize = +opts.maxSize > 0 ? +opts.maxSize : 40;
   const raisedMax = +opts.raisedMax > 0 ? +opts.raisedMax : 0;
   const maxDepth = +opts.maxDepth > 0 ? +opts.maxDepth : 0;
   const angle = +opts.angle > 0 ? +opts.angle : 35;
   const P = positions;
+  // a mark is never wider than a quarter of its part: a larger limit (1156 mm on a 400 mm housing) would make every patch of the part a
+  // "piece" and leave no face for a mark to sit on, so nothing would be found at all
+  { let lo = Infinity, hi = -Infinity; for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { const x = P[i + k]; if (x < lo) lo = x; if (x > hi) hi = x; } const side = hi - lo; if (side > 0 && maxSize > side / 4) maxSize = side / 4; }
   let I = index;
   if (!I) { I = new Uint32Array(P.length / 3); for (let i = 0; i < I.length; i++) I[i] = i; }
   const T = (I.length / 3) | 0;

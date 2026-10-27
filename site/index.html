@@ -44,10 +44,10 @@
   "description": "The free mesh editor that runs in your browser, built for big CAD assemblies. Everything stays on your computer.",
   "applicationCategory": "DesignApplication",
   "operatingSystem": "Windows, macOS",
-  "softwareVersion": "0.37.2",
+  "softwareVersion": "0.37.3",
   "url": "https://xpayn3.github.io/MeshOptimiser/",
   "image": "https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg",
-  "downloadUrl": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.2/MeshOptimiser-v0.37.2.zip",
+  "downloadUrl": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.37.3/MeshOptimiser-v0.37.3.zip",
   "license": "https://opensource.org/licenses/MIT",
   "offers": {
     "@type": "Offer",
@@ -84,7 +84,7 @@
   </header>
   <main id="main">
     <section class="wrap hero">
-      <p class="kicker">v0.37.2<b>·</b>Beta<b>·</b>MIT<b>·</b>Windows and macOS</p>
+      <p class="kicker">v0.37.3<b>·</b>Beta<b>·</b>MIT<b>·</b>Windows and macOS</p>
       <h1>Heavy models. Made light.</h1>
       <p class="lead">The free mesh editor that runs in your browser, built for big CAD assemblies. Everything stays on your computer.</p>
       <div class="actions">
@@ -435,15 +435,16 @@
       <div class="wrap split">
         <div class="split-head">
           <p class="kicker">Latest release</p>
-          <h2>v0.37.2</h2>
+          <h2>v0.37.3</h2>
           <a class="more" href="changelog.html">Full changelog</a>
         </div>
         <div class="split-body">
-          <p>A review of v0.37.1’s code: eight faults found by reading it, fixed.</p>
+          <p>Save writes over the file, the window’s title follows the scene, MeshOptimiser can be chosen in Explorer’s Open with list, and a long job tells you when it ends. An FBX keeps the names of its materials.</p>
           <ul class="changes">
-            <li><b class="is-fix">Fix</b><span>Texture size in the export window no longer leaves a shrunken picture on the graphics card, and Pictures as WebP keeps normal and other data maps lossless.</span></li>
-            <li><b class="is-fix">Fix</b><span>Edit mesh closes when a library shape is picked (Bake geo first), and a new blank scene is no longer tagged as saved in the History card.</span></li>
-            <li><b class="is-fix">Fix</b><span>The fault overlays of the Model inspector share their buffers between copies of a mesh and follow their copy; Animate does less work per frame.</span></li>
+            <li><b class="is-new">New</b><span>Save (Ctrl+S) writes over the file without asking; Save scene as is Ctrl+Shift+S. The window’s title is the scene’s name, with a diamond while changes are not saved.</span></li>
+            <li><b class="is-new">New</b><span>MeshOptimiser can be chosen in Explorer’s Open with list for the model files it reads (the installer adds it); OBJ, FBX, STL, 3MF, USD and Collada can be handed to the program too.</span></li>
+            <li><b class="is-new">New</b><span>Settings › General › Notifications: a notification when a long job ends in the background, and the percent of a running job in the window’s title.</span></li>
+            <li><b class="is-fix">Fix</b><span>Material names of an FBX (and other files) were lost; they now come in. Objects with objects under them (Cinema 4D) open as groups, and the pivots set in the file are on the parts.</span></li>
           </ul>
         </div>
       </div>
@@ -463,7 +464,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.37.2</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.37.3</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

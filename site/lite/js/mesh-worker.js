@@ -31,7 +31,7 @@
 // Every reply carries the request's id and ok: true / false.
 
 import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=38';
-import { findEmbossedBodies, findSurfaceMarks } from './emboss.js?v=7';
+import { findEmbossedBodies, findSurfaceMarks } from './emboss.js?v=9';
 import { reduceIndex, reduceWithin } from './simplify-core.js?v=7';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { repairMesh, analyseNormals } from './meshrepair.js?v=8';
